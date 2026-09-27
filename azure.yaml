@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+
+name: home-banking-assistant-python
+services:
+  account:
+    project: ./app/business-api/account
+    language: python
+    host: appservice
+  payment:
+    project: ./app/business-api/payment
+    language: python
+    host: appservice
+  transaction:
+    project: ./app/business-api/transaction
+    language: python
+    host: appservice
+  web:
+    project: ./app/frontend/banking-web
+    language: js
+    host: appservice
+infra:
+  provider: terraform
