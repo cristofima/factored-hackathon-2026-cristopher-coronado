@@ -1,0 +1,1320 @@
+# React Chat UI Technical Specification
+
+## Overview
+
+This document defines the technical specification for a React-based chat user interface that manages streamed events from a chat server. The system implements a real-time conversational interface capable of handling Server-Sent Events (SSE) and JSON responses from a single unified endpoint.
+
+### Protocol Origins
+
+This chat protocol is a fork of **OpenAI's Chatkit**, an open-source framework for building conversational AI interfaces. We extend and adapt the core Chatkit architecture to better support agent-framework from msft and ass support for client managed widgets and  multi-agent workflows.
+
+**Credit**: The foundational event streaming model, thread management patterns, and API design are based on [OpenAI Chatkit](https://github.com/openai/chatkit-js).
+
+
+## Features
+
+### User interface
+1. **Attachment Management**: When a user selects an attachment to upload, a preview thumbnail should be generated and displayed in the chat input area using the file bytes local to the browser, before the actual upload occurs. The thumbnail has a "x" icon on top left to remove it. Multiple attachments can be selected and previewed before sending the message. when the message is sent attachments are shown along with the text message.if it's a image attachment an image preview is provided in the user sent message, otherwise if it's a file attachment a badge with file name + extension is shown. when multiple attachments are sent, they are shown in a collapsed view with a "+X more" badge that can be expanded to see all attachments.
+2. **Thread Management**: Display create a new thread icon and thread history. Clicking the new thread icon creates a new thread and switches to it. Clicking the thread history icon replace the chat body with a list of past threads. User can select one of the past threads to load its history in the chat body.
+3. **Starter prompts**: Display a list of starter prompts when there are no threads. Clicking a prompt creates a new thread with that prompt as the first user message. A starter prompt can have an icon on the left and  a tittle
+4. **UI callbacks**: Provide UI callbacks for events like onMessageSent, onThreadCreated, onAttachmentAdded, onAttachmentRemoved, onError, onThreadDone etc.
+5. **Resizable chat component**: The chat component should be resizable by dragging its edges or corners.
+6. **Widget Rendering**: Widget components within the chat thread, supporting various widget types (e.g., cards, buttons, images). Widgets should be interactive and support actions like button clicks. Those are custom actions that get sent back to the server when clicked. see Custom Action request type for more details. The widget system supports two rendering modes:
+- **Server-managed widgets** (chatkit default): Widgets are defined using a DSL on the server and rendered dynamically on the client. See [here](./server-managed-widgets.md) for more details
+- **Client-managed widgets** (custom new): Pre-built React components are registered on the client and referenced by name from the server. See [here](./client-managed-widgets.md) for more details
+7. **Theming Support**: Support light and dark themes, with customizable colors and fonts.
+8. **Metadata Handling**: Allow passing custom metadata with thread creation and message sending requests.
+9. **Allow ghost user messages**: Allow sending an user message without displaying it in the chat thread. This is useful for system messages or background instructions. when this option is enabled, the user message is sent to the server but not rendered in the chat UI.
+10. 
+
+### Streaming Text Display
+
+1. **Typewriter Effect**: Render text deltas smoothly without janky re-renders
+2. **Debounced Updates**: Batch rapid deltas for performance
+3. **Cursor Indicator**: Show blinking cursor during active streaming. send message icon changes to a stop icon when streaming is in progress and `allow_cancel` is true
+4. **Markdown Parsing**: Parse markdown incrementally as text streams
+5. **HTML parsing**: text content can be both markdown or html. Parse and render accordingly
+
+### Error Handling
+
+1. **Error Display**: Show inline error messages with appropriate styling
+2. **Retry Mechanism**: Enable retry button when `allow_retry` is true
+3. **Graceful Degradation**: Handle connection losses gracefully
+4. **Timeout Handling**: Set reasonable timeouts for streaming responses
+
+### Progress Indication
+
+1. **task**: Displays a task text title, which will shimmer while it is the latest item in the thread. These titles are permanent members of the thread, and can use a custom icon, and can have optional expandable content (which is a markdown string). Use task for tool calls or arbitrary actions that you want to remain visible in the thread, and keep a record of. Tasks can initially be rendered as pending framing (e.g., "Fetching records...") and then updated to a past tense state (e.g., "Found 56 records).
+2. **workflow**: If you are running a multi-step task, you can group tasks together into a workflow. Workflow has two different styles, based on whether you pass a summary immediately, or at the very end of the workflow. The workflow summary is shown in the collapsed state of the workflow, and can either be a title + icon, or a duration (in seconds) that the workflow took to complete. you can expand/collapse the workflow to see all the individual tasks inside it. Use workflow when you are running complex, multi-step tasks that would be help to group and display to the user.
+3. **progress updates**: Show intermediate processing status. They're a great way to give ephemeral feedback to users about what is happening without littering the chat thread unnecessarily. Displays a non-persistent shimmer text title that will only display as long as it is the latest item in the thread. You can send multiple progress_update items and they will nicely rotate 
+4. **Cancel Support**: Display cancel button when streaming can be cancelled
+
+
+### Implementation Stack
+- **Runtime**: React 18 + Vite (same as `frontend/banking-web`) ensuring fast HMR and tree-shakable builds.
+- **Styling**: Tailwind CSS with shadcn/ui component presets layered on Radix primitives for consistent theming, focus rings, and accessibility.
+- **Utility Libraries**: `react-resizable-panels` for the draggable shell, `lucide-react` icon set, `sonner`/`@radix-ui/react-toast` for notices, and `@radix-ui/react-scroll-area` for virtualized panes.
+
+### High-Level Topology
+```
+<ChatShell>
+  ├─ <ShellHeader />            // new-thread button + thread-history toggle
+  └─ <ShellBody>
+    ├─ <HistoryView />       // replaces conversation pane when history icon active
+      └─ <StreamViewport />
+      └─ <ComposerDock />
+        ├─ <AttachmentTray />
+        └─ <Composer />
+</ChatShell>
+```
+- `ChatShell` stays resizable using `ResizablePanelGroup`, but thread controls now live in `ShellHeader` (a shadcn `Toolbar` with Radix `Tooltip` for icons).
+- The “history” icon toggles `HistoryView`, which temporarily replaces the conversation pane; selecting a thread hides history and rehydrates the stream.
+- `StreamViewport` Renders `ThreadItem` variants via shadcn `Card`, `Accordion`, `Tabs`, `Badge`, `Alert`, and Radix `Collapsible` for widgets/workflows. The SSE feed drives both progress, messages, widgets list simultaneously—`progress_update`, `task`, and `workflow` events land in the stream viewport as well.
+
+## System Architecture
+
+### Communication Protocol
+
+#### Endpoint Configuration
+- **Single Unified Endpoint**: All client-server communication flows through one endpoint
+- **Transport Protocols**: 
+  - Server-Sent Events (SSE) for real-time streaming updates
+- **Request Method**: POST for all operations
+
+#### Response Handling
+The server's `respond` method supports multiple response types:
+- Text messages with markdown formatting
+- Progress updates during processing
+- Tool invocations and results
+- Rich display widgets
+- Workflow visualization
+- Error notifications
+- Message retry management
+
+## Event Types and Handlers
+
+### 1. Thread Management Events
+
+#### Thread Lifecycle Events
+
+**`thread.created`**
+```typescript
+interface ThreadCreatedEvent {
+  type: 'thread.created';
+  thread: Thread;
+}
+```
+- **Purpose**: Emitted when a new conversation thread is initialized
+- **UI Action**: Create new thread container, initialize state
+- **React State**: Add thread to threads list, set as active thread
+
+**`thread.updated`**
+```typescript
+interface ThreadUpdatedEvent {
+  type: 'thread.updated';
+  thread: Thread;
+}
+```
+- **Purpose**: Thread metadata changed (title, status, etc.)
+- **UI Action**: Update thread display, refresh sidebar
+- **React State**: Merge updated thread properties
+
+**`thread.item.added`**
+```typescript
+interface ThreadItemAddedEvent {
+  type: 'thread.item.added';
+  item: ThreadItem;
+}
+```
+- **Purpose**: New item (message, widget, workflow) added to thread
+- **UI Action**: Append item to message list, scroll to bottom
+- **React State**: Push item to thread items array
+
+**`thread.item.updated`**
+```typescript
+interface ThreadItemUpdatedEvent {
+  type: 'thread.item.updated';
+  item_id: string;
+  update: ThreadItemUpdate;
+}
+```
+- **Purpose**: Incremental updates to existing thread items
+- **UI Action**: Apply delta updates without full re-render
+- **React State**: Update specific item properties by ID
+
+**`thread.item.done`**
+```typescript
+interface ThreadItemDoneEvent {
+  type: 'thread.item.done';
+  item: ThreadItem;
+}
+```
+- **Purpose**: Signals completion of a thread item
+- **UI Action**: Remove loading indicators, finalize rendering
+- **React State**: Mark item as complete, update status
+
+**`thread.item.removed`**
+```typescript
+interface ThreadItemRemovedEvent {
+  type: 'thread.item.removed';
+  item_id: string;
+}
+```
+- **Purpose**: Item deleted from thread
+- **UI Action**: Animate removal, update layout
+- **React State**: Filter out item from array
+
+**`thread.item.replaced`**
+```typescript
+interface ThreadItemReplacedEvent {
+  type: 'thread.item.replaced';
+  item: ThreadItem;
+}
+```
+- **Purpose**: Replace entire item (e.g., regeneration)
+- **UI Action**: Swap item with transition
+- **React State**: Replace item at same position
+
+### 2. Message Content Events
+
+#### Assistant Message Streaming
+
+**`assistant_message.content_part.added`**
+```typescript
+interface AssistantMessageContentPartAdded {
+  type: 'assistant_message.content_part.added';
+  content_index: number;
+  content: AssistantMessageContent;
+}
+```
+- **Purpose**: New content block started in assistant message
+- **UI Action**: Initialize new content container
+- **React State**: Add content part to message structure
+
+**`assistant_message.content_part.text_delta`**
+```typescript
+interface AssistantMessageContentPartTextDelta {
+  type: 'assistant_message.content_part.text_delta';
+  content_index: number;
+  delta: string;
+}
+```
+- **Purpose**: Incremental text streaming (token-by-token)
+- **UI Action**: Append text to content part, typewriter effect
+- **React State**: Concatenate delta to existing text
+- **Performance**: Use debounced rendering for smooth updates
+
+**`assistant_message.content_part.annotation_added`**
+```typescript
+interface AssistantMessageContentPartAnnotationAdded {
+  type: 'assistant_message.content_part.annotation_added';
+  content_index: number;
+  annotation_index: number;
+  annotation: Annotation;
+}
+```
+- **Purpose**: Add citation/reference to message content
+- **UI Action**: Display inline reference marker
+- **React State**: Add annotation to content part
+
+**`assistant_message.content_part.done`**
+```typescript
+interface AssistantMessageContentPartDone {
+  type: 'assistant_message.content_part.done';
+  content_index: number;
+  content: AssistantMessageContent;
+}
+```
+- **Purpose**: Content part finalized
+- **UI Action**: Apply final formatting, enable interactions
+- **React State**: Mark content part as complete
+
+### 3. Widget Events
+
+**`widget.root.updated`**
+```typescript
+interface WidgetRootUpdated {
+  type: 'widget.root.updated';
+  widget: WidgetRoot;
+}
+```
+- **Purpose**: Widget structure changed
+- **UI Action**: Re-render widget tree
+- **React State**: Replace widget root
+
+**`widget.component.updated`**
+```typescript
+interface WidgetComponentUpdated {
+  type: 'widget.component.updated';
+  component_id: string;
+  component: WidgetComponent;
+}
+```
+- **Purpose**: Individual widget component changed
+- **UI Action**: Update specific component
+- **React State**: Update component by ID in widget tree
+
+**`widget.streaming_text.value_delta`**
+```typescript
+interface WidgetStreamingTextValueDelta {
+  type: 'widget.streaming_text.value_delta';
+  component_id: string;
+  delta: string;
+  done: boolean;
+}
+```
+- **Purpose**: Stream text into widget component
+- **UI Action**: Append text to widget field
+- **React State**: Concatenate delta, mark done when complete
+
+### 4. Workflow Events
+
+**`workflow.task.added`**
+```typescript
+interface WorkflowTaskAdded {
+  type: 'workflow.task.added';
+  task_index: number;
+  task: Task;
+}
+```
+- **Purpose**: New step added to workflow visualization
+- **UI Action**: Render new task card
+- **React State**: Insert task at index
+
+**`workflow.task.updated`**
+```typescript
+interface WorkflowTaskUpdated {
+  type: 'workflow.task.updated';
+  task_index: number;
+  task: Task;
+}
+```
+- **Purpose**: Task status/content changed
+- **UI Action**: Update task display, change indicators
+- **React State**: Update task at index
+
+### 5. System Events
+
+**`stream_options`**
+```typescript
+interface StreamOptionsEvent {
+  type: 'stream_options';
+  stream_options: StreamOptions;
+}
+
+interface StreamOptions {
+  allow_cancel: boolean;
+}
+```
+- **Purpose**: Configure stream behavior at runtime
+- **UI Action**: Enable/disable cancel button
+- **React State**: Update stream options
+
+**`progress_update`**
+```typescript
+interface ProgressUpdateEvent {
+  type: 'progress_update';
+  icon: IconName | null;
+  text: string;
+}
+```
+- **Purpose**: Show intermediate processing status. They're a great way to give ephemeral feedback to users about what is happening without littering the chat thread unnecessarily.
+- **UI Action**: Displays a non-persistent shimmer text title that will only display as long as it is the latest item in the thread. You can send multiple progress_update items and they will nicely rotate between each other
+- **React State**: Update progress display
+
+**`client_effect`**
+```typescript
+interface ClientEffectEvent {
+  type: 'client_effect';
+  name: string;
+  data: Record<string, any>;
+}
+```
+- **Purpose**: Trigger client-side actions (navigation, notifications)
+- **UI Action**: Execute side effect (redirect, show toast, etc.)
+- **React State**: Handle effect based on name
+
+**`error`**
+```typescript
+interface ErrorEvent {
+  type: 'error';
+  code: ErrorCode | 'custom';
+  message: string | null;
+  allow_retry: boolean;
+}
+```
+- **Purpose**: Notify of processing errors
+- **UI Action**: Display error message, show retry button if allowed
+- **React State**: Set error state, enable retry option
+
+**`notice`**
+```typescript
+interface NoticeEvent {
+  type: 'notice';
+  level: 'info' | 'warning' | 'danger';
+  message: string; // Supports markdown
+  title: string | null;
+}
+```
+- **Purpose**: Display user notifications
+- **UI Action**: Show banner/toast with appropriate styling
+- **React State**: Add to notifications queue
+
+## Request Types
+
+### Streaming Requests
+
+These requests trigger SSE streaming responses:
+
+**Create Thread**
+```typescript
+interface ThreadsCreateReq {
+  type: 'threads.create';
+  params: {
+    input: UserMessageInput;
+  };
+  metadata?: Record<string, any>;
+}
+```
+
+> **Note**: When creating a thread, the response is streamed via SSE. The stream includes the `thread.created` event followed by subsequent events as the assistant processes the initial message.
+
+**Example Request:**
+```json
+{
+  "type": "threads.create",
+  "params": {
+    "input": {
+      "content": [
+        {
+          "type": "input_text",
+          "text": "can you pay this bill for me"
+        }
+      ],
+      "quoted_text": "",
+      "attachments": ["atc_c02562d2"],
+      "inference_options": {}
+    }
+  }
+}
+```
+
+**Example Response Stream:**
+```
+data: {"type":"thread.created","thread":{"id":"thr_f470d530","created_at":"2025-11-27T16:55:21.898537","status":{"type":"active"},"metadata":{},"items":{"data":[],"has_more":false}}}
+
+data: {"type":"thread.item.done","item":{"id":"msg_86628adc","thread_id":"thr_f470d530","created_at":"2025-11-27T16:55:21.899896","type":"user_message","content":[{"type":"input_text","text":"can you pay this bill for me"}],"attachments":[{"id":"atc_c02562d2","name":"gori.png","mime_type":"image/png","type":"image","preview_url":"https://ca-web-z576swbdi2iwk.greenwave-20f5c76e.francecentral.azurecontainerapps.io/preview/atc_c02562d2"}],"quoted_text":"","inference_options":{}}}
+
+data: {"type":"stream_options","stream_options":{"allow_cancel":true}}
+
+data: {"type":"progress_update","icon":"atom","text":"Processing your request ..."}
+
+data: {"type":"thread.item.added","item":{"id":"call_4okrzGmgK8sTV1lBndLp61F1","thread_id":"thr_f470d530","created_at":"2025-11-27T16:55:24.459113","type":"task","task":{"status_indicator":"none","type":"custom","title":"Extracting data from the uploaded image...","icon":"search"}}}
+
+data: {"type":"thread.item.added","item":{"id":"call_4okrzGmgK8sTV1lBndLp61F1","thread_id":"thr_f470d530","created_at":"2025-11-27T16:55:33.089565","type":"task","task":{"status_indicator":"none","type":"custom","title":"Data extracted from the uploaded image","icon":"check-circle-filled"}}}
+
+data: {"type":"thread.item.added","item":{"id":"msg_e4ba1d6c","thread_id":"thr_f470d530","created_at":"2025-11-27T16:55:34.073562","type":"assistant_message","content":[{"annotations":[],"text":"I've","type":"output_text"}]}}
+
+data: {"type":"thread.item.updated","item_id":"itm_02960f91","update":{"type":"assistant_message.content_part.text_delta","content_index":1,"delta":" extracted"}}
+
+data: {"type":"thread.item.updated","item_id":"itm_858da320","update":{"type":"assistant_message.content_part.text_delta","content_index":2,"delta":" the"}}
+
+data: {"type":"thread.item.updated","item_id":"itm_4f7c5809","update":{"type":"assistant_message.content_part.text_delta","content_index":3,"delta":" following"}}
+
+data: {"type":"thread.item.done","item":{"id":"msg_e4ba1d6c","thread_id":"thr_f470d530","created_at":"2025-11-27T16:55:34.688740","type":"assistant_message","content":[{"annotations":[],"text":"I've extracted the following details from your bill:\n\n| Field           | Value                  |\n|-----------------|-----------------------|\n| Payee Name      | GORI                  |\n| Invoice Number  | 9524011000817857      |\n| Invoice Date    | 2024-05-08            |\n| Amount Due      | €85,20                |\n\nPlease confirm that these details are correct before I proceed. If any information is missing or incorrect, let me know. Once confirmed, I'll check your previous payments to ensure this bill hasn't already been paid.","type":"output_text"}]}}
+```
+
+**Add User Message**
+```typescript
+interface ThreadsAddUserMessageReq {
+  type: 'threads.add_user_message';
+  params: {
+    input: UserMessageInput;
+    thread_id: string;
+  };
+  metadata?: Record<string, any>;
+}
+```
+
+**Example Request:**
+```json
+{
+  "type": "threads.add_user_message",
+  "params": {
+    "input": {
+      "content": [
+        {
+          "type": "input_text",
+          "text": "yep they are"
+        }
+      ],
+      "quoted_text": "",
+      "attachments": [],
+      "inference_options": {}
+    },
+    "thread_id": "thr_f470d530"
+  }
+}
+```
+
+**Example Response Stream:**
+```
+data: {"type":"thread.item.done","item":{"id":"msg_c680fff7","thread_id":"thr_f470d530","created_at":"2025-11-27T17:23:33.253488","type":"user_message","content":[{"type":"input_text","text":"yep they are"}],"attachments":[],"quoted_text":"","inference_options":{}}}
+
+data: {"type":"progress_update","icon":"atom","text":"Processing your request ..."}
+
+data: {"type":"thread.item.added","item":{"id":"call_5hzlr2NFljifxip0fznyPqAG","thread_id":"thr_f470d530","created_at":"2025-11-27T17:23:37.295380","type":"task","task":{"status_indicator":"none","type":"custom","title":"Looking up your account for your user name...","icon":"search"}}}
+
+data: {"type":"thread.item.added","item":{"id":"call_YyoD6SAaIbLJwk2Z3YsObbJQ","thread_id":"thr_f470d530","created_at":"2025-11-27T17:23:37.298180","type":"task","task":{"status_indicator":"none","type":"custom","title":"Searching transactions for the recipient...","icon":"search"}}}
+
+data: {"type":"thread.item.added","item":{"id":"msg_b8348cfd","thread_id":"thr_f470d530","created_at":"2025-11-27T17:23:40.819366","type":"assistant_message","content":[{"annotations":[],"text":"This","type":"output_text"}]}}
+
+data: {"type":"thread.item.updated","item_id":"itm_e4bf155b","update":{"type":"assistant_message.content_part.text_delta","content_index":1,"delta":" bill"}}
+
+data: {"type":"thread.item.updated","item_id":"itm_3933007a","update":{"type":"assistant_message.content_part.text_delta","content_index":2,"delta":" for"}}
+
+data: {"type":"thread.item.updated","item_id":"itm_fe8ba4a6","update":{"type":"assistant_message.content_part.text_delta","content_index":3,"delta":" G"}}
+
+data: {"type":"thread.item.updated","item_id":"itm_c1b13677","update":{"type":"assistant_message.content_part.text_delta","content_index":4,"delta":"ORI"}}
+
+data: {"type":"thread.item.done","item":{"id":"msg_b8348cfd","thread_id":"thr_f470d530","created_at":"2025-11-27T17:23:41.443057","type":"assistant_message","content":[{"annotations":[],"text":"This bill for GORI (invoice number: 9524011000817857, amount: €85,20) has already been paid on 2025-11-25 using your Primary Platinum Visa credit card.\n\nHere are the payment details:\n\n| Date & Time         | Recipient | Invoice Number         | Amount   | Payment Method     | Status |\n|---------------------|-----------|------------------------|----------|--------------------|--------|\n| 2025-11-25 14:04:14 | GORI      | 9524011000817857       | €85,20   | Primary Platinum Visa | Paid   |\n\nNo further payment is required for this bill. If you need to pay a different bill, please upload it or provide the details.","type":"output_text"}]}}
+```
+
+**Add Tool Output**
+```typescript
+interface ThreadsAddClientToolOutputReq {
+  type: 'threads.add_client_tool_output';
+  params: {
+    thread_id: string;
+    result: any;
+  };
+  metadata?: Record<string, any>;
+}
+```
+
+**Retry After Item**
+```typescript
+interface ThreadsRetryAfterItemReq {
+  type: 'threads.retry_after_item';
+  params: {
+    thread_id: string;
+    item_id: string;
+  };
+  metadata?: Record<string, any>;
+}
+```
+
+**Custom Action**
+```typescript
+interface ThreadsCustomActionReq {
+  type: 'threads.custom_action';
+  params: {
+    thread_id: string;
+    item_id: string | null;
+    action: Action<string, any>;
+  };
+  metadata?: Record<string, any>;
+}
+```
+**Custom Action - Request Example**
+```json
+data: {"type":"progress_update","icon":"atom","text":"Processing your request ..."}
+data: {"type":"thread.item.added","item":{"id":"msg_705ad562","thread_id":"thr_c56118de","created_at":"2025-11-27T18:20:43.344879","type":"assistant_message","content":[{"annotations":[],"text":"The","type":"output_text"}]}}
+data: {"type":"thread.item.updated","item_id":"itm_c8891202","update":{"type":"assistant_message.content_part.text_delta","content_index":1,"delta":" payment"}}
+
+data: {"type":"thread.item.updated","item_id":"itm_15b09cb7","update":{"type":"assistant_message.content_part.text_delta","content_index":2,"delta":" could"}}
+
+data: {"type":"thread.item.updated","item_id":"itm_a5bcce20","update":{"type":"assistant_message.content_part.text_delta","content_index":3,"delta":" not"}}
+
+data: {"type":"thread.item.updated","item_id":"itm_5faf3e0e","update":{"type":"assistant_message.content_part.text_delta","content_index":4,"delta":" be"}}
+
+data: {"type":"thread.item.updated","item_id":"itm_7280aacb","update":{"type":"assistant_message.content_part.text_delta","content_index":5,"delta":" processed"}}
+
+data: {"type":"thread.item.done","item":{"id":"msg_705ad562","thread_id":"thr_c56118de","created_at":"2025-11-27T18:20:43.518367","type":"assistant_message","content":[{"annotations":[],"text":"The payment could not be processed ","type":"output_text"}]}}
+```
+**Custom Action - Response Example**
+```json
+{}
+```
+### Non-Streaming Requests
+
+These requests return immediate JSON responses:
+
+**Get Thread by ID**
+```typescript
+interface ThreadsGetByIdReq {
+  type: 'threads.get_by_id';
+  params: {
+    thread_id: string;
+  };
+  metadata?: Record<string, any>;
+}
+```
+
+**Example Request:**
+```json
+{
+  "type": "threads.get_by_id",
+  "params": {
+    "thread_id": "thr_12c3ba2d"
+  }
+}
+```
+
+**Example Response:**
+```json
+{
+  "id": "thr_12c3ba2d",
+  "created_at": "2025-11-27T16:44:46.180370",
+  "status": {
+    "type": "active"
+  },
+  "metadata": {},
+  "items": {
+    "data": [
+      {
+        "id": "msg_974428ee",
+        "thread_id": "thr_12c3ba2d",
+        "created_at": "2025-11-27T16:44:46.181719",
+        "type": "user_message",
+        "content": [
+          {
+            "type": "input_text",
+            "text": "how much I have on my account"
+          }
+        ],
+        "attachments": [],
+        "quoted_text": "",
+        "inference_options": {}
+      },
+      {
+        "id": "msg_12aed261",
+        "thread_id": "thr_12c3ba2d",
+        "created_at": "2025-11-27T16:44:49.869394",
+        "type": "assistant_message",
+        "content": [
+          {
+            "annotations": [],
+            "text": "Here are the details of your account:\n\n| Account Holder | Currency | Balance     |\n|----------------|----------|-------------|\n| Bob User       | EUR      | €10,000.00  |\n\nIf you need more information (transactions, payment methods, etc.), just let me know!",
+            "type": "output_text"
+          }
+        ]
+      }
+    ],
+    "has_more": false,
+    "after": "msg_12aed261"
+  }
+}
+```
+
+**List Threads**
+```typescript
+interface ThreadsListReq {
+  type: 'threads.list';
+  params: {
+    limit?: number;
+    order?: 'asc' | 'desc';
+    after?: string;
+  };
+  metadata?: Record<string, any>;
+}
+```
+
+***Example Request:***
+```json
+{
+  "type": "threads.list",
+  "params": {
+    "limit": 9999,
+    "order": "desc"
+  }
+}
+```
+
+***Example Response:***
+```json
+{
+  "data": [
+    {
+      "title": "can you pay this bill for me",
+      "id": "thr_5a1bad4f",
+      "created_at": "2025-11-27T14:23:46.724911",
+      "status": {
+        "type": "active"
+      },
+      "metadata": {},
+      "items": {
+        "data": [],
+        "has_more": false
+      }
+    },
+    {
+      "title": "how much I have on my account",
+      "id": "thr_aa16ec0c",
+      "created_at": "2025-11-27T14:22:10.241056",
+      "status": {
+        "type": "active"
+      },
+      "metadata": {},
+      "items": {
+        "data": [],
+        "has_more": false
+      }
+    }
+  ],
+  "has_more": false,
+  "after": "thr_aa16ec0c"
+}
+```
+
+**List Items**
+```typescript
+interface ItemsListReq {
+  type: 'items.list';
+  params: {
+    thread_id: string;
+    limit?: number;
+    order?: 'asc' | 'desc';
+    after?: string;
+  };
+  metadata?: Record<string, any>;
+}
+```
+
+**Submit Feedback**
+```typescript
+interface ItemsFeedbackReq {
+  type: 'items.feedback';
+  params: {
+    thread_id: string;
+    item_ids: string[];
+    kind: 'positive' | 'negative';
+  };
+  metadata?: Record<string, any>;
+}
+```
+
+**Example Request:**
+```json
+{
+  "type": "items.feedback",
+  "params": {
+    "thread_id": "thr_f470d530",
+    "item_ids": [
+      "call_5hzlr2NFljifxip0fznyPqAG",
+      "call_YyoD6SAaIbLJwk2Z3YsObbJQ",
+      "call_J24dZeyNay3hjc065ljEZfMj",
+      "call_k5W5uhdTghzAPQVeyohZllVL",
+      "msg_b8348cfd"
+    ],
+    "kind": "positive"
+  }
+}
+```
+
+**Example Response:**
+```json
+{}
+```
+
+**Create Attachment**
+```typescript
+interface AttachmentsCreateReq {
+  type: 'attachments.create';
+  params: {
+    name: string;
+    size: number;
+    mime_type: string;
+  };
+  metadata?: Record<string, any>;
+}
+```
+
+> **Note**: This request is triggered when the user clicks the attachment icon and selects a file. Attachment upload uses a **two-phase approach**:
+> 1. **Phase 1**: The client sends the `attachments.create` request with file metadata
+> 2. **Phase 2**: Upon receiving the response with `upload_url`, the client uploads the actual file bytes to that URL with multipart/form-data field so that the server can physically store the file
+Furthermore, and additional call is made to preview_url to render thumbnails of an image attached to a user message
+**Example Request:**
+```json
+{
+  "type": "attachments.create",
+  "params": {
+    "name": "gori.png",
+    "size": 377958,
+    "mime_type": "image/png"
+  }
+}
+```
+
+**Example Response:**
+```json
+{
+  "id": "atc_c02562d2",
+  "name": "gori.png",
+  "mime_type": "image/png",
+  "upload_url": "https://ca-web-z576swbdi2iwk.greenwave-20f5c76e.francecentral.azurecontainerapps.io/upload/atc_c02562d2",
+  "type": "image",
+  "preview_url": "https://ca-web-z576swbdi2iwk.greenwave-20f5c76e.francecentral.azurecontainerapps.io/preview/atc_c02562d2"
+}
+```
+
+**Delete Attachment**
+```typescript
+interface AttachmentsDeleteReq {
+  type: 'attachments.delete';
+  params: {
+    attachment_id: string;
+  };
+  metadata?: Record<string, any>;
+}
+```
+
+**Example Request:**
+```json
+{
+  "type": "attachments.delete",
+  "params": {
+    "attachment_id": "atc_9b2b9b06"
+  }
+}
+```
+
+**Example Response:**
+```json
+{}
+```
+
+**Update Thread**
+```typescript
+interface ThreadsUpdateReq {
+  type: 'threads.update';
+  params: {
+    thread_id: string;
+    title: string;
+  };
+  metadata?: Record<string, any>;
+}
+```
+
+**Delete Thread**
+```typescript
+interface ThreadsDeleteReq {
+  type: 'threads.delete';
+  params: {
+    thread_id: string;
+  };
+  metadata?: Record<string, any>;
+}
+```
+
+## Data Models
+
+### Thread Structure
+
+```typescript
+interface Thread {
+  id: string;
+  title: string | null;
+  created_at: string; // ISO 8601 datetime
+  status: ThreadStatus;
+  metadata: Record<string, any>;
+  items: Page<ThreadItem>;
+}
+
+type ThreadStatus = 
+  | { type: 'active' }
+  | { type: 'locked'; reason?: string }
+  | { type: 'closed'; reason?: string };
+
+interface Page<T> {
+  data: T[];
+  has_more: boolean;
+  after: string | null;
+}
+```
+
+### Thread Items
+
+```typescript
+type ThreadItem =
+  | UserMessageItem
+  | AssistantMessageItem
+  | ClientToolCallItem
+  | WidgetItem
+  | WorkflowItem
+  | TaskItem
+  | EndOfTurnItem;
+
+interface UserMessageItem {
+  type: 'user_message';
+  id: string;
+  thread_id: string;
+  created_at: string;
+  content: UserMessageContent[];
+  attachments: Attachment[];
+  quoted_text: string | null;
+  inference_options: InferenceOptions;
+}
+
+interface AssistantMessageItem {
+  type: 'assistant_message';
+  id: string;
+  thread_id: string;
+  created_at: string;
+  content: AssistantMessageContent[];
+}
+
+interface ClientToolCallItem {
+  type: 'client_tool_call';
+  id: string;
+  thread_id: string;
+  created_at: string;
+  status: 'pending' | 'completed';
+  call_id: string;
+  name: string;
+  arguments: Record<string, any>;
+  output: any | null;
+}
+
+interface WidgetItem {
+  type: 'widget';
+  id: string;
+  thread_id: string;
+  created_at: string;
+  widget: WidgetRoot;
+  copy_text: string | null;
+}
+
+
+interface WorkflowItem {
+  type: 'workflow';
+  id: string;
+  thread_id: string;
+  created_at: string;
+  workflow: Workflow;
+}
+
+interface TaskItem {
+  type: 'task';
+  id: string;
+  thread_id: string;
+  created_at: string;
+  task: Task;
+}
+
+interface EndOfTurnItem {
+  type: 'end_of_turn';
+  id: string;
+  thread_id: string;
+  created_at: string;
+}
+```
+**Example WidgetItem Response:**
+```
+data: {"type":"thread.item.done","item":{"id":"wdg_550b6350","thread_id":"thr_c56118de","created_at":"2025-11-27T18:11:44.870265","type":"widget","widget":{"key":"approval_request","type":"Card","children":[{"children":[{"children":[{"type":"Icon","name":"info","color":"white","size":"3xl"}],"padding":3.0,"radius":"full","background":"yellow-400","type":"Box"},{"children":[{"type":"Title","value":"Approval Required"},{"type":"Text","value":"This action requires your approval before proceeding.","color":"secondary"},{"type":"Markdown","value":"**processPayment**"}],"align":"center","gap":1,"type":"Col"}],"align":"center","gap":4,"padding":4.0,"type":"Col"},{"type":"Markdown","value":"```py\n{'account_id': '1010', 'amount': 103.25, 'description': 'payment for invoice 411417740', 'timestamp': '2025-11-27 18:11:41', 'recipient_name': 'Organizer', 'payment_type': 'CreditCard', 'card_id': '66666', 'status': 'paid', 'category': 'subscriptions'}\n```"},{"type":"Divider","spacing":2},{"children":[{"type":"Button","label":"Approve","onClickAction":{"type":"approval","payload":{"tool_name":"processPayment","tool_args":{"account_id":"1010","amount":103.25,"description":"payment for invoice 411417740","timestamp":"2025-11-27 18:11:41","recipient_name":"Organizer","payment_type":"CreditCard","card_id":"66666","status":"paid","category":"subscriptions"},"approved":true,"call_id":"call_DDg5KQ3pB2Exkc7WbMz41q5u","request_id":"call_DDg5KQ3pB2Exkc7WbMz41q5u"},"handler":"server","loadingBehavior":"auto"},"block":true},{"type":"Button","label":"No","onClickAction":{"type":"approval","payload":{"tool_name":"processPayment","tool_args":{"account_id":"1010","amount":103.25,"description":"payment for invoice 411417740","timestamp":"2025-11-27 18:11:41","recipient_name":"Organizer","payment_type":"CreditCard","card_id":"66666","status":"paid","category":"subscriptions"},"approved":false,"call_id":"call_DDg5KQ3pB2Exkc7WbMz41q5u","request_id":"call_DDg5KQ3pB2Exkc7WbMz41q5u"},"handler":"server","loadingBehavior":"auto"},"variant":"outline","block":true}],"type":"Row"}],"padding":0.0}}}
+```
+
+This example shows a widget displaying an approval request card with:
+- An icon and title indicating approval is required
+- Markdown content showing the payment details in a code block
+- Two interactive buttons ("Approve" and "No") that trigger server-side actions
+- The widget uses a Card layout with nested components (Box, Col, Row, Icon, Title, Text, Markdown, Divider, Button)
+- Button actions include payload data for the `processPayment` tool with full transaction details
+
+### Message Content
+
+```typescript
+interface AssistantMessageContent {
+  type: 'output_text';
+  text: string;
+  annotations: Annotation[];
+}
+
+type UserMessageContent =
+  | { type: 'input_text'; text: string }
+  | { 
+      type: 'input_tag';
+      id: string;
+      text: string;
+      data: Record<string, any>;
+      group: string | null;
+      interactive: boolean;
+    };
+
+interface Annotation {
+  type: 'annotation';
+  source: URLSource | FileSource | EntitySource;
+  index: number | null;
+}
+
+interface URLSource {
+  type: 'url';
+  title: string;
+  url: string;
+  description: string | null;
+  timestamp: string | null;
+  attribution: string | null;
+  group: string | null;
+}
+
+interface FileSource {
+  type: 'file';
+  title: string;
+  filename: string;
+  description: string | null;
+  timestamp: string | null;
+  group: string | null;
+}
+
+interface EntitySource {
+  type: 'entity';
+  id: string;
+  title: string;
+  icon: IconName | null;
+  data: Record<string, any>;
+  description: string | null;
+  timestamp: string | null;
+  group: string | null;
+}
+```
+
+### Attachments
+
+```typescript
+type Attachment =
+  | FileAttachment
+  | ImageAttachment;
+
+interface FileAttachment {
+  type: 'file';
+  id: string;
+  name: string;
+  mime_type: string;
+  upload_url: string | null;
+}
+
+interface ImageAttachment {
+  type: 'image';
+  id: string;
+  name: string;
+  mime_type: string;
+  upload_url: string | null;
+  preview_url: string;
+}
+```
+
+
+```typescript
+interface Workflow {
+  type: 'custom' | 'reasoning';
+  tasks: Task[];
+  summary: WorkflowSummary | null;
+  expanded: boolean;
+}
+
+type WorkflowSummary =
+  | { title: string; icon: IconName | null }
+  | { duration: number }; // seconds
+
+type Task =
+  | CustomTask
+  | SearchTask
+  | ThoughtTask
+  | FileTask
+  | ImageTask;
+
+interface BaseTask {
+  status_indicator: 'none' | 'loading' | 'complete';
+}
+
+interface CustomTask extends BaseTask {
+  type: 'custom';
+  title: string | null;
+  icon: IconName | null;
+  content: string | null;
+}
+
+interface SearchTask extends BaseTask {
+  type: 'web_search';
+  title: string | null;
+  title_query: string | null;
+  queries: string[];
+  sources: URLSource[];
+}
+
+interface ThoughtTask extends BaseTask {
+  type: 'thought';
+  title: string | null;
+  content: string;
+}
+
+interface FileTask extends BaseTask {
+  type: 'file';
+  title: string | null;
+  sources: FileSource[];
+}
+
+interface ImageTask extends BaseTask {
+  type: 'image';
+  title: string | null;
+}
+```
+
+### User Input
+
+```typescript
+interface UserMessageInput {
+  content: UserMessageContent[];
+  attachments: string[]; // Attachment IDs
+  quoted_text: string | null;
+  inference_options: InferenceOptions;
+}
+
+interface InferenceOptions {
+  tool_choice: ToolChoice | null;
+  model: string | null;
+}
+
+interface ToolChoice {
+  id: string;
+}
+```
+
+---
+
+## Chat Flows
+
+This section describes the three core conversational flows supported by the ChatKit protocol, including sequence diagrams and event-by-event breakdowns.
+
+### Flow 1 – New Thread (First User Message)
+
+When a user starts a new conversation, the client sends a `threads.create` request. The server creates the thread, echoes the user message, and streams the agent's response — including progress updates, tool-call tasks, text deltas, and the final assistant message.
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant S as ChatKit Server
+    participant O as Orchestrator
+    participant A as Specialist Agent
+    participant MCP as MCP Server
+
+    C->>S: POST /chatkit { type: "threads.create", params: { input: { content: [...] } } }
+    S-->>C: SSE: thread.created { thread: { id: "thr_xxx" } }
+    S-->>C: SSE: thread.item.done { item: { type: "user_message", content: [...] } }
+    S-->>C: SSE: stream_options { allow_cancel: true }
+    S-->>C: SSE: progress_update { text: "Processing your request ..." }
+
+    S->>O: processMessageStream(messages)
+    O->>A: handoff to specialist agent
+    S-->>C: SSE: thread.item.added { item: { type: "task", title: "Connected to TransactionHistoryAgent" } }
+
+    A->>MCP: getAccountsByUserName(userName)
+    MCP-->>A: [account data]
+    S-->>C: SSE: thread.item.added { item: { type: "task", title: "Retrieved account info" } }
+
+    A->>MCP: getTransactionsByRecipientName(accountId, recipientName)
+    MCP-->>A: [transaction records]
+    S-->>C: SSE: thread.item.added { item: { type: "task", title: "Found transactions for Contoso" } }
+
+    A-->>S: streaming text response
+    S-->>C: SSE: thread.item.added { item: { type: "assistant_message", content: [{ text: "Here" }] } }
+    S-->>C: SSE: thread.item.updated { update: { type: "text_delta", delta: " are" } }
+    S-->>C: SSE: thread.item.updated { update: { type: "text_delta", delta: " the" } }
+    Note over S,C: ... more text deltas streamed token by token ...
+    S-->>C: SSE: thread.item.done { item: { type: "assistant_message", content: [{ text: "full response" }] } }
+```
+
+#### Event Sequence
+
+| # | Event Type | Description |
+|---|---|---|
+| 1 | `thread.created` | A new thread is created with a unique `thread_id`. The client stores this ID for all subsequent requests in this conversation. |
+| 2 | `thread.item.done` | The user's original message is echoed back as a `user_message` item, confirming it was received and stored in the thread. |
+| 3 | `stream_options` | Stream configuration is sent (e.g., `allow_cancel: true`) so the client can render a cancel button. |
+| 4 | `progress_update` | Ephemeral status text (e.g., "Processing your request ...") displayed as a shimmer indicator. Replaced by subsequent events. |
+| 5 | `thread.item.added` (task) | One or more task events appear as the orchestrator hands off to specialist agents and those agents invoke MCP tools. Each task has a title (e.g., "Connected to TransactionHistoryAgent", "Retrieved account info"). |
+| 6 | `thread.item.added` (assistant_message) | The assistant message item is created with the first token of text. |
+| 7 | `thread.item.updated` (text_delta) | Incremental text deltas stream token-by-token, enabling the typewriter rendering effect. |
+| 8 | `thread.item.done` (assistant_message) | The final, complete assistant message with full text content. The client uses this to replace the incrementally built text. |
+
+---
+
+### Flow 2 – Multi-Turn Conversation (Follow-Up Message)
+
+When the user sends a follow-up message within an existing thread, the client sends a `threads.add_user_message` request with the `thread_id`. The server resumes from the thread's conversation history, preserving context across turns.
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant S as ChatKit Server
+    participant O as Orchestrator
+    participant A as Specialist Agent
+    participant MCP as MCP Server
+
+    Note over C,S: Thread already exists from Flow 1 (thread_id = "thr_xxx")
+
+    C->>S: POST /chatkit { type: "threads.add_user_message", params: { thread_id: "thr_xxx", input: { content: [...] } } }
+    S-->>C: SSE: thread.item.done { item: { type: "user_message" } }
+    S-->>C: SSE: stream_options { allow_cancel: true }
+    S-->>C: SSE: progress_update { text: "Processing your request ..." }
+
+    S->>O: processMessageStream(messages) with full conversation history
+    O->>A: handoff (agent has context from previous turns)
+
+    A->>MCP: getTransactionsByRecipientName(accountId, "ACME")
+    MCP-->>A: [ACME transactions]
+    S-->>C: SSE: thread.item.added { item: { type: "task", title: "Found transactions for ACME" } }
+
+    A-->>S: streaming text response
+    S-->>C: SSE: thread.item.added { item: { type: "assistant_message" } }
+    S-->>C: SSE: thread.item.updated { update: { type: "text_delta", delta: "..." } }
+    Note over S,C: ... text deltas ...
+    S-->>C: SSE: thread.item.done { item: { type: "assistant_message" } }
+```
+
+#### Key Differences from Flow 1
+
+| Aspect | Flow 1 (New Thread) | Flow 2 (Follow-Up) |
+|---|---|---|
+| Request type | `threads.create` | `threads.add_user_message` |
+| Thread ID | Generated by server | Must be provided by client |
+| First SSE event | `thread.created` | `thread.item.done` (user message echo) |
+| Conversation context | None | Full history from previous turns |
+| Agent behavior | Fresh context | Understands implicit references (e.g., "what about ACME" is interpreted as a transaction inquiry based on the previous turn) |
+
+#### Context Preservation
+
+The orchestrator passes the full conversation history (all previous user and assistant messages) to the agent on each turn. This enables the agent to:
+- Resolve ambiguous follow-up queries ("what about ACME" → understands "transactions for ACME")
+- Avoid repeating already-completed steps (e.g., account lookup cached from turn 1)
+- Maintain the same specialist agent routing when the topic hasn't changed
+
+---
+
+### Flow 3 – Client Widget and Custom Action (Human-in-the-Loop Approval)
+
+This flow covers multi-turn interactions where the agent requires explicit human approval before executing a sensitive action (e.g., payment). The agent framework's `approval_mode` on MCP tools triggers a checkpoint-and-pause mechanism. The server emits a `client_widget` with a `tool_approval_request`, and the client sends back a `threads.custom_action` with the user's decision.
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant S as ChatKit Server
+    participant O as Orchestrator
+    participant PA as Payment Agent
+    participant MCP as MCP Servers
+
+    C->>S: threads.create { "I need to pay a bill. Payee: Mario, Invoice: 1561672, Amount: 100 EUR" }
+    S-->>C: SSE: thread.created { thread_id: "thr_yyy" }
+    S-->>C: SSE: thread.item.done { user_message }
+
+    PA->>MCP: getAccountsByUserName, getTransactionsByRecipientName
+    MCP-->>PA: account data, no prior payments
+    S-->>C: SSE: task events (account lookup, transaction search)
+    S-->>C: SSE: assistant_message { "Bill not yet paid. Select a payment method." }
+
+    C->>S: threads.add_user_message { "use my rechargeable visa card" }
+    S-->>C: SSE: thread.item.done { user_message }
+
+    PA->>MCP: getCreditCards, getCardDetails
+    MCP-->>PA: card details (balance: 640.25 EUR)
+    S-->>C: SSE: task events (card lookup)
+    S-->>C: SSE: assistant_message { "Card has enough funds. Confirm?" }
+
+    C->>S: threads.add_user_message { "proceed with the payment" }
+    S-->>C: SSE: thread.item.done { user_message }
+
+    Note over PA: Agent calls processPayment → approval_mode triggers checkpoint
+    PA-->>O: function_approval_request event
+    O-->>S: WorkflowEvent (request_info)
+
+    S-->>C: SSE: thread.item.done { type: "client_widget", name: "tool_approval_request", args: { tool_name, tool_args, call_id } }
+
+    Note over C: Client renders approval UI with payment details
+
+    C->>S: threads.custom_action { item_id: "wdg_xxx", action: { type: "approval", payload: { approved: true, call_id, tool_name, tool_args } } }
+
+    S->>O: processToolApprovalResponse(approved=true)
+    O->>PA: resume workflow from checkpoint
+    PA->>MCP: processPayment(account_id, amount, ...)
+    MCP-->>PA: { status: "ok" }
+    S-->>C: SSE: task events (payment submitted)
+    S-->>C: SSE: assistant_message { "Payment confirmed." }
+```
+
+#### Approval Widget Event
+
+When the agent attempts to call a tool configured with `approval_mode: always_require_approval`, the framework pauses execution and emits a `client_widget` event:
+
+```json
+{
+  "type": "thread.item.done",
+  "item": {
+    "id": "wdg_100daee1",
+    "thread_id": "thr_yyy",
+    "type": "client_widget",
+    "name": "tool_approval_request",
+    "args": {
+      "tool_name": "processPayment",
+      "tool_args": "{\"account_id\":\"1010\",\"amount\":100,...}",
+      "call_id": "call_l4vKKGYun9DtHRZ9lChkF5TC",
+      "request_id": null
+    }
+  }
+}
+```
+
+The client renders this as an approval card showing the payment details with **Approve** and **Reject** buttons.
+
+#### Custom Action Request
+
+When the user clicks **Approve**, the client sends a `threads.custom_action`:
+
+```json
+{
+  "type": "threads.custom_action",
+  "params": {
+    "item_id": "wdg_100daee1",
+    "action": {
+      "type": "approval",
+      "payload": {
+        "tool_name": "processPayment",
+        "tool_args": "{\"account_id\":\"1010\",\"amount\":100,...}",
+        "approved": true,
+        "call_id": "call_l4vKKGYun9DtHRZ9lChkF5TC",
+        "request_id": null
+      },
+      "handler": "server",
+      "loadingBehavior": "auto"
+    },
+    "thread_id": "thr_yyy"
+  }
+}
+```
+
+#### Checkpoint / Resume Mechanism
+
+The human-in-the-loop flow relies on the Agent Framework's checkpoint system:
+
+| Step | Component | Action |
+|---|---|---|
+| 1 | Payment Agent | Calls `processPayment` tool |
+| 2 | Agent Framework | Detects `approval_mode` on the MCP tool, saves a checkpoint, emits `function_approval_request` |
+| 3 | ChatKit Events Handler | Converts the approval request into a `client_widget` SSE event |
+| 4 | Client | Renders the approval UI |
+| 5 | Client | User approves → sends `threads.custom_action` |
+| 6 | ChatKit Server | Extracts `approved`, `call_id`, `request_id` from the action payload |
+| 7 | Orchestrator | Loads the saved checkpoint, produces `function_approval_response(approved=true)` |
+| 8 | Agent Framework | Resumes workflow execution from the checkpoint |
+| 9 | Payment Agent | Executes `processPayment` via the MCP server |
+| 10 | Server | Streams task events and final assistant confirmation message |
+
+#### LLM Variability
+
+The number of conversational turns before the approval widget appears may vary depending on the LLM's behavior. The agent may:
+- Ask for a payment method, then validate funds, then request confirmation (3 turns before approval)
+- Validate the card and request confirmation in a single response (2 turns before approval)
+- Skip textual confirmation entirely and trigger the approval widget right after card selection (1 turn before approval)
+
+Clients should be prepared to receive the `tool_approval_request` widget at any point after the user has provided sufficient payment details.
+
+
