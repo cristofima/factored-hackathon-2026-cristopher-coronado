@@ -1,0 +1,176 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "npm install - banking-web",
+      "type": "shell",
+      "command": "npm install",
+      "options": {
+        "cwd": "${workspaceFolder}/app/frontend/banking-web"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "run account mcp dev",
+      "type": "shell",
+      "command": "uv run python main.py",
+      "options": {
+        "cwd": "${workspaceFolder}/app/business-api/account",
+        "env": {
+          "PROFILE": "dev"
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "account-mcp",
+        "clear": true
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": [
+          {
+            "regexp": "."
+          }
+        ],
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".*Starting account service server with profile: dev, port: 8070.*",
+          "endsPattern": ".*Uvicorn running on http://0\\.0\\.0\\.0:8070.*"
+        }
+      }
+    },
+    {
+      "label": "run transaction mcp dev",
+      "type": "shell",
+      "command": "uv run python main.py",
+      "options": {
+        "cwd": "${workspaceFolder}/app/business-api/transaction",
+        "env": {
+          "PROFILE": "dev"
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "transaction-mcp",
+        "clear": true
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": [
+          {
+            "regexp": "."
+          }
+        ],
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".*Starting transaction service server with profile: dev, port: 8071.*",
+          "endsPattern": ".*Uvicorn running on http://0\\.0\\.0\\.0:8071.*"
+        }
+      }
+    },
+    {
+      "label": "run payment mcp dev",
+      "type": "shell",
+      "command": "uv run python main.py",
+      "options": {
+        "cwd": "${workspaceFolder}/app/business-api/payment",
+        "env": {
+          "PROFILE": "dev",
+          "TRANSACTIONS_API_SERVER_URL": "http://localhost:8071"
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "payment-mcp",
+        "clear": true
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": [
+          {
+            "regexp": "."
+          }
+        ],
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".*Starting payment service server with profile: dev, port: 8072.*",
+          "endsPattern": ".*Uvicorn running on http://0\\.0\\.0\\.0:8072.*"
+        }
+      }
+    },
+    {
+      "label": "run chatkit backend dev",
+      "type": "shell",
+      "command": "uv run uvicorn app.main_chatkit_server:app --port 8080",
+      "options": {
+        "cwd": "${workspaceFolder}/app/backend",
+        "env": {
+          "PROFILE": "dev",
+          "ENABLE_SENSITIVE_DATA": "true"
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "chatkit-backend",
+        "clear": true
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": [
+          {
+            "regexp": "."
+          }
+        ],
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".*",
+          "endsPattern": ".*Uvicorn running on http://127\\.0\\.0\\.1:8080.*|.*Uvicorn running on http://0\\.0\\.0\\.0:8080.*"
+        }
+      }
+    },
+    {
+      "label": "run frontend dev",
+      "type": "shell",
+      "command": "npm run dev",
+      "options": {
+        "cwd": "${workspaceFolder}/app/frontend/banking-web"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "frontend-dev",
+        "clear": true
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": [
+          {
+            "regexp": "."
+          }
+        ],
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".*",
+          "endsPattern": ".*Local:.*http://.*:5170/.*"
+        }
+      }
+    },
+    {
+      "label": "prepare full stack dev",
+      "type": "shell",
+      "command": "echo Full stack ready",
+      "problemMatcher": [],
+      "dependsOn": [
+        "run account mcp dev",
+        "run transaction mcp dev",
+        "run payment mcp dev",
+        "run chatkit backend dev",
+        "run frontend dev"
+      ]
+    }
+  ]
+}

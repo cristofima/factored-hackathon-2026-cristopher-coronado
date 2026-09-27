@@ -1,0 +1,74 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "defaultConfiguration": "DEV - Full Stack Ordered",
+  "configurations": [
+    {
+      "name": "Account MCP: DEV (Python Main)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "main.py",
+      "env": {
+        "PROFILE": "dev"
+      },
+      "cwd": "${workspaceFolder}/app/business-api/account",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Transaction MCP: DEV (Python Main)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "main.py",
+      "env": {
+        "PROFILE": "dev"
+      },
+      "cwd": "${workspaceFolder}/app/business-api/transaction",
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "Payment MCP: DEV (Python Main)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "main.py",
+      "env": {
+        "PROFILE": "dev",
+        "TRANSACTIONS_API_SERVER_URL": "http://localhost:8071"
+      },
+      "cwd": "${workspaceFolder}/app/business-api/payment",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "DEV - Banking Web App",
+      "type": "pwa-chrome",
+      "request": "launch",
+      "url": "http://localhost:5170/",
+      "webRoot": "${workspaceFolder}/app/frontend/banking-web",
+      "preLaunchTask": "prepare full stack dev"
+    },
+
+    {
+      "name": "DEV - Chatkit Backend App",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": ["app.main_chatkit_server:app", "--port", "8080"],
+      "env": {
+        "PROFILE": "dev",
+        "ENABLE_SENSITIVE_DATA": "true"
+      },
+      "jinja": true,
+      "cwd": "${workspaceFolder}/app/backend",
+      "justMyCode": false
+    }
+  ],
+  "compounds": [
+    {
+      "name": "DEV - Full Stack Ordered",
+      "configurations": ["DEV - Banking Web App"],
+      "stopAll": true
+    }
+  ]
+}
