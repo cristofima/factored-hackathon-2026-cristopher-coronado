@@ -1,0 +1,30 @@
+# toolbox.yaml
+# Defines the toolbox this agent consumes. Create or update it with:
+#   azd ai toolbox create <toolbox-name> --from-file ./toolbox.yaml --cwd .
+#   azd ai toolbox update <toolbox-name> --from-file ./toolbox.yaml --cwd .
+# After creating it, copy the versioned MCP endpoint the command prints and set it as the
+# TOOLBOX_ENDPOINT environment variable (see azure.yaml's env: block). The agent connects to
+# that endpoint at runtime.
+#
+# This file is not read directly by the agent at runtime (locally or deployed) — it only
+# takes effect when applied to the toolbox resource in Foundry. If you add or change a tool
+# here, re-apply this file so both local and remote runs pick up the change. If that produces
+# a new/versioned endpoint, update TOOLBOX_ENDPOINT everywhere it's set.
+#
+# Each server_label/project_connection_id below must match an existing Foundry OAuth
+# identity-passthrough connection in the active Foundry project/environment. This file only
+# wires existing connections into the toolbox; it does not create those connections.
+description: Banking assistant MCP toolbox (account, transaction, payment services)
+tools:
+  - type: mcp
+    server_label: banking-account-mcp
+    project_connection_id: banking-account-mcp
+    require_approval: "never"
+  - type: mcp
+    server_label: banking-transaction-mcp
+    project_connection_id: banking-transaction-mcp
+    require_approval: "never"
+  - type: mcp
+    server_label: banking-payment-mcp
+    project_connection_id: banking-payment-mcp
+    require_approval: "never"
