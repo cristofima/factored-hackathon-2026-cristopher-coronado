@@ -6,6 +6,9 @@ on:
       - main
     paths:
       - "app/frontend/banking-web/**"
+      - "!app/frontend/banking-web/**/*.md"
+      - ".github/workflows/deploy-web.yaml"
+  workflow_dispatch:
 
 permissions:
   id-token: write

@@ -6,6 +6,9 @@ on:
       - main
     paths:
       - "app/business-api/payment/**"
+      - "!app/business-api/payment/**/*.md"
+      - ".github/workflows/deploy-payment.yaml"
+  workflow_dispatch:
 
 permissions:
   id-token: write
@@ -27,8 +30,10 @@ jobs:
         env:
           AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
           AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
         run: |
           azd config set auth.useAzCliAuth true
           azd env new development --subscription "$AZURE_SUBSCRIPTION_ID" --location "$AZURE_LOCATION" --no-prompt
+          azd env set AZURE_RESOURCE_GROUP "$AZURE_RESOURCE_GROUP"
       - name: Deploy payment
         run: azd deploy payment --no-prompt
