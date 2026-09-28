@@ -80,6 +80,7 @@ Notes:
 
 - With `VITE_BACKEND_URI` empty, requests are relative and go through Vite dev proxy.
 - Set `VITE_BACKEND_URI` only if you want to bypass proxy and call a remote backend directly.
+- In deployed environments, set `VITE_ACCOUNT_API_URL` and `VITE_TRANSACTION_API_URL` to full API bases that already include `/api` (for example, `https://<app-service-host>/api`).
 
 ## Dev proxy setup (Vite)
 

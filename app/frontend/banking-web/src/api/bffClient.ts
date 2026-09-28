@@ -19,18 +19,12 @@ const MOCK_SESSION_TOKEN = "mock-session-token-2025";
 const withDelay = <T>(response: T, delay = 200) =>
   new Promise<T>((resolve) => setTimeout(() => resolve(response), delay));
 
-const BACKEND_URI = import.meta.env.VITE_BACKEND_URI ? import.meta.env.VITE_BACKEND_URI : "";
-
-
-
+const LOCAL_API_URL = import.meta.env.VITE_BACKEND_URI || "/api";
+const ACCOUNT_API_URL = import.meta.env.VITE_ACCOUNT_API_URL || LOCAL_API_URL;
+const TRANSACTION_API_URL = import.meta.env.VITE_TRANSACTION_API_URL || LOCAL_API_URL;
 
 export class BFFClient {
-  private baseUrl: string;
   private sessionToken: string | null = null;
-
-  constructor(baseUrl?: string) {
-    this.baseUrl = baseUrl || "/api";
-  }
 
   async login(credentials: { email: string; password: string }) {
     if (!credentials.email || !credentials.password) {
@@ -48,15 +42,14 @@ export class BFFClient {
   }
 
   async getUserProfile(): Promise<UserProfile> {
-   
     //call user profile with session token
 
     return withDelay(MOCK_USER_PROFILE);
   }
 
   async getPayments(): Promise<Payment[]> {
-    const transactionAPIUrl = `${this.baseUrl}/transactions`;
-    
+    const transactionAPIUrl = `${TRANSACTION_API_URL}/transactions`;
+
     const accountId = (await this.getUserProfile()).accountId;
     const response = await fetch(`${transactionAPIUrl}/${accountId}?transaction_type=payment`);
     if (!response.ok) {
@@ -68,8 +61,8 @@ export class BFFClient {
   }
 
   async getCards(): Promise<CreditCard[]> {
-    const accountsAPIUrl = `${this.baseUrl}/accounts`;
-    
+    const accountsAPIUrl = `${ACCOUNT_API_URL}/accounts`;
+
     const accountId = (await this.getUserProfile()).accountId;
     const response = await fetch(`${accountsAPIUrl}/${accountId}/cards`);
     if (!response.ok) {
@@ -81,8 +74,8 @@ export class BFFClient {
   }
 
   async getCardTransactions(cardId: string | null): Promise<CreditCardTransaction[]> {
-    const transactionAPIUrl = `${this.baseUrl}/transactions`;
-    
+    const transactionAPIUrl = `${TRANSACTION_API_URL}/transactions`;
+
     const accountId = (await this.getUserProfile()).accountId;
     const cardIdParam = cardId ? `&card_id=${cardId}` : "";
     const response = await fetch(`${transactionAPIUrl}/${accountId}?transaction_type=payment&payment_type=CreditCard${cardIdParam}`);
@@ -97,4 +90,4 @@ export class BFFClient {
 
 }
 
-export const bffClient = new BFFClient(BACKEND_URI);
+export const bffClient = new BFFClient();
