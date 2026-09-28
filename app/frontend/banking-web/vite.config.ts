@@ -22,15 +22,11 @@ export default defineConfig(({ mode }) => ({
         target: 'http://localhost:8071',
         changeOrigin: true
       },
-      "/chatkit": {
+      "/responses": {
         target: 'http://localhost:8080',
         changeOrigin: true,
       },
-      "/upload": {
-        target: 'http://localhost:8080',
-        changeOrigin: true,
-      },
-      "/preview": {
+      "/auth": {
         target: 'http://localhost:8080',
         changeOrigin: true,
       },

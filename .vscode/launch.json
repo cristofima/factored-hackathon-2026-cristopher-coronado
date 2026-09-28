@@ -29,18 +29,6 @@
       "justMyCode": false
     },
     {
-      "name": "Payment MCP: DEV (Python Main)",
-      "type": "debugpy",
-      "request": "launch",
-      "program": "main.py",
-      "env": {
-        "PROFILE": "dev",
-        "TRANSACTIONS_API_SERVER_URL": "http://localhost:8071"
-      },
-      "cwd": "${workspaceFolder}/app/business-api/payment",
-      "console": "integratedTerminal"
-    },
-    {
       "name": "DEV - Banking Web App",
       "type": "pwa-chrome",
       "request": "launch",
@@ -50,17 +38,31 @@
     },
 
     {
-      "name": "DEV - Chatkit Backend App",
+      "name": "DEV - Responses Hosted Agent",
       "type": "debugpy",
       "request": "launch",
-      "module": "uvicorn",
-      "args": ["app.main_chatkit_server:app", "--port", "8080"],
+      "module": "app.main_responses_host",
       "env": {
         "PROFILE": "dev",
         "ENABLE_SENSITIVE_DATA": "true"
       },
       "jinja": true,
       "cwd": "${workspaceFolder}/app/backend",
+      "justMyCode": false
+    },
+    {
+      "name": "DEV - Responses BFF",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": ["bff.main:app", "--port", "8080"],
+      "env": {
+        "PROFILE": "dev",
+        "RESPONSES_UPSTREAM_MODE": "local",
+        "RESPONSES_AGENT_ENDPOINT": "http://127.0.0.1:8088/responses"
+      },
+      "jinja": true,
+      "cwd": "${workspaceFolder}/app/responses-bff",
       "justMyCode": false
     }
   ],

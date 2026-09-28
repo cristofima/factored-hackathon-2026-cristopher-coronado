@@ -1,3 +1,6 @@
+# Hackathon execution plan: local-only, never committed
+plan/
+
 # Azure az webapp deployment details
 .azure
 **/.terraform/
