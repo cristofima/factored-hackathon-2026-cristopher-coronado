@@ -15,7 +15,6 @@ import Sidebar from "./components/Sidebar";
 import Navigation from "./components/Navigation";
 import AIAgent from "./components/AIAgent";
 import Dashboard from "./pages/Dashboard";
-import Payments from "./pages/Payments";
 import CreditCardManagement from "./pages/CreditCardManagement";
 import InvestmentPortfolio from "./pages/InvestmentPortfolio";
 import TransactionAnalytics from "./pages/TransactionAnalytics";
@@ -79,7 +78,6 @@ const App = () => (
               }
             >
               <Route index element={<Dashboard />} />
-              <Route path="payments" element={<Payments />} />
               <Route path="credit-cards" element={<CreditCardManagement />} />
               <Route path="portfolio" element={<InvestmentPortfolio />} />
               <Route path="analytics" element={<TransactionAnalytics />} />

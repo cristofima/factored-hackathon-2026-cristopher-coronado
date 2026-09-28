@@ -57,12 +57,17 @@ import {
 } from "lucide-react";
 
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/common/utils";
-import { useChat } from "./ChatProvider";
+import { useChat } from "./ResponsesChatProvider";
 import { Markdown } from "./Markdown";
 import { useDebounce } from "./useDebounce";
 import { useMemo } from "react";
@@ -92,7 +97,7 @@ const formatFileSize = (size: number) => {
 
 const getIconForName = (iconName?: string | null): React.ReactNode => {
   const iconClass = "h-4 w-4";
-  
+
   // Map icon names to Lucide components
   switch (iconName) {
     case "agent":
@@ -224,10 +229,16 @@ interface AttachmentListProps {
   maxVisible?: number;
 }
 
-function AttachmentList({ attachments, isUser, imageSize = "md", maxVisible }: AttachmentListProps) {
+function AttachmentList({
+  attachments,
+  isUser,
+  imageSize = "md",
+  maxVisible,
+}: AttachmentListProps) {
   const [expanded, setExpanded] = useState(false);
-  
-  const visibleAttachments = maxVisible && !expanded ? attachments.slice(0, maxVisible) : attachments;
+
+  const visibleAttachments =
+    maxVisible && !expanded ? attachments.slice(0, maxVisible) : attachments;
   const remainingCount = maxVisible ? attachments.length - maxVisible : 0;
   const showExpandButton = maxVisible && remainingCount > 0 && !expanded;
 
@@ -240,7 +251,9 @@ function AttachmentList({ attachments, isUser, imageSize = "md", maxVisible }: A
 
   return (
     <div className="mt-3 flex flex-col gap-2">
-      <div className={cn("flex flex-wrap gap-2", imageSize === "lg" && "gap-3")}>
+      <div
+        className={cn("flex flex-wrap gap-2", imageSize === "lg" && "gap-3")}
+      >
         {visibleAttachments.map((attachment) => (
           <div
             key={attachment.id}
@@ -252,12 +265,28 @@ function AttachmentList({ attachments, isUser, imageSize = "md", maxVisible }: A
             )}
           >
             {attachment.type === "image" && attachment.preview_url ? (
-              <div className={cn("overflow-hidden rounded-xl border border-border/40 bg-background", imageSizeClasses[imageSize])}>
-                <img src={attachment.preview_url} alt={attachment.name} className="h-full w-full object-cover" />
+              <div
+                className={cn(
+                  "overflow-hidden rounded-xl border border-border/40 bg-background",
+                  imageSizeClasses[imageSize],
+                )}
+              >
+                <img
+                  src={attachment.preview_url}
+                  alt={attachment.name}
+                  className="h-full w-full object-cover"
+                />
               </div>
             ) : (
               <div className="flex items-center gap-2">
-                <Paperclip className={cn("h-3.5 w-3.5", isUser ? "text-primary-foreground/70" : "text-muted-foreground")} />
+                <Paperclip
+                  className={cn(
+                    "h-3.5 w-3.5",
+                    isUser
+                      ? "text-primary-foreground/70"
+                      : "text-muted-foreground",
+                  )}
+                />
                 <div className="flex flex-col">
                   <span className="font-medium">{attachment.name}</span>
                 </div>
@@ -266,7 +295,7 @@ function AttachmentList({ attachments, isUser, imageSize = "md", maxVisible }: A
           </div>
         ))}
       </div>
-      
+
       {showExpandButton && (
         <Button
           variant="ghost"
@@ -274,7 +303,9 @@ function AttachmentList({ attachments, isUser, imageSize = "md", maxVisible }: A
           onClick={() => setExpanded(true)}
           className={cn(
             "self-start text-xs",
-            isUser ? "text-primary-foreground/70 hover:text-primary-foreground" : "text-muted-foreground"
+            isUser
+              ? "text-primary-foreground/70 hover:text-primary-foreground"
+              : "text-muted-foreground",
           )}
         >
           +{remainingCount} more
@@ -293,22 +324,23 @@ interface UserMessageRendererProps {
   maxVisibleAttachments?: number;
 }
 
-function UserMessageRenderer({ 
-  item, 
+function UserMessageRenderer({
+  item,
   attachmentImageSize = "md",
   maxVisibleAttachments = 3,
 }: UserMessageRendererProps) {
   const textContent = item.content.find((c) => c.type === "input_text");
-  const text = textContent && textContent.type === "input_text" ? textContent.text : "";
+  const text =
+    textContent && textContent.type === "input_text" ? textContent.text : "";
 
   return (
     <div className="ml-auto max-w-xl animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
       <div className="rounded-2xl border border-primary/20 bg-primary/10 px-4 py-3 text-sm text-foreground shadow-sm backdrop-blur-sm">
         {text && <p className="whitespace-pre-line leading-relaxed">{text}</p>}
         {!!item.attachments?.length && (
-          <AttachmentList 
-            attachments={item.attachments} 
-            isUser 
+          <AttachmentList
+            attachments={item.attachments}
+            isUser
             imageSize={attachmentImageSize}
             maxVisible={maxVisibleAttachments}
           />
@@ -322,9 +354,12 @@ function UserMessageRenderer({
 // Assistant Message Renderer with Typewriter Effect
 // ============================================================================
 function AssistantMessageRenderer({ item }: { item: AssistantMessageItem }) {
-  const fullText = useMemo(() => item.content.map((c) => c.text).join(""), [item.content]);
+  const fullText = useMemo(
+    () => item.content.map((c) => c.text).join(""),
+    [item.content],
+  );
   const isStreaming = item.streaming ?? false;
-  
+
   // Use slower debounce (200ms) for more visible typewriter effect
   // This creates a noticeable delay that makes streaming obvious
   const displayText = useDebounce(fullText, isStreaming ? 200 : 0);
@@ -344,31 +379,51 @@ function AssistantMessageRenderer({ item }: { item: AssistantMessageItem }) {
 // ============================================================================
 // Task Item Renderer
 // ============================================================================
-function TaskItemRenderer({ item, isLastTask }: { item: TaskItem; isLastTask: boolean }) {
+function TaskItemRenderer({
+  item,
+  isLastTask,
+}: {
+  item: TaskItem;
+  isLastTask: boolean;
+}) {
   const { task } = item;
   const icon = getIconForName(task.icon);
-  const isLoading = task.status_indicator === "loading" || task.status_indicator === "none";
+  const isLoading =
+    task.status_indicator === "loading" || task.status_indicator === "none";
   const isComplete = task.status_indicator === "complete";
-  
+
   // Apply shimmer only if this is the last task in the list and it's loading (or none, which means in progress)
   const shouldShimmer = isLastTask && isLoading;
-  
+
   // Debug logging
   useEffect(() => {
-    console.log(`Task "${task.title}" - status: ${task.status_indicator}, isLastTask: ${isLastTask}, isLoading: ${isLoading}, shouldShimmer: ${shouldShimmer}`);
+    console.log(
+      `Task "${task.title}" - status: ${task.status_indicator}, isLastTask: ${isLastTask}, isLoading: ${isLoading}, shouldShimmer: ${shouldShimmer}`,
+    );
   }, [isLastTask, isLoading, shouldShimmer, task.title, task.status_indicator]);
 
   return (
     <Card
       className={cn(
         "flex items-center gap-3 border-none px-4 py-1.5 text-sm shadow-none animate-in fade-in-0 slide-in-from-bottom-2 duration-300",
-        isComplete ? "bg-secondary/20 text-secondary-foreground" : "border-border/70 bg-background",
+        isComplete
+          ? "bg-secondary/20 text-secondary-foreground"
+          : "border-border/70 bg-background",
       )}
     >
       {icon && <span aria-hidden>{icon}</span>}
       <div className="flex-1">
-        <p className={cn("font-medium leading-tight", shouldShimmer && "animate-shimmer")}>{task.title}</p>
-        {task.type === "custom" && task.content && <p className="text-xs text-muted-foreground">{task.content}</p>}
+        <p
+          className={cn(
+            "font-medium leading-tight",
+            shouldShimmer && "animate-shimmer",
+          )}
+        >
+          {task.title}
+        </p>
+        {task.type === "custom" && task.content && (
+          <p className="text-xs text-muted-foreground">{task.content}</p>
+        )}
       </div>
       {isComplete && <CheckCircle className="h-4 w-4 text-green-600" />}
     </Card>
@@ -389,21 +444,38 @@ function WorkflowItemRenderer({ item }: { item: WorkflowItem }) {
 
   return (
     <Card className="border-border/70 bg-card px-4 py-3 text-sm shadow-sm animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
-      <Accordion type="single" collapsible defaultValue={workflow.expanded ? "workflow" : undefined}>
+      <Accordion
+        type="single"
+        collapsible
+        defaultValue={workflow.expanded ? "workflow" : undefined}
+      >
         <AccordionItem value="workflow" className="border-none">
-          <AccordionTrigger className="py-2 text-sm font-medium hover:no-underline">{summaryText}</AccordionTrigger>
+          <AccordionTrigger className="py-2 text-sm font-medium hover:no-underline">
+            {summaryText}
+          </AccordionTrigger>
           <AccordionContent>
             <div className="space-y-2">
               {workflow.tasks.map((task, idx) => {
                 const taskIcon = getIconForName(task.icon);
                 return (
-                  <div key={idx} className="flex items-start gap-3 rounded-lg border border-border/50 bg-muted/30 px-3 py-2 text-xs">
-                    {taskIcon && <span className="mt-0.5 flex-shrink-0">{taskIcon}</span>}
+                  <div
+                    key={idx}
+                    className="flex items-start gap-3 rounded-lg border border-border/50 bg-muted/30 px-3 py-2 text-xs"
+                  >
+                    {taskIcon && (
+                      <span className="mt-0.5 flex-shrink-0">{taskIcon}</span>
+                    )}
                     <div className="flex-1">
                       <p className="font-medium">{task.title}</p>
-                      {task.type === "custom" && task.content && <p className="mt-1 text-muted-foreground">{task.content}</p>}
+                      {task.type === "custom" && task.content && (
+                        <p className="mt-1 text-muted-foreground">
+                          {task.content}
+                        </p>
+                      )}
                     </div>
-                    {task.status_indicator === "complete" && <CheckCircle className="h-3.5 w-3.5 text-green-600" />}
+                    {task.status_indicator === "complete" && (
+                      <CheckCircle className="h-3.5 w-3.5 text-green-600" />
+                    )}
                   </div>
                 );
               })}
@@ -420,29 +492,29 @@ function WorkflowItemRenderer({ item }: { item: WorkflowItem }) {
 // ============================================================================
 function ServerWidgetRenderer({ item }: { item: WidgetItem }) {
   const { sendWidgetAction } = useChat();
-  
+
   // Handle widget actions - this will trigger a new streaming response from the server
   const handleAction = (action: ActionConfig, itemId?: string) => {
     const id = itemId || item.id;
     console.log("Widget action triggered:", action.type, id);
     sendWidgetAction(item.thread_id, id, action);
   };
-  
+
   // Get size constraint based on widget root size property
   const getWidgetSizeClass = () => {
     const widget = item.widget as { size?: string };
     const size = widget?.size || "md"; // Default to "md" if not specified
-    
+
     const sizeMap: Record<string, string> = {
       sm: "max-w-sm", // 384px
       md: "max-w-md", // 448px
       lg: "max-w-lg", // 512px
       full: "w-full",
     };
-    
+
     return sizeMap[size] || "max-w-md";
   };
-  
+
   return (
     <div className={getWidgetSizeClass()}>
       <WidgetRenderer
@@ -462,7 +534,7 @@ import { widgetRegistry } from "@/components/chat/widgets/WidgetRegistry";
 function ClientWidgetRenderer({ item }: { item: ClientWidgetItem }) {
   // Import and render the client widget
   const ClientWidget = widgetRegistry.get(item.name);
-  
+
   if (!ClientWidget) {
     console.error(`Client widget '${item.name}' not found in registry`);
     return (
@@ -471,20 +543,17 @@ function ClientWidgetRenderer({ item }: { item: ClientWidgetItem }) {
       </div>
     );
   }
-  
+
   // Get size constraint - for client widgets, default to md
   const getWidgetSizeClass = () => {
     // Client widgets can use standard sizing
     return "max-w-md";
   };
-  
+
   // Client widgets handle their own actions via useSendWidgetAction hook
   return (
     <div className={getWidgetSizeClass()}>
-      <ClientWidget
-        args={item.args || {}}
-        itemId={item.id}
-      />
+      <ClientWidget args={item.args || {}} itemId={item.id} />
     </div>
   );
 }
@@ -498,9 +567,13 @@ function ClientToolCallRenderer({ item }: { item: ClientToolCallItem }) {
       <div className="flex items-center justify-between">
         <div>
           <p className="font-medium">Tool: {item.name}</p>
-          <p className="text-xs text-muted-foreground">Call ID: {item.call_id}</p>
+          <p className="text-xs text-muted-foreground">
+            Call ID: {item.call_id}
+          </p>
         </div>
-        <Badge variant={item.status === "completed" ? "default" : "outline"}>{item.status}</Badge>
+        <Badge variant={item.status === "completed" ? "default" : "outline"}>
+          {item.status}
+        </Badge>
       </div>
     </Card>
   );
@@ -518,9 +591,13 @@ function ErrorItemRenderer({ item }: { item: ErrorItem }) {
         <AlertCircle className="h-5 w-5 flex-shrink-0 text-destructive" />
         <div className="flex-1">
           <p className="font-medium text-destructive">Error</p>
-          {item.message && <p className="mt-1 text-sm text-foreground">{item.message}</p>}
+          {item.message && (
+            <p className="mt-1 text-sm text-foreground">{item.message}</p>
+          )}
           <p className="mt-1 text-xs text-muted-foreground">
-            {item.http_status ? `HTTP ${item.http_status}` : `Code: ${item.code}`}
+            {item.http_status
+              ? `HTTP ${item.http_status}`
+              : `Code: ${item.code}`}
           </p>
         </div>
         {item.allow_retry && (
@@ -544,10 +621,12 @@ function ErrorItemRenderer({ item }: { item: ErrorItem }) {
 // ============================================================================
 function ProgressUpdate({ icon, text }: { icon: string | null; text: string }) {
   const iconComponent = icon ? getIconForName(icon) : null;
-  
+
   return (
     <div className="flex items-center gap-3 animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
-      {iconComponent && <span className="animate-pulse flex-shrink-0">{iconComponent}</span>}
+      {iconComponent && (
+        <span className="animate-pulse flex-shrink-0">{iconComponent}</span>
+      )}
       <p className="animate-pulse text-sm text-muted-foreground">{text}</p>
     </div>
   );
@@ -575,10 +654,14 @@ function StarterPrompts() {
           {(welcomeHeaderConfig.title || welcomeHeaderConfig.subtitle) && (
             <div>
               {welcomeHeaderConfig.title && (
-                <h2 className="text-xl font-semibold text-foreground">{welcomeHeaderConfig.title}</h2>
+                <h2 className="text-xl font-semibold text-foreground">
+                  {welcomeHeaderConfig.title}
+                </h2>
               )}
               {welcomeHeaderConfig.subtitle && (
-                <p className="mt-1 text-sm text-muted-foreground">{welcomeHeaderConfig.subtitle}</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {welcomeHeaderConfig.subtitle}
+                </p>
               )}
             </div>
           )}
@@ -597,7 +680,9 @@ function StarterPrompts() {
             </div>
             <div className="flex-1">
               <h3 className="font-medium text-foreground">{prompt.title}</h3>
-              <p className="mt-0.5 text-sm text-muted-foreground">{prompt.description}</p>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                {prompt.description}
+              </p>
             </div>
           </button>
         ))}
@@ -616,8 +701,8 @@ interface ItemRendererProps {
   isLastTask?: boolean;
 }
 
-function ItemRenderer({ 
-  item, 
+function ItemRenderer({
+  item,
   attachmentImageSize = "md",
   maxVisibleAttachments = 3,
   isLastTask = false,
@@ -625,8 +710,8 @@ function ItemRenderer({
   switch (item.type) {
     case "user_message":
       return (
-        <UserMessageRenderer 
-          item={item} 
+        <UserMessageRenderer
+          item={item}
           attachmentImageSize={attachmentImageSize}
           maxVisibleAttachments={maxVisibleAttachments}
         />
@@ -658,9 +743,18 @@ function ItemRenderer({
 function LoadingIndicator() {
   return (
     <div className="flex items-center gap-1 animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
-      <span className="h-2 w-2 rounded-full bg-primary/60 animate-pulse" style={{ animationDelay: "0ms" }} />
-      <span className="h-2 w-2 rounded-full bg-primary/60 animate-pulse" style={{ animationDelay: "150ms" }} />
-      <span className="h-2 w-2 rounded-full bg-primary/60 animate-pulse" style={{ animationDelay: "300ms" }} />
+      <span
+        className="h-2 w-2 rounded-full bg-primary/60 animate-pulse"
+        style={{ animationDelay: "0ms" }}
+      />
+      <span
+        className="h-2 w-2 rounded-full bg-primary/60 animate-pulse"
+        style={{ animationDelay: "150ms" }}
+      />
+      <span
+        className="h-2 w-2 rounded-full bg-primary/60 animate-pulse"
+        style={{ animationDelay: "300ms" }}
+      />
     </div>
   );
 }
@@ -673,25 +767,28 @@ interface StreamViewportProps {
   maxVisibleAttachments?: number;
 }
 
-export function StreamViewport({ 
+export function StreamViewport({
   attachmentImageSize = "md",
   maxVisibleAttachments = 3,
 }: StreamViewportProps) {
-  const { items, progressUpdate, isStreaming, hasReceivedStreamEvent } = useChat();
+  const { items, progressUpdate, isStreaming, hasReceivedStreamEvent } =
+    useChat();
 
   // Track task IDs that have been replaced (to prevent shimmer on replaced tasks)
-  const [replacedTaskIds, setReplacedTaskIds] = useState<Set<string>>(new Set());
+  const [replacedTaskIds, setReplacedTaskIds] = useState<Set<string>>(
+    new Set(),
+  );
   const prevTaskIdsRef = useRef<Set<string>>(new Set());
 
   // Detect when tasks are replaced (same ID appears again)
   useEffect(() => {
     const currentTaskIds = new Set<string>();
-    items.forEach(item => {
+    items.forEach((item) => {
       if (item.type === "task") {
         currentTaskIds.add(item.id);
         // If this task ID existed before, it's a replacement
         if (prevTaskIdsRef.current.has(item.id)) {
-          setReplacedTaskIds(prev => new Set(prev).add(item.id));
+          setReplacedTaskIds((prev) => new Set(prev).add(item.id));
           console.log(`Task ${item.id} was replaced`);
         }
       }
@@ -703,7 +800,11 @@ export function StreamViewport({
   const showLoading = isStreaming && !hasReceivedStreamEvent && !progressUpdate;
 
   // Show starter prompts only if there are no items AND we're not streaming and haven't received any events
-  const showStarterPrompts = items.length === 0 && !isStreaming && !hasReceivedStreamEvent && !progressUpdate;
+  const showStarterPrompts =
+    items.length === 0 &&
+    !isStreaming &&
+    !hasReceivedStreamEvent &&
+    !progressUpdate;
 
   // Find the index of the last task item to apply shimmer effect
   const lastTaskIndex = useMemo(() => {
@@ -727,20 +828,27 @@ export function StreamViewport({
             {items.map((item, index) => {
               // Determine if this is the last task for shimmer effect
               // Don't shimmer if the task was replaced (same ID arrived again)
-              const wasReplaced = item.type === "task" && replacedTaskIds.has(item.id);
-              const isLastTask = item.type === "task" && index === lastTaskIndex && !wasReplaced;
-              
+              const wasReplaced =
+                item.type === "task" && replacedTaskIds.has(item.id);
+              const isLastTask =
+                item.type === "task" && index === lastTaskIndex && !wasReplaced;
+
               return (
-                <ItemRenderer 
-                  key={item.id} 
-                  item={item} 
+                <ItemRenderer
+                  key={item.id}
+                  item={item}
                   attachmentImageSize={attachmentImageSize}
                   maxVisibleAttachments={maxVisibleAttachments}
                   isLastTask={isLastTask}
                 />
               );
             })}
-            {progressUpdate && <ProgressUpdate icon={progressUpdate.icon} text={progressUpdate.text} />}
+            {progressUpdate && (
+              <ProgressUpdate
+                icon={progressUpdate.icon}
+                text={progressUpdate.text}
+              />
+            )}
             {showLoading && <LoadingIndicator />}
           </>
         )}
