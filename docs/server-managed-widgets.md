@@ -1,3 +1,6 @@
+> [!WARNING]
+> Historical ChatKit design reference only. See [technical-architecture.md](technical-architecture.md) for the active Responses architecture.
+
 # Server Managed Widgets
 
 Server-managed widgets use a declarative DSL to define the UI structure. The server sends a complete widget definition that the client renders dynamically. See the [Widget Builder](https://chatkit.ai/docs/widget-builder) for an interactive editor to build and preview widgets.
@@ -6,6 +9,7 @@ Server-managed widgets use a declarative DSL to define the UI structure. The ser
 > Server-managed widgets are partially supported and tested. Not all components described in https://widgets.chatkit.studio/components/button are supported yet. For more control on widget rendering, consider using [Client-Managed Widgets](client-managed-widgets.md).
 
 **Structure:**
+
 ```python
 {
     "type": "widget",
@@ -31,6 +35,7 @@ Server-managed widgets use a declarative DSL to define the UI structure. The ser
 ```
 
 **Key characteristics:**
+
 - Item type is `"widget"`
 - Uses `widget` field containing the root component definition
 - Widget structure defined entirely by the server
@@ -40,9 +45,11 @@ Server-managed widgets use a declarative DSL to define the UI structure. The ser
 Widgets are constructed with a single container (WidgetRoot), which contains many components (WidgetNode).
 
 ## Containers (WidgetRoot)
+
 Containers have specific characteristics, like display status indicator text and primary actions.
 
 ### Card
+
 A bounded container for widgets. Supports status, confirm and cancel fields for presenting status indicators and action buttons below the widget.
 
 - children: list[WidgetNode]
@@ -66,9 +73,11 @@ A bounded container for widgets. Supports status, confirm and cancel fields for 
 - key: str | None
 
 ## Components (WidgetNode)
+
 The following widget types are supported. You can also browse components and use an interactive editor in the components section of the Widget Builder.
 
 ### Badge
+
 A small label for status or metadata.
 
 - label: str
@@ -78,7 +87,8 @@ A small label for status or metadata.
 - size: "sm" | "md" | "lg" | None
 - key: str | None
 
-### Box 
+### Box
+
 A flexible container for layout, supports direction, spacing, and styling.
 
 - children: list[WidgetNode] | None
@@ -106,6 +116,7 @@ A flexible container for layout, supports direction, spacing, and styling.
 - key: str | None
 
 ### Row
+
 Arranges children horizontally.
 
 - children: list[WidgetNode] | None
@@ -127,10 +138,11 @@ Arranges children horizontally.
 - border: int | dict[str, Any] | None (single border: { size: int, color?: str | { dark: str, light: str }, style?: "solid" | "dashed" | "dotted" | "double" | "groove" | "ridge" | "inset" | "outset" } per-side: { top?: int|dict, right?: int|dict, bottom?: int|dict, left?: int|dict, x?: int|dict, y?: int|dict })
 - radius: "2xs" | "xs" | "sm" | "md" | "lg" | "xl" | "2xl" | "3xl" | "4xl" | "full" | "100%" | "none" | None
 - background: str | { dark: str, light: str } | None
-aspectRatio: float | str | None
-key: str | None
+  aspectRatio: float | str | None
+  key: str | None
 
 ### Col
+
 Arranges children vertically.
 
 - children: list[WidgetNode] | None
@@ -153,10 +165,11 @@ Arranges children vertically.
 - border: int | dict[str, Any] | None (single border: { size: int, color?: str | { dark: str, light: str }, style?: "solid" | "dashed" | "dotted" | "double" | "groove" | "ridge" | "inset" | "outset" } per-side: { top?: int|dict, right?: int|dict, bottom?: int|dict, left?: int|dict, x?: int|dict, y?: int|dict })
 - radius: "2xs" | "xs" | "sm" | "md" | "lg" | "xl" | "2xl" | "3xl" | "4xl" | "full" | "100%" | "none" | None
 - background: str | { dark: str, light: str }| None
-aspectRatio: float | str | None
+  aspectRatio: float | str | None
 - key: str | None
 
 ### Button
+
 A flexible action button.
 
 - submit: bool | None
@@ -175,6 +188,7 @@ A flexible action button.
 - key: str | None
 
 ### Caption
+
 Smaller, supporting text.
 
 - value: str
@@ -187,6 +201,7 @@ Smaller, supporting text.
 - key: str | None
 
 ### DatePicker
+
 A date input with a dropdown calendar.
 
 - onChangeAction: ActionConfig | None
@@ -206,6 +221,7 @@ A date input with a dropdown calendar.
 - key: str | None
 
 ### Divider
+
 A horizontal or vertical separator.
 
 - spacing: int | str | None
@@ -222,6 +238,7 @@ A horizontal or vertical separator.
 - key: str | None
 
 ### Image
+
 Displays an image with optional styling, fit, and position.
 
 - size: int | str | None
@@ -247,6 +264,7 @@ Displays an image with optional styling, fit, and position.
 - key: str | None
 
 ### ListView
+
 Displays a vertical list of items.
 
 -children: list[ListViewItem] | None
@@ -256,6 +274,7 @@ Displays a vertical list of items.
 -key: str | None
 
 ### ListViewItem
+
 An item in a ListView with optional action.
 
 - children: list[WidgetNode] | None
@@ -265,6 +284,7 @@ An item in a ListView with optional action.
 - key: str | None
 
 ### Markdown
+
 Renders markdown-formatted text, supports streaming updates.
 
 - value: str
@@ -272,6 +292,7 @@ Renders markdown-formatted text, supports streaming updates.
 - key: str | None
 
 ### Select
+
 A dropdown single-select input.
 
 - options: list[dict[str, str]] (each option: { label: str, value: str })
@@ -288,12 +309,14 @@ A dropdown single-select input.
 - key: str | None
 
 ### Spacer
+
 Flexible empty space used in layouts.
 
 - minSize: int | str | None
 - key: str | None
 
 ### Text
+
 Displays plain text (use Markdown for markdown rendering). Supports streaming updates.
 
 - value: str
@@ -312,6 +335,7 @@ Displays plain text (use Markdown for markdown rendering). Supports streaming up
 - key: str | None
 
 ### Title
+
 Prominent heading text.
 
 - value: str
@@ -324,6 +348,7 @@ Prominent heading text.
 - key: str | None
 
 ### Form
+
 A layout container that can submit an action.
 
 - onSubmitAction: ActionConfig
@@ -351,13 +376,13 @@ A layout container that can submit an action.
 - children: WidgetNode | None
 - key: str | None
 
-
 ## ActionConfig
 
 Trigger actions on the backend from user interactions in your chat.
 Actions are a way for the ChatKit SDK frontend to trigger a streaming response without the user submitting a message. They can also be used to trigger side-effects outside ChatKit SDK.
 
 ### Triggering actions
+
 In response to user interaction with widgets
 Actions can be triggered by attaching an ActionConfig to any widget node that supports it. For example, you can respond to click events on Buttons. When a user clicks on this button, the action will be sent to your server where you can update the widget, run inference, stream new thread items, etc.
 
@@ -373,13 +398,13 @@ Button(
 
 Actions can also be sent imperatively by your frontend with sendAction(). This is probably most useful when you need ChatKit to respond to interaction happening outside ChatKit, but it can also be used to chain actions when you need to respond on both the client and the server (more on that below).
 
-
 ```python
 await chatKit.sendAction({
   type: "example",
   payload: { id: 123 },
 });
 ```
+
 ### Handling actions
 
 On the server
@@ -418,6 +443,7 @@ class MyChatKitServer(ChatKitServer[RequestContext])
 ```
 
 ### Client
+
 Sometimes you’ll want to handle actions in your client integration. To do that you need to specify that the action should be sent to your client-side action handler by adding handler="client to the ActionConfig.
 
 ```python
@@ -578,7 +604,7 @@ Backend processes action
 
 Here's how the approval widget from your example is structured:
 
-```json
+````json
 {
   "type": "Card",
   "key": "approval_request",
@@ -658,7 +684,7 @@ Here's how the approval widget from your example is structured:
     }
   ]
 }
-```
+````
 
 ## Styling
 

@@ -1,80 +1,47 @@
-## Technical Architecture
+# Technical Architecture
 
-![HLA](../docs/assets/HLA-Agent-Framework.png)
+The banking assistant uses a browser-facing Responses BFF and a separately deployed Microsoft Foundry agent. Account and Transaction are the only active specialist agents.
 
-### Backend Architecture
+## Request Flow
 
-The home banking assistant is designed as conversational multi-agent system with each agent specializing in a specific functional domain (e.g., account management, transaction history, payments). The architecture consists of the following key components:
+```mermaid
+flowchart LR
+    Browser[React banking web] -->|Application JWT| BFF[Responses BFF]
+    BFF -->|Signed verified identity| Agent[Responses agent]
+    Agent -->|60-second bearer| Account[Account MCP API]
+    Agent -->|60-second bearer| Transaction[Transaction MCP API]
+```
 
-- **Agents App (Microservice)**: Serves as the central hub for processing user chat requests. It's a [FastAPI](https://fastapi.tiangolo.com/) app which uses **agent-framework** to create Agents equipped with tools and orchestrate them using [hand-off pattern](https://learn.microsoft.com/en-us/azure/architecture/ai-ml/guide/ai-agent-design-patterns#handoff-orchestration).
-  - **Supervisor Agent**: It's responsible to triage the user request, and delegate the task to the specialized domain agent. This component ensures that user queries are efficiently handled by the relevant agent. Agents are engaged by the supervisor in a single turn conversation meaning that only one is selected by the supervisor to answer to user task.
-  - **Account Agent**: Specializes in handling tasks related to banking account information, credit balance, and registered payment methods. It leverages specific Account service APIs to fetch and manage account-related data. The Microsoft Agent Framework is used to create account specific tools definition from the MCP server and automatically call the HTTP endpoint with input parameters extracted by gpt4 model from the chat conversation.
+The BFF is the browser trust boundary. It validates the application JWT, signs verified `sub` and `customer_id` claims, binds conversation identifiers to that user, and forwards Responses requests. The agent verifies the signed envelope and issues a fresh 60-second bearer for MCP calls. In hosted mode, the BFF also obtains an Azure access token server-side. The browser never receives a Foundry credential and cannot provide arbitrary downstream identity.
 
-  - **Transactions Agent**: Focuses on tasks related to querying user bank movements, including income and outcome payments. This agent accesses account mcp server to retrieve accountid and transaction history mcp server to search for transactions and present them to the user.
+## Deployable Units
 
-  - **Payments Agent**: Focuses on managing tasks related to submitting payments. It interacts with multiple MCP servers and tools, such as ScanInvoice (backed by Azure Document Intelligence), Account Service to retrieve account and payment methods info, Payment Service to submit payment processing and Transaction History service to check for previous paid invoices.
+| Unit            | Location                                                            | Responsibility                            |
+| --------------- | ------------------------------------------------------------------- | ----------------------------------------- |
+| Banking web     | [`app/frontend/banking-web`](../app/frontend/banking-web/README.md) | React UI and Responses SSE consumption    |
+| Responses BFF   | [`app/responses-bff`](../app/responses-bff)                         | Login, JWT validation, and upstream proxy |
+| Hosted agent    | [`app/backend`](../app/backend/README.md)                           | Account/Transaction handoff workflow      |
+| Account API     | [`app/business-api/account`](../app/business-api/account)           | Account MCP tools                         |
+| Transaction API | [`app/business-api/transaction`](../app/business-api/transaction)   | Transaction MCP tools                     |
 
-- **Existing Business APIs**: Python FastAPI and FastMCP services under [app/business-api](../app/business-api/README.md) expose the account, transaction, and payment tools consumed by the agents.
-  - **Account MCP Service (Microservice)**: Provides functionalities like retrieving account details by username, fetching payment methods, and getting registered beneficiaries. This microservice supports all 3 agents.
+The root Terraform stack provisions the web, BFF, Account, Transaction, and Payment App Services. Payment remains an infrastructure/business API artifact but is not connected to the active agent workflow. The hosted Foundry agent uses the independent [`app/backend/azure.yaml`](../app/backend/azure.yaml) project root.
 
-  - **Payments MCP Service (Microservice)**: Offers capabilities to submit payments and notify transactions. It is a critical component for the Payments Agent to execute payment-related tasks efficiently.
+## Local Topology
 
-  - **Reporting MCP Service (Microservice)**: Enables searching transactions and retrieving transactions by recipient. This service supports the Transactions Agent in providing detailed transaction reports to the user and the Payment Agent as it needs to check if an invoice has not been already paid.
+| Port   | Process               |
+| ------ | --------------------- |
+| `5170` | Banking web           |
+| `8080` | Responses BFF         |
+| `8088` | Local Responses agent |
+| `8070` | Account MCP           |
+| `8071` | Transaction MCP       |
 
-- **Multi-agent orchestration**: The [handoff orchestrator](../app/backend/app/agents/azure_chat/handoff_orchestrator.py) uses Microsoft Agent Framework to delegate account, transaction, and payment requests. The [ChatKit server](../app/backend/app/routers/chatkit/chatkit_server.py) streams the conversation to the banking frontend.
+The BFF uses its local upstream mode for browser validation. Hosted Foundry deployment is a separate later-stage target.
 
-### Frontend Architecture
+## Authentication Status
 
-This project keeps the banking web frontend with ChatKit protocol support:
+The BFF verifies environment-configured Argon2 users and issues short-lived HS256 JWTs containing `sub`, `customer_id`, `email`, `locale`, `iss`, `aud`, and `exp`. Local browser validation has covered login, user-bound conversations, foreign-account denial, and an authorized follow-up. PostgreSQL-backed users and ownership relationships, dynamic profile/locale injection, and hosted identity transport remain pending.
 
-#### banking-web
+## Historical Protocol Documents
 
-A fully-featured React Single Page Application built with React shadcn/ui that supports:
-
-- Rich human-in-the-loop (HITL) experience
-- Agent progress notifications
-- Tool approval widgets
-- Image upload support for invoices and receipts
-- Chatkit protocol compliance
-- Integrated into a banking app interface
-
-Run the backend locally with `uv run uvicorn app.main_chatkit_server:app --port 8080` from [app/backend](../app/backend/README.md). App Service ZIP deployment and the separate Foundry Hosted Agent manifest are not yet verified; [the infrastructure](../infra/main.bicep) still provisions Container Apps.
-
-### Agent Framework - Chatkit protocol support
-
-This sample implements UI-to-agent communication approach built on top of the [OpenAI ChatKit protocol](https://platform.openai.com/docs/guides/chatkit) and [Microsoft Agent Framework](https://github.com/microsoft/agent-framework), specifically addressing key concerns around chatkit.js production deployment that are outlined in the [Agent Framework ChatKit integration documentation](https://github.com/microsoft/agent-framework/blob/main/python/packages/chatkit/README.md).
-
-**Key Challenges Addressed:**
-
-The ChatKit protocol provides a standardized chat communication pattern for AI agents, but the default implementation has several limitations for air gapped cloud:
-
-1. **Network Dependencies**: The ChatKit frontend requires connectivity to OpenAI's CDN (`cdn.platform.openai.com`) and external services, making it unsuitable for air-gapped or highly-regulated environments
-2. **Domain Registration**: Production deployments require manual domain registration at platform.openai.com
-
-**Our Solution:**
-
-This sample extends the Agent Framework's ChatKit integration:
-
-- **Chatkit Protocol Compliant**: supports ChatKit server protocol specification for rich human-in-the-loop (HITL) experiences including:
-  - Real-time agent progress notifications during task execution
-  - Tool approval widgets for user confirmation before sensitive operations
-  - Structured event streaming (thread.created, thread.item.done, etc.)
-  - Support for attachments and multi-modal content (invoice images, receipts)
-
-- **Extended Agent Framework**: Enhances the base `agent-framework-chatkit` package with:
-  - Custom handoff orchestration patterns optimized for multi-agent banking workflows
-  - Persistent checkpoint management for conversation state across sessions
-  - Seamless integration between Agent Framework's `HandoffBuilder` and ChatKit's event streaming
-
-- **Custom Reusable Chat Component**: Built a framework-agnostic React chat component (`banking-web/src/components/chat`) that:
-  - Supports the ChatKit protocol client-side specification
-  - Can be embedded into existing web applications (demonstrated in a banking app context)
-  - Provides a clean API for thread management, message and attachment handling, and event callbacks
-
-**Technical Implementation:**
-
-The backend uses `agent-framework-chatkit` to bridge Agent Framework agents with ChatKit's protocol, implementing a custom `ChatKitServer` subclass ([chatkit_server.py](../app/backend/app/routers/chatkit/chatkit_server.py)) that handles thread persistence, message conversion, and event streaming. The frontend chat component consumes the ChatKit SSE stream and renders progress indicators, approval widgets, and conversation history in a banking-integrated interface.
-
-This approach demonstrates how to build production-grade agentic applications that combine the power of Agent Framework's orchestration capabilities with the user experience benefits of the ChatKit protocol, while maintaining full control over deployment, security, and customization requirements.
-
-More info on the implementation can be found in the [chat server protocol](chat-server-protocol.md).
+The ChatKit protocol documents in this directory describe the removed implementation and are retained only as historical design references. They are not runtime or deployment instructions.

@@ -9,15 +9,15 @@
 
 ## Overview
 
-Zip deploy on App Service is the intended way to remove the Azure Container Registry dependency for the Python MCP APIs. This is a target architecture, not a verified deployment: [the current Bicep infrastructure](../infra/main.bicep) still provisions Container Apps and ACR, while the application manifest and CI target App Service.
+Zip deploy on App Service removes the Azure Container Registry dependency for the Python MCP APIs, Responses BFF, and web frontend. The root azd project uses the Terraform stack under [`infra`](../infra/README.md); the hosted agent has a separate azd project.
 
 ## Hosted agent placement
 
-The orchestrator is intended to run as a Foundry Hosted Agent. The hosted-agent azd manifest now lives at [app/backend/azure.yaml](../app/backend/azure.yaml), and commands should be run with `--cwd app/backend` from repository root. The current [ChatKit server](../app/backend/app/main_chatkit_server.py) is a FastAPI app, not an AgentServer Responses entry point, so hosted deployment still depends on completing that runtime integration.
+The Account/Transaction orchestrator runs through a Foundry Responses host. Its azd manifest lives at [app/backend/azure.yaml](../app/backend/azure.yaml), and commands should be run with `--cwd app/backend` from repository root. Local browser validation uses the local agent on port `8088` through the Responses BFF; hosted deployment is a separate operation.
 
 ## MCP API deployment
 
-The account, transaction, and payment MCP servers are FastAPI projects that only rely on Python packages. App Service build automation (set the SCM_DO_BUILD_DURING_DEPLOYMENT setting to true) restores dependencies during zip deploy, which matches the requirements captured in [plan/00-decisions.md](plan/00-decisions.md). Select an App Service plan SKU (for example B1, B2, or P1v3) that aligns with the expected concurrent tool calls. The plan choice determines available cores and memory, so no additional CPU tuning step is required.
+The Account and Transaction MCP servers are FastAPI projects that rely only on Python packages. The Payment App Service remains in the root infrastructure but is not connected to the active agent workflow. App Service build automation (`SCM_DO_BUILD_DURING_DEPLOYMENT=true`) restores dependencies during zip deploy. Select an App Service plan SKU (for example B1, B2, or P1v3) that aligns with expected concurrent tool calls.
 
 For zip deploy, each Python API directory must include a `requirements.txt` file. In this repository, `pyproject.toml` remains the local development source of truth, and `requirements.txt` is the deployment artifact consumed by Oryx on App Service.
 
@@ -29,14 +29,11 @@ uv pip compile pyproject.toml -o requirements.txt
 
 cd ../transaction
 uv pip compile pyproject.toml -o requirements.txt
-
-cd ../payment
-uv pip compile pyproject.toml -o requirements.txt
 ```
 
 ## Frontend deployment
 
-The banking web frontend can target App Service once production assets are built and a static serving strategy, including SPA routing, is configured. The current workflow packages source files without running the Vite build, and removing nginx did not provide a replacement server. Do not treat the frontend ZIP as deployable yet.
+The banking web deployment workflow builds the Vite production assets, packages its App Service server, and injects the deployed Account, Transaction, and Responses BFF URLs. The browser calls the BFF `/responses` endpoint and never receives a Foundry credential.
 
 ## When to revisit containers
 

@@ -1,11 +1,10 @@
 # Deployment Guide
 
 > [!WARNING]
-> This guide describes the original Container Apps deployment. The current
-> root `azure.yaml` and CI workflows target App Service, while `infra/` still provisions
-> Container Apps and ACR. The hosted agent uses a separate azd project root at
-> `app/backend/azure.yaml` (use `--cwd app/backend` for that stack). Do not use the
-> commands below as a validated deployment procedure until those pieces are reconciled.
+> Provisioning and hosted identity transport have not been verified end to end for the
+> hackathon environment. Review the Terraform plan and existing resource ownership before
+> running these commands. The root project targets App Service through Terraform; the
+> hosted agent uses a separate azd project at `app/backend/azure.yaml`.
 
 ## **🚀 Quick Start**
 
@@ -31,8 +30,9 @@ For the hosted-agent stack, run from repository root:
 azd up --cwd app/backend
 ```
 
-- This will provision Azure resources and deploy this sample to those resources.
-- The project has been tested with gpt-4o and gpt-4.1 model which is currently available with several deployment options these regions. The default is global standard. For more info on deployments and updated region availability check [here](https://learn.microsoft.com/en-us/azure/ai-foundry/foundry-models/concepts/models-sold-directly-by-azure?pivots=azure-openai&tabs=global-standard-aoai%2Cstandard-chat-completions%2Cglobal-standard#model-summary-table-and-region-availability)
+- Root `azd up` provisions the Terraform App Service stack and deploys its services.
+- Backend `azd up --cwd app/backend` deploys the hosted workflow to an existing Foundry
+  project. Its manifest declares `gpt-4.1-mini`, but does not create that model deployment.
 
 3. After the application has been successfully deployed you will see a web app URL printed to the console. Click that URL to interact with the application in your browser.
 
@@ -78,56 +78,27 @@ For hosted-agent code changes, use:
 azd deploy --cwd app/backend
 ```
 
-If you've changed the infrastructure files (`infra` folder or `azure.yaml`), then you'll need to re-provision the Azure resources. You can do that by running:
+If you changed the root infrastructure files (`infra` or the root `azure.yaml`), review
+the Terraform plan and then reprovision the App Service stack:
 
 ```shell
 azd up
 ```
 
-> [!WARNING]
-> When you run `azd up` multiple times to redeploy infrastructure, make sure to set the following parameters in `infra/main.parameters.json` to `true` to avoid container apps images from being overridden with default "mcr.microsoft.com/azuredocs/containerapps-helloworld" image:
+Do not use `azd down` as a rollback against an existing shared resource group. Inspect
+the Terraform state and plan first.
 
-```json
- "copilotAppExists": {
-      "value": false
-    },
-    "webAppExists": {
-      "value": false
-    },
-    "accountAppExists": {
-      "value": false
-    },
-    "paymentAppExists": {
-      "value": false
-    },
-    "transactionAppExists": {
-      "value": false
-    }
-```
+## Model Configuration
 
-## Testing different gpt models, versions and sku.
-
-The default LLM used in this project is _gpt-4.1_ deployed with global standard on Azure AI Foundry.
-You can test different models and versions by changing the model sections in the [infra/main.parameters.json](infra/main.parameters.json). An example:
-
-```shell
-"models": {
-      "value": [
-        {
-          "deploymentName": "gpt-4.1",
-          "name": "gpt-4.1",
-          "format": "OpenAI",
-          "version": "2025-04-14",
-          "skuName": "GlobalStandard",
-          "capacity": 80
-        }
-      ]
-    }
-```
+Set `MODEL_DEPLOYMENT_NAME` in the backend azd environment to the name of an existing
+deployment in the configured Foundry project. The checked-in manifest declares
+`gpt-4.1-mini`; neither the root Terraform stack nor the backend manifest provisions it.
+Changing the declaration does not create, resize, or validate model capacity.
 
 ## Running Agents locally
 
-Once you have created the Azure resources with `azd up` or `azd provision`, you can run all the apps locally (instead of using Azure Container Apps). For more details on how to run each app check:
+The supported local topology runs independently of App Service deployment. Use the root
+VS Code launch `DEV - Full Stack Ordered`; for component details, see:
 
 - the [backend README](../app/backend/README.md) to run the agents backend and the frontend
 - the [business API README](../app/business-api/README.md) to run the simulated banking MCP servers.

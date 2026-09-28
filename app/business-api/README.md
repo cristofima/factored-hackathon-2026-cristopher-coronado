@@ -4,11 +4,11 @@ A collection of Python-based FastMCP servers that provide simulated banking tool
 
 ## 🏗️ Architecture
 
-This business API layer implements **specialized MCP servers** for different banking domains:
+This business API layer contains **specialized MCP servers** for different banking domains:
 
-- **Account Service**: Manages account details, payment methods, and beneficiaries
-- **Payment Service**: Processes payment requests and transactions
-- **Transaction Service**: Handles transaction history and search operations
+- **Account Service**: Active workflow dependency for account details, payment methods, and beneficiaries
+- **Transaction Service**: Active workflow dependency for transaction history and search operations
+- **Payment Service**: Inherited compatibility service, not connected to the active agent workflow
 
 Each service runs as an independent FastMCP server exposing banking tools through HTTP endpoints that the copilot agents can consume.
 
@@ -165,23 +165,31 @@ The Banking Assistant Copilot connects to these services via MCP URLs configured
 # MCP Server URLs (from app/backend/.env.dev)
 ACCOUNT_MCP_URL=http://localhost:8070
 TRANSACTION_MCP_URL=http://localhost:8071
-PAYMENT_MCP_URL=http://localhost:8072
 ```
 
-The copilot's specialized agents use these tools to:
+The copilot's active specialist agents use these tools to:
 
 - **Account Agent**: Query account details and payment methods
 - **Transaction Agent**: Search and retrieve transaction history
-- **Payment Agent**: Process payment requests and validations
+
+The Payment service remains in this directory but is not connected to the active agent workflow.
+
+Account and Transaction MCP endpoints require a short-lived bearer created by the
+Responses agent from BFF-verified identity. Their `services.py` methods enforce
+`customer_id` ownership over the current dummy mappings before returning customer-owned
+resources. Keep those checks in the service layer when PostgreSQL repositories replace
+the mappings; tool descriptions and agent instructions are not authorization boundaries.
 
 ## 🐛 Development & Debugging
 
-Launch the services individually with the commands above or press `F5` with `DEV - Full Stack Ordered` to start all services and open Vite on port 5170; see the [root local-development guide](../../README.md#local-development-vs-code). Set breakpoints in any service and the running process will honor them.
+Launch the services individually or press `F5` with `DEV - Full Stack Ordered` to start Account, Transaction, the local Responses agent, the BFF, and Vite; see the [root local-development guide](../../README.md#local-development-vs-code). Set breakpoints in any service and the running process will honor them.
 
 ## Local inquiry verification
 
-On 2026-09-26, a browser conversation asking about recent Contoso payments reached `TransactionHistoryAgent`. The Account MCP call `getAccountsByUserName` and Transaction MCP call `getTransactionsByRecipientName` both succeeded, and the UI displayed the returned payment history. This confirms the local account/transaction inquiry path with simulated data, not payment execution or access control for real customer data.
+On 2026-09-26, browser conversations through the BFF verified both sides of the dummy-data authorization path: a foreign account was denied, and an authorized follow-up returned account data without leaking the prior conversation. A transaction inquiry also reached `TransactionHistoryAgent` and completed Account and Transaction MCP calls. These checks confirm local protocol and ownership behavior over sample mappings, not production access control or payment execution.
 
-For another local check, start the MCP services, backend, and frontend, ask about a recipient's recent payments, and confirm both tool calls succeed in the backend logs and that the final response appears in the browser. Do not use `/chatkit` HTTP 200 alone as proof that the tools finished.
+Do not spend additional effort expanding dummy-data scenarios. Repeat the ownership,
+conversation-isolation, and transaction checks against PostgreSQL-backed hackathon data
+when it is available.
 
 The services provide simulated banking data for development and testing purposes. In a production environment, these would connect to real banking systems and databases.
