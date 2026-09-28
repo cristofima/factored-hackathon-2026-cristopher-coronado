@@ -1,15 +1,38 @@
 import { useEffect, useRef } from "react";
+import { getAuthToken } from "@/api/authToken";
 import type { RetryConfig } from "./types";
 
 export interface StreamEvent {
   type: string;
-  [key: string]: any;
+  thread?: unknown;
+  item?: unknown;
+  icon?: string;
+  text?: string;
+  stream_options?: unknown;
+  message?: string;
+  code?: string;
+  allow_retry?: boolean;
+  http_status?: number;
+  response?: unknown;
+  delta?: unknown;
+}
+
+interface ThreadStreamRequest {
+  payload?: unknown;
+  threadId?: string;
+  type?: string;
+  params?: {
+    thread_id?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
 }
 
 export interface UseThreadStreamOptions {
   url: string;
-  request: any;
+  request: ThreadStreamRequest | null;
   onEvent: (event: StreamEvent) => void;
+  onConversation?: (threadId: string, conversationId: string) => void;
   onError?: (error: Error) => void;
   onComplete?: () => void;
   enabled: boolean;
@@ -22,7 +45,7 @@ const DEFAULT_RETRYABLE_STATUS_CODES = [408, 429, 500, 502, 503, 504];
 // Convert HTTP error to ErrorEvent format
 function createHttpErrorEvent(status: number, statusText: string, retryableStatusCodes: number[]): StreamEvent {
   const isRetryable = retryableStatusCodes.includes(status);
-  
+
   let message: string;
   if (status === 429) {
     message = "Too many requests. Please wait a moment and try again.";
@@ -39,7 +62,7 @@ function createHttpErrorEvent(status: number, statusText: string, retryableStatu
   } else {
     message = `HTTP error ${status}: ${statusText || 'Unknown error'}`;
   }
-  
+
   return {
     type: "error",
     code: "http_error",
@@ -53,9 +76,10 @@ function createHttpErrorEvent(status: number, statusText: string, retryableStatu
  * Custom hook for handling Server-Sent Events (SSE) streaming from the chat server.
  * Automatically manages connection lifecycle and event parsing.
  */
-export function useThreadStream({ url, request, onEvent, onError, onComplete, enabled, retryConfig }: UseThreadStreamOptions) {
+export function useThreadStream({ url, request, onEvent, onConversation, onError, onComplete, enabled, retryConfig }: UseThreadStreamOptions) {
   const abortControllerRef = useRef<AbortController | null>(null);
   const onEventRef = useRef(onEvent);
+  const onConversationRef = useRef(onConversation);
   const onErrorRef = useRef(onError);
   const onCompleteRef = useRef(onComplete);
   const retryConfigRef = useRef(retryConfig);
@@ -63,6 +87,7 @@ export function useThreadStream({ url, request, onEvent, onError, onComplete, en
   // Update refs when callbacks change
   useEffect(() => {
     onEventRef.current = onEvent;
+    onConversationRef.current = onConversation;
     onErrorRef.current = onError;
     onCompleteRef.current = onComplete;
     retryConfigRef.current = retryConfig;
@@ -79,13 +104,15 @@ export function useThreadStream({ url, request, onEvent, onError, onComplete, en
 
     const startStream = async () => {
       try {
+        const token = getAuthToken();
         const response = await fetch(url, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Accept: "text/event-stream",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
-          body: JSON.stringify(request),
+          body: JSON.stringify(request.payload ?? request),
           signal,
         });
 
@@ -93,13 +120,18 @@ export function useThreadStream({ url, request, onEvent, onError, onComplete, en
           // Convert HTTP error to error event instead of throwing
           const retryableStatusCodes = retryConfigRef.current?.retryableStatusCodes ?? DEFAULT_RETRYABLE_STATUS_CODES;
           const errorEvent = createHttpErrorEvent(response.status, response.statusText, retryableStatusCodes);
-          
+
           // Emit the error event so it's handled like SSE errors
           onEventRef.current(errorEvent);
-          
+
           // Also call onComplete to clean up streaming state
           onCompleteRef.current?.();
           return;
+        }
+
+        const conversationId = response.headers.get("X-Conversation-Id");
+        if (conversationId && typeof request.threadId === "string") {
+          onConversationRef.current?.(request.threadId, conversationId);
         }
 
         const reader = response.body?.getReader();
@@ -128,11 +160,11 @@ export function useThreadStream({ url, request, onEvent, onError, onComplete, en
 
           for (const line of lines) {
             const trimmed = line.trim();
-            
+
             // SSE events start with "data: "
             if (trimmed.startsWith("data: ")) {
               const jsonStr = trimmed.substring(6); // Remove "data: " prefix
-              
+
               try {
                 const event = JSON.parse(jsonStr) as StreamEvent;
                 onEventRef.current(event);

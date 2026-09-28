@@ -1,8 +1,7 @@
 import os
 from typing import List
-from urllib.parse import urlsplit
 
-from pydantic import Field, field_validator
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -56,35 +55,17 @@ class Settings(BaseSettings):
     ENABLE_OTEL : bool = Field(default=True)
   
     
-    # maps to environment variables described by the user
-
-    #Azure OpenAI Chat configuration
-    AZURE_OPENAI_ENDPOINT: str | None = Field(default=None)
-    AZURE_OPENAI_CHAT_DEPLOYMENT_NAME: str = Field(default="gpt-4o")
-
-    @field_validator("AZURE_OPENAI_ENDPOINT")
-    @classmethod
-    def validate_azure_openai_endpoint(cls, value: str | None) -> str | None:
-        if value:
-            url = urlsplit(value)
-            if url.path not in ("", "/") or url.query or url.fragment:
-                raise ValueError(
-                    "AZURE_OPENAI_ENDPOINT must be the resource root URL, "
-                    "not an /openai/v1/responses or chat/completions URL"
-                )
-        return value
-
-    # Azure services
-    AZURE_STORAGE_ACCOUNT: str | None = Field(default=None)
-    AZURE_STORAGE_CONTAINER: str | None = Field(default="content")
+    # Foundry hosted agent configuration
+    FOUNDRY_PROJECT_ENDPOINT: str | None = Field(default=None)
+    MODEL_DEPLOYMENT_NAME: str | None = Field(default=None)
+    INTERNAL_IDENTITY_SECRET: str | None = Field(default=None, min_length=32)
 
     #MCP servers
     ACCOUNT_MCP_URL: str | None= Field(default=None,description="MCP server URL (required)", min_length=1)
     TRANSACTION_MCP_URL: str | None= Field(default=None,description="MCP server URL (required)", min_length=1)
-    PAYMENT_MCP_URL: str | None= Field(default=None,description="MCP server URL (required)", min_length=1)
 
     # Support for User Assigned Managed Identity: empty means system-managed
-    AZURE_CLIENT_ID: str  | None = Field(default="system-managed-identity")
+    AZURE_CLIENT_ID: str | None = Field(default=None)
 
     model_config = SettingsConfigDict(
         env_file=get_env_files(),

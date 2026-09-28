@@ -8,13 +8,22 @@ services:
   ai-project:
     host: azure.ai.project
     endpoint: ${FOUNDRY_PROJECT_ENDPOINT}
+    deployments:
+      - name: gpt-4.1-mini
+        model:
+          format: OpenAI
+          name: gpt-4.1-mini
+          version: "2025-04-14"
+        sku:
+          name: GlobalStandard
+          capacity: 10
   home-banking-agent:
     host: azure.ai.agent
     project: .
     language: python
     codeConfiguration:
       runtime: python_3_13
-      entryPoint: app/main_chatkit_server.py
+      entryPoint: app/main_responses_host.py
     uses:
       - ai-project
     kind: hosted
@@ -25,14 +34,15 @@ services:
         - Agent Framework
         - Azure AI AgentServer
     description: >
-      Hosted agent orchestrating account, transaction, and payment MCP servers for the banking assistant workflow.
+      Hosted agent orchestrating account and transaction MCP servers through the Responses protocol.
     protocols:
       - protocol: responses
         version: 2.0.0
     env:
-      FOUNDRY_PROJECT_ENDPOINT: ${FOUNDRY_PROJECT_ENDPOINT}
       MODEL_DEPLOYMENT_NAME: ${MODEL_DEPLOYMENT_NAME}
-      TOOLBOX_ENDPOINT: ${TOOLBOX_ENDPOINT}
+      ACCOUNT_MCP_URL: ${ACCOUNT_MCP_URL}
+      TRANSACTION_MCP_URL: ${TRANSACTION_MCP_URL}
+      INTERNAL_IDENTITY_SECRET: ${INTERNAL_IDENTITY_SECRET}
       ENABLE_INSTRUMENTATION: ${ENABLE_INSTRUMENTATION}
       ENABLE_SENSITIVE_DATA: ${ENABLE_SENSITIVE_DATA}
       AZURE_EXPERIMENTAL_ENABLE_GENAI_TRACING: ${AZURE_EXPERIMENTAL_ENABLE_GENAI_TRACING}

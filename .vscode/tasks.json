@@ -13,7 +13,7 @@
     {
       "label": "run account mcp dev",
       "type": "shell",
-      "command": "uv run python main.py",
+      "command": "uv run --env-file ../../../.env.dev python main.py",
       "options": {
         "cwd": "${workspaceFolder}/app/business-api/account",
         "env": {
@@ -43,7 +43,7 @@
     {
       "label": "run transaction mcp dev",
       "type": "shell",
-      "command": "uv run python main.py",
+      "command": "uv run --env-file ../../../.env.dev python main.py",
       "options": {
         "cwd": "${workspaceFolder}/app/business-api/transaction",
         "env": {
@@ -71,20 +71,20 @@
       }
     },
     {
-      "label": "run payment mcp dev",
+      "label": "run responses agent dev",
       "type": "shell",
-      "command": "uv run python main.py",
+      "command": "uv run --env-file ../../.env.dev python -m app.main_responses_host",
       "options": {
-        "cwd": "${workspaceFolder}/app/business-api/payment",
+        "cwd": "${workspaceFolder}/app/backend",
         "env": {
           "PROFILE": "dev",
-          "TRANSACTIONS_API_SERVER_URL": "http://localhost:8071"
+          "ENABLE_SENSITIVE_DATA": "true"
         }
       },
       "presentation": {
         "reveal": "always",
         "panel": "dedicated",
-        "group": "payment-mcp",
+        "group": "responses-agent",
         "clear": true
       },
       "isBackground": true,
@@ -96,26 +96,27 @@
         ],
         "background": {
           "activeOnStart": true,
-          "beginsPattern": ".*Starting payment service server with profile: dev, port: 8072.*",
-          "endsPattern": ".*Uvicorn running on http://0\\.0\\.0\\.0:8072.*"
+          "beginsPattern": ".*",
+          "endsPattern": ".*Uvicorn running on http://127\\.0\\.0\\.1:8088.*|.*Uvicorn running on http://0\\.0\\.0\\.0:8088.*"
         }
       }
     },
     {
-      "label": "run chatkit backend dev",
+      "label": "run responses bff dev",
       "type": "shell",
-      "command": "uv run uvicorn app.main_chatkit_server:app --port 8080",
+      "command": "uv run --env-file ../../.env.dev uvicorn bff.main:app --port 8080",
       "options": {
-        "cwd": "${workspaceFolder}/app/backend",
+        "cwd": "${workspaceFolder}/app/responses-bff",
         "env": {
           "PROFILE": "dev",
-          "ENABLE_SENSITIVE_DATA": "true"
+          "RESPONSES_UPSTREAM_MODE": "local",
+          "RESPONSES_AGENT_ENDPOINT": "http://127.0.0.1:8088/responses"
         }
       },
       "presentation": {
         "reveal": "always",
         "panel": "dedicated",
-        "group": "chatkit-backend",
+        "group": "responses-bff",
         "clear": true
       },
       "isBackground": true,
@@ -167,8 +168,8 @@
       "dependsOn": [
         "run account mcp dev",
         "run transaction mcp dev",
-        "run payment mcp dev",
-        "run chatkit backend dev",
+        "run responses agent dev",
+        "run responses bff dev",
         "run frontend dev"
       ]
     }

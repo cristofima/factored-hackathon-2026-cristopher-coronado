@@ -3,7 +3,6 @@ page_type: sample
 languages:
   - azdeveloper
   - python
-  - bicep
   - typescript
   - html
 products:
@@ -12,14 +11,13 @@ products:
   - azure-openai
   - active-directory
   - azure-cognitive-search
-  - azure-container-apps
   - azure-sdks
   - github
   - azure-monitor
   - azure-pipelines
 urlFragment: agent-openai-python-banking-assistant
 name: Multi Agents Banking Assistant with Python and Microsoft Agent Framework
-description: A Python sample app emulating a personal banking AI-powered assistant to inquire about account balances, review recent transactions, or initiate payments
+description: A Python sample app using Foundry Responses for account and transaction inquiries
 ---
 
 <!-- YAML front-matter schema: https://review.learn.microsoft.com/en-us/help/contribute/samples/process/onboarding?branch=main#supported-metadata-fields-for-readmemd -->
@@ -32,7 +30,7 @@ description: A Python sample app emulating a personal banking AI-powered assista
 
 # Multi Agent Banking Assistant
 
-This hackathon prototype extends Microsoft's public [Azure-Samples/agent-openai-python-banking-assistant](https://github.com/Azure-Samples/agent-openai-python-banking-assistant) sample. The current work focuses on the Account / Transaction / Payment inquiry workflow; planned data, authentication, localization, and evaluation changes are tracked in [the prototype plan](./plan/README.md).
+This hackathon prototype extends Microsoft's public [Azure-Samples/agent-openai-python-banking-assistant](https://github.com/Azure-Samples/agent-openai-python-banking-assistant) sample. The current workflow focuses on Account and Transaction inquiries through Foundry Responses. Data persistence, dynamic localization, hosted validation, and evaluation work are tracked in [the prototype plan](./plan/README.md).
 
 A banking personal assistant designed to revolutionize the way users interact with their bank account information, transaction history, and payment functionalities. Utilizing the power of generative AI within a multi-agent architecture, this assistant aims to provide a seamless, conversational interface through which users can effortlessly access and manage their financial data.
 
@@ -57,28 +55,27 @@ Business scenario
 </div>
 <br/>
 
-Revolutionize the way users interact with their bank account information, transaction history, and payment functionalities.
-Instead of navigating through traditional web interfaces and menus, users can simply converse with the AI-powered assistant to inquire about their account balances, credit cards, review recent transactions, or initiate payments. This approach not only enhances user experience by making financial management more intuitive and accessible but also leverages the existing workload data and APIs to ensure a reliable and secure service.
+Users can converse with the assistant to inquire about account balances and review recent transactions instead of navigating traditional menus. The active workflow does not execute payments.
 
-The payment agent can initiate payments using bill details supplied in text by the user. Invoice samples remain in the data folder, but automated invoice-image extraction is not enabled. The business APIs currently serve sample account, transaction, and payment data through REST endpoints and MCP tools; the PostgreSQL migration is planned, not deployed.
+The business APIs currently serve sample data. The Payment service and invoice samples remain as inherited artifacts but are not connected to the agent. The BFF provides prototype login with environment-configured Argon2 users; PostgreSQL-backed users and banking data remain pending.
 
 ### Key Features
 
 <details open>
   <summary>Click to learn more about the key features this solution enables</summary>
  
- - **Add agentic conversational experience to your existing website** <br/>
-The React frontend supports attachment uploads backed by Blob storage; the payment agent cannot extract fields from uploaded invoices.
+ - **Add an agentic conversational experience to your existing website** <br/>
+The React frontend streams OpenAI Responses events for account and transaction inquiries through a JWT-protected BFF.
  - **Multi-agent supervisor architecture** <br/>
- Use agents-as-tools or hand-off orchestration to implement supervisor agent to understand user intents and delegate tasks to specific domain agents. Agents are using **gpt-4.1** on [Azure AI Foundry](https://azure.microsoft.com/en-us/products/ai-foundry)
+ Use handoff orchestration to understand user intent and delegate requests to domain agents. The hosted-agent manifest declares **gpt-4.1-mini** on [Microsoft Foundry](https://azure.microsoft.com/en-us/products/ai-foundry); this repository does not provision the model deployment.
  - **Reusing existing business APIs as MCP tools** <br/>
  Business service logic is exposed to agents through MCP using [fastmcp](https://gofastmcp.com/getting-started/welcome) 
  - **Microsoft Agent Framework First** <br/>
  Use [MAF](https://learn.microsoft.com/en-us/agent-framework/overview/agent-framework-overview) chat agents to flexibly support AzureOpenAI or Foundry Agent Service based agents
  - **Human-In-The-Loop (HITL) patterns** <br/>
- Rich human-in-the-loop experience supporting agents progress notification and tool approval using [Open AI chatkit protocol](https://platform.openai.com/docs/guides/chatkit).
+ Generic approval events can be presented by the Responses client without coupling the UI to payment-specific behavior.
 - **Separate hosted agent and App Services** <br/>
-The Foundry hosted agent uses its own azd project; the root Terraform stack defines four App Services for the web and business APIs.
+The Foundry hosted agent uses its own azd project; the root Terraform stack defines five App Services for the BFF, web frontend, and business APIs.
 - **Automated IaC and App build & Deployment**
 Automated Azure resources creation and solution deployment leveraging [Azure Developer CLI](https://learn.microsoft.com/en-us/azure/developer/azure-developer-cli/).
 
@@ -94,14 +91,13 @@ Solution overview
 | ![image](docs/assets/HLA-Agent-Framework.png) |
 | --------------------------------------------- |
 
-The home banking assistant is designed as conversational multi-agent system with each agent specializing in a specific functional domain (e.g., account management, transaction history, payments).Business services logic is exposed to agents through MCP endpoint running on domain driven microservice.
-Agents-to-Chat communication protocol is based on [OpenAI Chatkit protocol](<(https://github.com/openai/chatkit-js)>) handling SSE streams from a unified POST endpoint; It extends original ChatKit Microsoft agent-framework implementation in order support client-managed widgets and multi-agent workflows.
+The home banking assistant uses a handoff workflow whose agents specialize in account and transaction inquiries. Business service logic is exposed to those agents through MCP endpoints. The browser sends OpenAI Responses requests with a bearer JWT to the BFF. The BFF validates the user, signs downstream identity, and routes the request to the local Responses agent or, when configured, obtains an Azure access token and calls the Foundry-hosted agent.
 
 ### Additional resources
 
 - [Skilling-Presentation](./docs/Home%20Banking%20Assistant.pdf)
 - [Technical Architecture](./docs/technical-architecture.md)
-- [Chat-to-Agent Conversational protocol implementation](./docs/chat-server-protocol.md)
+- [Historical ChatKit protocol reference](./docs/chat-server-protocol.md)
 - For Semantic Kernel version check this [branch](https://github.com/Azure-Samples/agent-openai-python-banking-assistant/tree/semantic-kernel)
 
 <br /><br />
@@ -134,7 +130,7 @@ Clone this repository and select an azd environment. Before provisioning the roo
 
 This repository intentionally uses two separate Azure Developer CLI project roots:
 
-- Root project (`./azure.yaml`): Terraform provisions the shared Linux plan, four App Services, monitoring, Blob attachment storage, and a dedicated Foundry account and project; root `azd deploy` deploys only the App Service workloads.
+- Root project (`./azure.yaml`): Terraform provisions the shared Linux plan, five App Services, monitoring, Blob storage, and a dedicated Foundry account and project; root `azd deploy` deploys only the App Service workloads.
 - Backend project (`./app/backend/azure.yaml`): the `microsoft.foundry` provider deploys the hosted agent to the existing Foundry project. Set its `FOUNDRY_PROJECT_ENDPOINT` from the root environment output before deploying; the two azd environments are separate.
 
 Naming note for the App Service stack: the frontend app uses `app-banking-web-<env>` (for example, `app-banking-web-development`) so the web workload name is explicit and distinct from backend services.
@@ -159,15 +155,16 @@ azd deploy --cwd app/backend
 
 ### Python dependency artifact for App Service zip deploy
 
-The three Python MCP APIs (`account`, `transaction`, `payment`) are deployed independently from the root `azure.yaml`. For App Service zip deploy, each service directory must include its own `requirements.txt` so Oryx can install runtime dependencies. Keep `pyproject.toml` as the development source of truth and regenerate `requirements.txt` from it before deployment changes.
+The three Python MCP APIs (`account`, `transaction`, `payment`) and the Responses BFF are deployed independently from the root `azure.yaml`. For App Service zip deploy, each Python service directory must include its own `requirements.txt` so Oryx can install runtime dependencies. Keep `pyproject.toml` and the `uv` lock files as the development source of truth and regenerate `requirements.txt` before deployment changes.
 
 ```shell
 uv pip compile app/business-api/account/pyproject.toml -o app/business-api/account/requirements.txt
 uv pip compile app/business-api/transaction/pyproject.toml -o app/business-api/transaction/requirements.txt
 uv pip compile app/business-api/payment/pyproject.toml -o app/business-api/payment/requirements.txt
+uv export --project app/responses-bff --no-dev --no-hashes --no-emit-project --output-file app/responses-bff/requirements.txt
 ```
 
-The current ChatKit server keeps threads, items, and attachment metadata in local SQLite; Blob storage holds uploaded attachment bytes. Foundry Responses history, linked by `conversation` or `previous_response_id`, is separate and does not replace ChatKit persistence. No Cosmos DB is provisioned, and a durable per-user ChatKit store is still required before production deployment.
+Foundry Responses maintains conversation history when requests link turns with a signed user-bound `conversation` value. The BFF rejects conversation identifiers that belong to a different authenticated user. It currently verifies environment-configured Argon2 users and issues short-lived HS256 JWTs; PostgreSQL-backed identity persistence remains pending.
 
 For more info about deployment click [here](./docs/deployment-guide.md)
 
@@ -179,8 +176,8 @@ For more info about deployment click [here](./docs/deployment-guide.md)
 Pricing varies per region and usage, so it isn't possible to predict exact costs for your usage.
 However, you can try the [Azure pricing calculator](https://azure.com/e/8ffbe5b1919c4c72aed89b022294df76) for the resources below.
 
-- Azure App Service: a shared Linux B1 plan for the four apps. [Pricing](https://azure.microsoft.com/en-us/pricing/details/app-service/linux/)
-- Azure Blob Storage: Standard LRS for ChatKit attachment bytes. [Pricing](https://azure.microsoft.com/pricing/details/storage/blobs/)
+- Azure App Service: a shared Linux B1 plan for the five apps. [Pricing](https://azure.microsoft.com/en-us/pricing/details/app-service/linux/)
+- Azure Blob Storage: Standard LRS. [Pricing](https://azure.microsoft.com/pricing/details/storage/blobs/)
 - Azure Monitor: Log Analytics and Application Insights, billed by usage. [Pricing](https://azure.microsoft.com/en-us/pricing/details/monitor/)
 - The separate Foundry project and model usage have their own costs.
 
@@ -188,15 +185,13 @@ Do not run `azd down` against an existing shared resource group as a rollback st
 
 ### Local development (VS Code)
 
-Start the account (8070), transaction (8071), and payment (8072) MCP services, the ChatKit backend (8080), and the Vite frontend in separate terminals. The commands and environment variables are in the [business API](./app/business-api/README.md), [backend](./app/backend/README.md), and [frontend](./app/frontend/banking-web/README.md) guides. Open the URL printed by Vite, normally `http://localhost:5170/`.
+Start the Account MCP service (8070), Transaction MCP service (8071), local Responses agent (8088), Responses BFF (8080), and Vite frontend (5170). The BFF uses `RESPONSES_UPSTREAM_MODE=local`, so browser requests never call Foundry directly during local validation.
 
 In VS Code, press `F5` with `DEV - Full Stack Ordered` to start all five services and open the frontend at `http://localhost:5170/`. The frontend task waits for Vite to report that URL; port `5170` must be available for this launch configuration.
 
-The backend ChatKit server at `http://localhost:8080/` only exposes API endpoints, so the root path returns `404 Not Found` by design.
+The BFF exposes the protected Responses endpoint at `http://localhost:8080/responses`; the local agent listens at `http://localhost:8088/responses`.
 
-For local Azure OpenAI inference with `PROFILE=dev`, sign in with `az login` using an identity that has the `Cognitive Services OpenAI User` role on the configured Azure AI Services resource. The Azure account selected in VS Code is independent of the Azure CLI identity used by the backend; a successful `/chatkit` HTTP 200 alone does not confirm model access.
-
-**Local verification (2026-09-26):** A browser request to `/chatkit` completed a transaction-history inquiry: the supervisor handed off to `TransactionHistoryAgent`, `getAccountsByUserName` and `getTransactionsByRecipientName` succeeded through the local MCP services, and Azure OpenAI returned HTTP 200. The UI displayed the payment history and final answer. This verifies that inquiry path locally, not payment execution, end-user authorization, or a deployed environment.
+For local Azure OpenAI inference with `PROFILE=dev`, sign in with `az login` using an identity that has the `Cognitive Services OpenAI User` role on the configured Azure AI Services resource. Configure approved Argon2 test users in the BFF's ignored local environment and sign in through the frontend. Do not substitute a fixed development bearer token.
 
 <h2><img src="./docs/assets/supporting-documentation.png" width="48" />
 Supporting documentation
@@ -204,17 +199,47 @@ Supporting documentation
 
 ### Restrict access to the public web app
 
-The root Terraform stack does not configure end-user authentication or access restrictions for the web app. Do not expose real customer data until the planned email/password JWT authentication and service-layer resource ownership checks are implemented.
+The root Terraform stack does not configure network access restrictions for the public web app. Prototype JWT authentication and dummy-data ownership checks exist, but do not expose real customer data until PostgreSQL ownership relationships, hosted identity transport, and deployment controls are verified.
+
+### Prototype limitations
+
+This repository is a hackathon prototype. It demonstrates an architecture pattern and deployment topology, but it does not claim production-ready controls for a regulated banking environment.
+
+Current limitations to keep explicit:
+
+- End-user login uses environment-configured Argon2 identities and short-lived JWTs; it is not a production identity lifecycle.
+- PostgreSQL-backed users, account ownership relationships, and banking data are not implemented.
+- Account and Transaction enforce ownership over dummy mappings, which must be preserved and revalidated when repositories replace them.
+- MCP and internal API authorization must be enforced in service code (`customer_id` ownership checks), not inferred from prompts.
+- The frontend must not call Foundry or agent endpoints directly; browser traffic must go through the Responses BFF.
+- The BFF validates application identity and proxies upstream requests, but this does not replace per-resource authorization in business services.
+- The previous ChatKit-style direct browser-to-agent pattern is no longer the target architecture.
+- HITL approval widgets are generic protocol support; approval policy still requires business-specific hardening and audit coverage.
+- Prompt-injection resilience is bounded by deterministic authorization checks and does not rely on model instruction following alone.
+- Logging and tracing are useful for diagnostics, but sensitive-data controls and retention governance must be reviewed before production.
+
+Production controls that remain outside this prototype scope:
+
+- Enterprise IAM integration (full account lifecycle, MFA, password reset, session revocation, key rotation).
+- End-to-end network isolation (private endpoints, restricted ingress, and explicit east-west trust boundaries).
+- Complete compliance controls (PCI-DSS, GDPR, local banking regulation mapping, evidence collection, and formal audit workflows).
+- Fraud and abuse controls (risk scoring, anomaly detection, velocity rules, and adaptive step-up authentication).
+- Operational resilience standards (disaster recovery objectives, multi-region failover, and formal incident response playbooks).
+- Full security verification program (penetration testing, dependency governance, SAST/DAST tuning, and continuous control validation).
+
+In short: the intended secure pattern is `frontend -> BFF -> hosted agent -> authenticated MCP/APIs`, with authorization checks in each business service. The prototype already aligns to that direction, and remaining phases close the gaps.
 
 ### Security guidelines
 
 > [!IMPORTANT]
-> **This sample is a proof-of-concept and does not implement app authentication or authorization**.
+> **This sample is a proof-of-concept. Its prototype authentication and authorization controls are not production-ready.**
 
 The sample does not cover the following aspects, essential to the security of the solution:
 
-- **No isolation of user conversations**: After app deployment on Azure, the platform does not isolate conversations or other persisted state by end user.
-- **No authentication or authorization of end users**: The planned JWT authentication and customer ownership checks are not implemented yet.
+- **Prototype identities only**: The BFF verifies environment-configured Argon2 users and issues short-lived JWTs. Registration, password reset, revocation, and PostgreSQL persistence are not implemented.
+- **Local identity chain only**: Signed BFF-to-agent identity and 60-second agent-to-MCP bearers are validated locally. Hosted delegated-identity transport remains unverified.
+- **Dummy ownership data**: Account and Transaction service methods enforce `customer_id` ownership over sample mappings. Real database relationships and authorization tests remain pending.
+- **Conversation binding is application-scoped**: The BFF binds conversation identifiers to verified JWT subjects, but production persistence, lifecycle, and hosted isolation still require validation.
 
 When deploying to production with real customer data, consider implementing:
 

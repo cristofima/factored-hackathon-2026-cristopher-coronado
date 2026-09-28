@@ -1,11 +1,11 @@
 /**
  * Utility functions for client-managed widgets
  * 
- * These utilities help client-managed widgets interact with the ChatKit server
- * by providing convenient functions for sending actions and formatting data.
+ * These utilities help client-managed widgets send Responses approval events
+ * and format display data.
  */
 
-import { useChat } from "@/components/chat/ChatProvider";
+import { useChat } from "@/components/chat/ResponsesChatProvider";
 import { useCallback, useEffect, useRef } from "react";
 
 /**
@@ -18,9 +18,7 @@ export interface WidgetActionCallbacks {
 }
 
 /**
- * Hook to send widget actions to the ChatKit server
- * This handles the complete flow of sending a threads.custom_action request
- * with support for lifecycle callbacks
+ * Hook to send widget actions as Responses MCP approval events with lifecycle callbacks
  * 
  * @param callbacks - Optional callbacks for action lifecycle events
  * @returns Function to send actions with proper context
@@ -38,19 +36,19 @@ export function useSendWidgetAction(callbacks?: WidgetActionCallbacks) {
   const wasStreamingRef = useRef(false);
   const callbacksRef = useRef(callbacks);
   const hasActionBeenSentRef = useRef(false);
-  
+
   // Keep callbacks ref up to date
   useEffect(() => {
     callbacksRef.current = callbacks;
   }, [callbacks]);
-  
+
   // Monitor streaming state changes - only if this widget has sent an action
   useEffect(() => {
     // Only react to streaming changes if this widget initiated an action
     if (!hasActionBeenSentRef.current) {
       return;
     }
-    
+
     // Thread started (not streaming -> streaming)
     if (isStreaming && !wasStreamingRef.current) {
       callbacksRef.current?.onThreadStarted?.();
@@ -61,10 +59,10 @@ export function useSendWidgetAction(callbacks?: WidgetActionCallbacks) {
       // Reset the flag after thread ends
       hasActionBeenSentRef.current = false;
     }
-    
+
     wasStreamingRef.current = isStreaming;
   }, [isStreaming]);
-  
+
   return useCallback((itemId: string, action: {
     type: string;
     payload?: Record<string, unknown>;
@@ -79,10 +77,10 @@ export function useSendWidgetAction(callbacks?: WidgetActionCallbacks) {
       });
       return;
     }
-    
+
     // Mark that this widget has sent an action
     hasActionBeenSentRef.current = true;
-    
+
     // Format action with defaults
     const formattedAction = {
       type: action.type,
@@ -90,8 +88,8 @@ export function useSendWidgetAction(callbacks?: WidgetActionCallbacks) {
       handler: action.handler || "server",
       loadingBehavior: action.loadingBehavior || "auto",
     };
-    
-    // Send to ChatKit server via threads.custom_action
+
+    // Translate the widget action into an MCP approval response.
     sendWidgetAction(activeThreadId, itemId, formattedAction);
   }, [sendWidgetAction, activeThreadId]);
 }

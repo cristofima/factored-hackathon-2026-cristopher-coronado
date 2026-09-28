@@ -14,6 +14,10 @@ services:
     project: ./app/business-api/transaction
     language: python
     host: appservice
+  responses-bff:
+    project: ./app/responses-bff
+    language: python
+    host: appservice
   web:
     project: ./app/frontend/banking-web
     language: js

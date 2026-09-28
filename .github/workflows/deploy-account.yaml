@@ -35,5 +35,25 @@ jobs:
           azd config set auth.useAzCliAuth true
           azd env new development --subscription "$AZURE_SUBSCRIPTION_ID" --location "$AZURE_LOCATION" --no-prompt
           azd env set AZURE_RESOURCE_GROUP "$AZURE_RESOURCE_GROUP"
+      - name: Configure internal identity secret
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          INTERNAL_IDENTITY_SECRET: ${{ secrets.INTERNAL_IDENTITY_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ ${#INTERNAL_IDENTITY_SECRET} -lt 32 ]; then
+            echo "::error::INTERNAL_IDENTITY_SECRET must contain at least 32 characters"
+            exit 1
+          fi
+          APP_NAME="$(az resource list --resource-group "$AZURE_RESOURCE_GROUP" --resource-type Microsoft.Web/sites --tag azd-service-name=account --query '[0].name' --output tsv)"
+          if [ -z "$APP_NAME" ]; then
+            echo "::error::Account App Service was not found in $AZURE_RESOURCE_GROUP"
+            exit 1
+          fi
+          az webapp config appsettings set \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$APP_NAME" \
+            --settings "INTERNAL_IDENTITY_SECRET=$INTERNAL_IDENTITY_SECRET" \
+            --output none
       - name: Deploy account
         run: azd deploy account --no-prompt

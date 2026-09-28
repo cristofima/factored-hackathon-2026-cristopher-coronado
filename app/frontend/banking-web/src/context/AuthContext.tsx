@@ -1,65 +1,67 @@
-import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { bffClient } from "@/api/bffClient";
-import { UserProfile } from "@/models/UserProfile";
-
-interface LoginCredentials {
-  email: string;
-  password: string;
-}
+import {
+  createContext,
+  ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import {
+  AuthenticatedUser,
+  login as authenticate,
+  restoreUser,
+} from "@/api/authClient";
+import { AUTH_TOKEN_KEY } from "@/api/authToken";
 
 interface AuthContextValue {
-  user: UserProfile | null;
+  user: AuthenticatedUser | null;
   loading: boolean;
-  isAuthenticated: boolean;
-  login: (credentials: LoginCredentials) => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
   logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-const AUTH_TOKEN_KEY = "banking-auth-token";
-
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<UserProfile | null>(null);
+  const [user, setUser] = useState<AuthenticatedUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem(AUTH_TOKEN_KEY);
-    if (!token) {
-      setLoading(false);
-      return;
-    }
-
-    bffClient
-      .getUserProfile()
-      .then(setUser)
-      .catch(() => {
-        localStorage.removeItem(AUTH_TOKEN_KEY);
+    let active = true;
+    restoreUser()
+      .then((restoredUser) => {
+        if (active) {
+          setUser(restoredUser);
+        }
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (active) {
+          setLoading(false);
+        }
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
-  const login = useCallback(async (credentials: LoginCredentials) => {
-    const response = await bffClient.login(credentials);
-    localStorage.setItem(AUTH_TOKEN_KEY, response.token);
-    const profile = await bffClient.getUserProfile();
-    setUser(profile);
+  const login = useCallback(async (email: string, password: string) => {
+    setUser(await authenticate(email, password));
   }, []);
 
   const logout = useCallback(() => {
-    setUser(null);
     localStorage.removeItem(AUTH_TOKEN_KEY);
+    setUser(null);
   }, []);
 
   const value = useMemo(
     () => ({
       user,
       loading,
-      isAuthenticated: Boolean(user),
       login,
       logout,
     }),
-    [user, loading, login, logout]
+    [loading, login, logout, user],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

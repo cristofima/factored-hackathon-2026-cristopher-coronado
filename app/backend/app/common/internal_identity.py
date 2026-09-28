@@ -1,0 +1,78 @@
+"""Validation and delegation for internal banking identities."""
+
+from __future__ import annotations
+
+import base64
+import hashlib
+import hmac
+import json
+import time
+from dataclasses import dataclass
+from typing import Any
+
+from azure.ai.agentserver.core import get_request_context
+
+
+@dataclass(frozen=True)
+class InternalPrincipal:
+    """Verified identity propagated by the BFF."""
+
+    sub: str
+    customer_id: str
+
+
+def create_mcp_authorization(secret: str, lifetime_seconds: int = 60) -> str:
+    """Create a short-lived MCP bearer token for the current request identity."""
+    identity = get_request_context().user_id
+    if not identity:
+        raise RuntimeError("Authenticated request identity is required")
+
+    principal = _verify_envelope(identity, secret)
+    payload = {
+        "customer_id": principal.customer_id,
+        "exp": int(time.time()) + lifetime_seconds,
+        "sub": principal.sub,
+    }
+    return f"Bearer {_sign_payload(payload, secret)}"
+
+
+def mcp_header_provider(secret: str):
+    """Build a request-scoped Agent Framework MCP header provider."""
+
+    def provide_headers(_: dict[str, Any]) -> dict[str, str]:
+        return {"Authorization": create_mcp_authorization(secret)}
+
+    return provide_headers
+
+
+def _verify_envelope(token: str, secret: str) -> InternalPrincipal:
+    try:
+        version, encoded_payload, signature = token.split(".")
+    except ValueError as error:
+        raise ValueError("Invalid internal identity") from error
+    if version != "v1":
+        raise ValueError("Unsupported internal identity version")
+
+    expected = hmac.new(secret.encode(), encoded_payload.encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(signature, expected):
+        raise ValueError("Invalid internal identity signature")
+
+    try:
+        padding = "=" * (-len(encoded_payload) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(encoded_payload + padding))
+        principal = InternalPrincipal(
+            sub=payload["sub"],
+            customer_id=payload["customer_id"],
+        )
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+        raise ValueError("Invalid internal identity payload") from error
+    if not principal.sub or not principal.customer_id:
+        raise ValueError("Internal identity claims must not be empty")
+    return principal
+
+
+def _sign_payload(payload: dict[str, Any], secret: str) -> str:
+    serialized = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode()
+    encoded_payload = base64.urlsafe_b64encode(serialized).rstrip(b"=").decode()
+    signature = hmac.new(secret.encode(), encoded_payload.encode(), hashlib.sha256).hexdigest()
+    return f"v1.{encoded_payload}.{signature}"

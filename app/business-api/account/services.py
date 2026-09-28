@@ -4,6 +4,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+ACCOUNT_CUSTOMERS = {
+    "1000": "customer-alice",
+    "1010": "local-customer",
+    "1020": "customer-charlie",
+}
+
 
 class AccountService:
     def __init__(self):
@@ -55,28 +61,40 @@ class AccountService:
         self.payment_methods["23456"] = PaymentMethod(id="23456", type="BankTransfer", activationDate="2022-01-01", expirationDate="9999-01-01", availableBalance=5000.0, cardNumber=None)
         self.payment_methods["345678"] = PaymentMethod(id="345678", type="BankTransfer", activationDate="2022-01-01", expirationDate="9999-01-01", availableBalance=10000.0, cardNumber=None)
 
-    def get_account_details(self, account_id: str) -> Optional[Account]:
+    def get_account_details(self, account_id: str, customer_id: str) -> Optional[Account]:
         logger.info("Request to get_account_details with account_id: %s", account_id)
-        if not account_id:
-            raise ValueError("AccountId is empty or null")
-        if not account_id.isdigit():
-            raise ValueError("AccountId is not a valid number")
+        _authorize_account(account_id, customer_id)
         return self.accounts.get(account_id)
 
-    def get_payment_method_details(self, payment_method_id: str) -> Optional[PaymentMethod]:
+    def get_payment_method_details(
+        self,
+        payment_method_id: str,
+        customer_id: str,
+    ) -> Optional[PaymentMethod]:
         logger.info("Request to get_payment_method_details with payment_method_id: %s", payment_method_id)
         if not payment_method_id:
             raise ValueError("PaymentMethodId is empty or null")
         if not payment_method_id.isdigit():
             raise ValueError("PaymentMethodId is not a valid number")
+        account_id = next(
+            (
+                account.id
+                for account in self.accounts.values()
+                if account.paymentMethods
+                and any(method.id == payment_method_id for method in account.paymentMethods)
+            ),
+            None,
+        )
+        _authorize_account(account_id, customer_id)
         return self.payment_methods.get(payment_method_id)
 
-    def get_registered_beneficiary(self, account_id: str) -> List[Beneficiary]:
+    def get_registered_beneficiary(
+        self,
+        account_id: str,
+        customer_id: str,
+    ) -> List[Beneficiary]:
         logger.info("Request to get_registered_beneficiary with account_id: %s", account_id)
-        if not account_id:
-            raise ValueError("AccountId is empty or null")
-        if not account_id.isdigit():
-            raise ValueError("AccountId is not a valid number")
+        _authorize_account(account_id, customer_id)
         return [
             Beneficiary(id="1", fullName="Mike ThePlumber", bankCode="123456789", bankName="Intesa Sanpaolo"),
             Beneficiary(id="2", fullName="Jane TheElectrician", bankCode="987654321", bankName="UBS"),
@@ -90,9 +108,10 @@ class UserService:
         self.accounts["bob.user@contoso.com"] = Account(id="1010", userName="bob.user@contoso.com", accountHolderFullName="Bob User", currency="EUR", activationDate="2022-01-01", balance="10000", paymentMethods=None)
         self.accounts["charlie.user@contoso.com"] = Account(id="1020", userName="charlie.user@contoso.com", accountHolderFullName="Charlie User", currency="EUR", activationDate="2022-01-01", balance="3000", paymentMethods=None)
 
-    def get_accounts_by_user_name(self, user_name: str) -> List[Account]:
+    def get_accounts_by_user_name(self, user_name: str, customer_id: str) -> List[Account]:
         # Return list with account if found, otherwise an empty list
         acc = self.accounts.get(user_name)
+        _authorize_account(acc.id if acc else None, customer_id)
         return [acc] if acc is not None else []
 
 
@@ -130,19 +149,19 @@ class CardService:
         return card
 
     # public surface
-    def get_credit_cards(self, account_id: str) -> List[Card]:
+    def get_credit_cards(self, account_id: str, customer_id: str) -> List[Card]:
         logger.info("Request to get_credit_cards with account_id: %s", account_id)
-        self._validate_account_id(account_id)
+        _authorize_account(account_id, customer_id)
         return self.cards_by_account.get(account_id, [])
 
-    def get_card_details(self, card_id: str) -> Optional[Card]:
+    def get_card_details(self, card_id: str, customer_id: str) -> Optional[Card]:
         logger.info("Request to get_card_details for card_id=%s", card_id)
-        if not card_id:
-            raise ValueError("CardId is empty or null")
+        self._authorize_card(card_id, customer_id)
         return self.cards.get(card_id)
 
-    def recharge_card(self, card_id: str, amount: float) -> Card:
+    def recharge_card(self, card_id: str, amount: float, customer_id: str) -> Card:
         logger.info("Request to recharge_card card_id=%s amount=%.2f", card_id, amount)
+        self._authorize_card(card_id, customer_id)
         if amount <= 0:
             raise ValueError("Amount must be greater than zero")
         card = self._require_card(card_id)
@@ -156,8 +175,9 @@ class CardService:
         card.balance = round((card.balance or 0.0) + amount, 2)
         return card
 
-    def pay_with_card(self, card_id: str, amount: float) -> Card:
+    def pay_with_card(self, card_id: str, amount: float, customer_id: str) -> Card:
         logger.info("Request to pay_with_card card_id=%s amount=%.2f", card_id, amount)
+        self._authorize_card(card_id, customer_id)
         if amount <= 0:
             raise ValueError("Amount must be greater than zero")
         card = self._require_card(card_id)
@@ -167,6 +187,28 @@ class CardService:
         card.balance = round(balance - amount, 2)
         return card
 
+    def _authorize_card(self, card_id: str, customer_id: str) -> None:
+        if not card_id:
+            raise ValueError("CardId is empty or null")
+        account_id = next(
+            (
+                owner_account_id
+                for owner_account_id, cards in self.cards_by_account.items()
+                if any(card.id == card_id for card in cards)
+            ),
+            None,
+        )
+        _authorize_account(account_id, customer_id)
+
 
 # shared singleton (cards are stored in memory here)
 card_service_singleton = CardService()
+
+
+def _authorize_account(account_id: str | None, customer_id: str) -> None:
+    if not account_id:
+        raise ValueError("AccountId is empty or null")
+    if not account_id.isdigit():
+        raise ValueError("AccountId is not a valid number")
+    if ACCOUNT_CUSTOMERS.get(account_id) != customer_id:
+        raise PermissionError("Account does not belong to the authenticated customer")

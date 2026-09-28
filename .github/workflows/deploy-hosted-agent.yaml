@@ -6,6 +6,8 @@ on:
       - main
     paths:
       - "app/backend/**"
+      - "!app/backend/**/*.md"
+      - ".github/workflows/deploy-hosted-agent.yaml"
   workflow_dispatch:
 
 permissions:
@@ -39,6 +41,7 @@ jobs:
           AZURE_AI_PROJECT_ID: ${{ vars.AZURE_AI_PROJECT_ID }}
           MODEL_DEPLOYMENT_NAME: ${{ vars.MODEL_DEPLOYMENT_NAME }}
           TOOLBOX_ENDPOINT: ${{ vars.TOOLBOX_ENDPOINT }}
+          INTERNAL_IDENTITY_SECRET: ${{ secrets.INTERNAL_IDENTITY_SECRET }}
           ENABLE_INSTRUMENTATION: ${{ vars.ENABLE_INSTRUMENTATION }}
           ENABLE_SENSITIVE_DATA: ${{ vars.ENABLE_SENSITIVE_DATA }}
           AZURE_EXPERIMENTAL_ENABLE_GENAI_TRACING: ${{ vars.AZURE_EXPERIMENTAL_ENABLE_GENAI_TRACING }}
@@ -53,10 +56,15 @@ jobs:
               exit 1
             fi
           done
+          if [ ${#INTERNAL_IDENTITY_SECRET} -lt 32 ]; then
+            echo "::error::INTERNAL_IDENTITY_SECRET must contain at least 32 characters"
+            exit 1
+          fi
           for var in AZURE_TENANT_ID AZURE_AI_PROJECT_ID FOUNDRY_PROJECT_ENDPOINT MODEL_DEPLOYMENT_NAME TOOLBOX_ENDPOINT \
                      ENABLE_INSTRUMENTATION ENABLE_SENSITIVE_DATA \
                      AZURE_EXPERIMENTAL_ENABLE_GENAI_TRACING \
-                     OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT; do
+                     OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT \
+                     INTERNAL_IDENTITY_SECRET; do
             azd -C app/backend env set "$var" "${!var}"
           done
       - name: Deploy hosted agent
