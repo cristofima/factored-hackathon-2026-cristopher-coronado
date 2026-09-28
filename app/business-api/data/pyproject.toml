@@ -1,0 +1,16 @@
+[project]
+name = "banking-assistant-data"
+version = "0.1.0"
+description = "Schema migrations and bounded data loading for the banking assistant"
+requires-python = ">=3.11"
+dependencies = [
+    "alembic>=1.14,<2",
+    "psycopg[binary]>=3.2,<4",
+    "sqlmodel>=0.0.24,<1",
+]
+
+[dependency-groups]
+dev = ["pytest>=8,<9"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
