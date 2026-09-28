@@ -40,7 +40,6 @@ jobs:
           FOUNDRY_PROJECT_ENDPOINT: ${{ vars.FOUNDRY_PROJECT_ENDPOINT }}
           AZURE_AI_PROJECT_ID: ${{ vars.AZURE_AI_PROJECT_ID }}
           MODEL_DEPLOYMENT_NAME: ${{ vars.MODEL_DEPLOYMENT_NAME }}
-          TOOLBOX_ENDPOINT: ${{ vars.TOOLBOX_ENDPOINT }}
           INTERNAL_IDENTITY_SECRET: ${{ secrets.INTERNAL_IDENTITY_SECRET }}
           ENABLE_INSTRUMENTATION: ${{ vars.ENABLE_INSTRUMENTATION }}
           ENABLE_SENSITIVE_DATA: ${{ vars.ENABLE_SENSITIVE_DATA }}
@@ -50,7 +49,7 @@ jobs:
           set -euo pipefail
           azd -C app/backend config set auth.useAzCliAuth true
           azd -C app/backend env new development --subscription "$AZURE_SUBSCRIPTION_ID" --location "$AZURE_LOCATION" --no-prompt
-          for var in AZURE_AI_PROJECT_ID FOUNDRY_PROJECT_ENDPOINT MODEL_DEPLOYMENT_NAME TOOLBOX_ENDPOINT; do
+          for var in AZURE_AI_PROJECT_ID FOUNDRY_PROJECT_ENDPOINT MODEL_DEPLOYMENT_NAME; do
             if [ -z "${!var}" ]; then
               echo "::error::Missing required GitHub environment variable: $var"
               exit 1
@@ -60,7 +59,7 @@ jobs:
             echo "::error::INTERNAL_IDENTITY_SECRET must contain at least 32 characters"
             exit 1
           fi
-          for var in AZURE_TENANT_ID AZURE_AI_PROJECT_ID FOUNDRY_PROJECT_ENDPOINT MODEL_DEPLOYMENT_NAME TOOLBOX_ENDPOINT \
+          for var in AZURE_TENANT_ID AZURE_AI_PROJECT_ID FOUNDRY_PROJECT_ENDPOINT MODEL_DEPLOYMENT_NAME \
                      ENABLE_INSTRUMENTATION ENABLE_SENSITIVE_DATA \
                      AZURE_EXPERIMENTAL_ENABLE_GENAI_TRACING \
                      OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT \

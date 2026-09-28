@@ -57,7 +57,6 @@ Required:
 - `FOUNDRY_PROJECT_ENDPOINT`
 - `AZURE_AI_PROJECT_ID`
 - `MODEL_DEPLOYMENT_NAME`
-- `TOOLBOX_ENDPOINT` (manifest compatibility only; the active workflow does not currently use Toolbox)
 
 Optional (observability and tracing behavior):
 
