@@ -1,0 +1,28 @@
+[project]
+name = "banking-assistant-responses-bff"
+version = "0.1.0"
+description = "JWT-protected proxy for the banking assistant Responses API"
+requires-python = ">=3.11"
+dependencies = [
+    "azure-identity==1.25.3",
+    "fastapi==0.141.1",
+    "httpx==0.28.1",
+    "pwdlib[argon2]>=0.2,<1",
+    "pyjwt==2.10.1",
+    "pydantic-settings>=2.0,<3",
+    "uvicorn==0.54.0",
+]
+
+[project.optional-dependencies]
+dev = ["asgi-lifespan", "pytest==9.1.1", "pytest-asyncio==1.4.0"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["bff*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"

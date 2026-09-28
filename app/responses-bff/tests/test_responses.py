@@ -1,0 +1,180 @@
+"""Tests for local and Foundry Responses upstream modes."""
+
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+import re
+from types import SimpleNamespace
+
+import httpx
+import jwt
+import pytest
+from asgi_lifespan import LifespanManager
+from httpx import ASGITransport, AsyncClient
+
+from bff.auth import AuthenticatedUser
+from bff.internal_identity import create_internal_identity
+from bff.main import create_app
+from bff.settings import Settings
+
+
+TEST_SECRET = "test-secret-key-with-at-least-32-bytes"
+
+
+class FakeCredential:
+    def __init__(self) -> None:
+        self.scopes: list[str] = []
+        self.closed = False
+
+    async def get_token(self, *scopes: str) -> SimpleNamespace:
+        self.scopes.extend(scopes)
+        return SimpleNamespace(token="foundry-access-token")
+
+    async def close(self) -> None:
+        self.closed = True
+
+
+class SseStream(httpx.AsyncByteStream):
+    async def __aiter__(self):
+        yield b"event: response.completed\ndata: {}\n\n"
+
+
+def _settings(mode: str) -> Settings:
+    return Settings(
+        responses_upstream_mode=mode,
+        responses_agent_endpoint="http://agent.test/responses",
+        jwt_secret_key=TEST_SECRET,
+        internal_identity_secret=TEST_SECRET,
+    )
+
+
+def _token(user_id: str, settings: Settings) -> str:
+    return jwt.encode(
+        {
+            "sub": user_id,
+            "customer_id": f"customer-{user_id}",
+            "email": f"{user_id}@example.com",
+            "locale": "en-US",
+            "iss": settings.jwt_issuer,
+            "aud": settings.jwt_audience,
+            "exp": datetime.now(timezone.utc) + timedelta(minutes=5),
+        },
+        TEST_SECRET,
+        algorithm="HS256",
+    )
+
+
+async def _post(app, token: str, payload: dict[str, object]) -> httpx.Response:
+    async with LifespanManager(app):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            return await client.post(
+                "/responses",
+                json=payload,
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+
+async def test_local_mode_uses_signed_internal_identity_without_azure_credential() -> None:
+    settings = _settings("local")
+    credential_factory_called = False
+
+    def fail_if_called(_: Settings) -> FakeCredential:
+        nonlocal credential_factory_called
+        credential_factory_called = True
+        raise AssertionError("Local mode must not create an Azure credential")
+
+    async def upstream(request: httpx.Request) -> httpx.Response:
+        assert request.url == httpx.URL("http://agent.test/responses")
+        assert "Authorization" not in request.headers
+        assert "x-ms-user-identity" not in request.headers
+        assert request.headers["x-agent-user-id"] == create_internal_identity(
+            user=_authenticated_user("user-a"),
+            secret=TEST_SECRET,
+        )
+        return httpx.Response(
+            200,
+            headers={"Content-Type": "text/event-stream"},
+            stream=SseStream(),
+        )
+
+    app = create_app(
+        settings,
+        transport=httpx.MockTransport(upstream),
+        credential_factory=fail_if_called,
+    )
+    response = await _post(app, _token("user-a", settings), {"input": "Accounts", "stream": True})
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert re.fullmatch(r"[A-Za-z0-9_-]{1,128}", response.headers["x-conversation-id"])
+    assert response.text == "event: response.completed\ndata: {}\n\n"
+    assert credential_factory_called is False
+
+
+async def test_foundry_mode_uses_managed_credential_and_delegated_identity() -> None:
+    settings = _settings("foundry")
+    credential = FakeCredential()
+
+    async def upstream(request: httpx.Request) -> httpx.Response:
+        assert request.headers["Authorization"] == "Bearer foundry-access-token"
+        assert request.headers["x-ms-user-identity"] == create_internal_identity(
+            user=_authenticated_user("user-a"),
+            secret=TEST_SECRET,
+        )
+        assert "user_isolation_key" not in request.headers
+        assert "chat_isolation_key" not in request.headers
+        return httpx.Response(200, json={"status": "completed"})
+
+    app = create_app(
+        settings,
+        transport=httpx.MockTransport(upstream),
+        credential_factory=lambda _: credential,
+    )
+    response = await _post(app, _token("user-a", settings), {"input": "Accounts"})
+
+    assert response.status_code == 200
+    assert credential.scopes == ["https://ai.azure.com/.default"]
+    assert credential.closed is True
+
+
+def _authenticated_user(user_id: str) -> AuthenticatedUser:
+    return AuthenticatedUser(
+        sub=user_id,
+        customer_id=f"customer-{user_id}",
+        email=f"{user_id}@example.com",
+        locale="en-US",
+    )
+
+
+async def test_conversation_cannot_cross_users() -> None:
+    settings = _settings("local")
+
+    async def upstream(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"status": "completed"})
+
+    app = create_app(settings, transport=httpx.MockTransport(upstream))
+    first = await _post(app, _token("user-a", settings), {"input": "First turn"})
+    second = await _post(
+        app,
+        _token("user-b", settings),
+        {"input": "Second turn", "conversation": first.headers["x-conversation-id"]},
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 403
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"input": "Continue", "previous_response_id": "caresp_foreign"},
+        {"input": "Continue", "conversation": 123},
+    ],
+)
+async def test_invalid_continuation_is_rejected(payload: dict[str, object]) -> None:
+    settings = _settings("local")
+    app = create_app(settings)
+
+    response = await _post(app, _token("user-a", settings), payload)
+
+    assert response.status_code == 400

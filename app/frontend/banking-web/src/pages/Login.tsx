@@ -1,104 +1,116 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { FormEvent, useState } from "react";
+import { LoaderCircle, LockKeyhole } from "lucide-react";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/context/AuthContext";
 
 const Login = () => {
-  const { login, isAuthenticated, loading } = useAuth();
-  const [email, setEmail] = useState("michael.carter@enterprisebank.com");
-  const [password, setPassword] = useState("enterprise123");
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { user, login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const { toast } = useToast();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  const from = useMemo(() => {
-    const state = location.state as { from?: { pathname: string } } | null;
-    return state?.from?.pathname ?? "/";
-  }, [location.state]);
-
-  useEffect(() => {
-    if (isAuthenticated && !loading) {
-      navigate(from, { replace: true });
-    }
-  }, [from, isAuthenticated, loading, navigate]);
+  if (user) {
+    return <Navigate to="/" replace />;
+  }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
     setSubmitting(true);
-
     try {
-      await login({ email, password });
-      toast({
-        title: "Sign in successful",
-        description: "Welcome back to your enterprise dashboard.",
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unable to sign in.";
-      setError(message);
+      await login(email, password);
+      const destination = (
+        location.state as { from?: { pathname?: string } } | null
+      )?.from?.pathname;
+      navigate(destination || "/", { replace: true });
+    } catch (loginError) {
+      setError(
+        loginError instanceof Error ? loginError.message : "Sign in failed",
+      );
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800 flex items-center justify-center px-4">
-      <div className="w-full max-w-md rounded-3xl bg-slate-950/80 border border-slate-800 p-10 shadow-2xl backdrop-blur">
+    <div className="min-h-screen bg-slate-900 flex items-center justify-center px-4">
+      <div className="w-full max-w-md rounded-lg bg-slate-950/80 border border-slate-800 p-10 shadow-2xl">
         <div className="space-y-3 text-center">
-          <p className="text-lg font-semibold text-slate-200">Enterprise Banking</p>
-          <h1 className="text-3xl font-bold text-white">Sign in to continue</h1>
+          <LockKeyhole
+            className="mx-auto size-8 text-sky-400"
+            aria-hidden="true"
+          />
+          <p className="text-lg font-semibold text-slate-200">
+            Enterprise Banking
+          </p>
+          <h1 className="text-2xl font-bold text-white">Sign in</h1>
           <p className="text-sm text-slate-400">
-            The banking assistant will only unlock once we verify who you are.
+            Use your banking assistant credentials to continue.
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="mt-8 space-y-6">
+        <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
           <div className="space-y-2">
-            <Label htmlFor="email" className="text-sm text-slate-300">
-              Work email
+            <Label htmlFor="email" className="text-slate-200">
+              Email
             </Label>
             <Input
               id="email"
               type="email"
+              autoComplete="username"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              placeholder="you@enterprisebank.com"
               required
+              className="border-slate-700 bg-slate-900 text-white"
             />
           </div>
-
           <div className="space-y-2">
-            <Label htmlFor="password" className="text-sm text-slate-300">
+            <Label htmlFor="password" className="text-slate-200">
               Password
             </Label>
             <Input
               id="password"
               type="password"
+              autoComplete="current-password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              placeholder="Enter your password"
               required
+              className="border-slate-700 bg-slate-900 text-white"
             />
           </div>
-
           {error && (
-            <p className="text-sm text-red-400" role="alert" aria-live="assertive">
+            <p role="alert" className="text-sm text-red-400">
               {error}
             </p>
           )}
-
           <Button type="submit" className="w-full" disabled={submitting}>
-            {submitting ? "Signing in…" : "Start banking"}
+            {submitting && (
+              <LoaderCircle
+                className="mr-2 size-4 animate-spin"
+                aria-hidden="true"
+              />
+            )}
+            {submitting ? "Signing in" : "Sign in"}
           </Button>
         </form>
 
         <div className="mt-6 text-center text-sm text-slate-400">
-          <p>Need help? Contact <a href="mailto:support@bankwise.com" className="text-sky-400 underline">support</a>.</p>
+          <p>
+            Need help? Contact{" "}
+            <a
+              href="mailto:support@bankwise.com"
+              className="text-sky-400 underline"
+            >
+              support
+            </a>
+            .
+          </p>
         </div>
       </div>
     </div>
