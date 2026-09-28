@@ -4,47 +4,15 @@ import { CreditCardTransaction } from "@/models/CreditCardTransaction";
 import { Payment } from "@/models/Payments";
 import { UserProfile } from "@/models/UserProfile";
 
-const MOCK_USER_PROFILE: UserProfile = {
-  id: "user-12",
-  name: "Michael Carter",
-  email: "michael.carter@enterprisebank.com",
-  accountId: "1010",
-  avatar: "/avatar.svg",
-  role: "Head of Treasury",
-  team: "Enterprise Finance"
-};
-
-const MOCK_SESSION_TOKEN = "mock-session-token-2025";
-
-const withDelay = <T>(response: T, delay = 200) =>
-  new Promise<T>((resolve) => setTimeout(() => resolve(response), delay));
-
 const LOCAL_API_URL = import.meta.env.VITE_BACKEND_URI || "/api";
 const ACCOUNT_API_URL = import.meta.env.VITE_ACCOUNT_API_URL || LOCAL_API_URL;
 const TRANSACTION_API_URL = import.meta.env.VITE_TRANSACTION_API_URL || LOCAL_API_URL;
 
 export class BFFClient {
-  private sessionToken: string | null = null;
-
-  async login(credentials: { email: string; password: string }) {
-    if (!credentials.email || !credentials.password) {
-      throw new Error("Please provide both email and password.");
-    }
-
-    await withDelay(null);
-    this.sessionToken = MOCK_SESSION_TOKEN;
-
-    return {
-      token: MOCK_SESSION_TOKEN,
-      userId: MOCK_USER_PROFILE.id,
-      expiresIn: 3600
-    };
-  }
-
   async getUserProfile(): Promise<UserProfile> {
-    //call user profile with session token
-
-    return withDelay(MOCK_USER_PROFILE);
+    throw new Error(
+      "User profiles are unavailable until PostgreSQL-backed authentication is enabled.",
+    );
   }
 
   async getPayments(): Promise<Payment[]> {

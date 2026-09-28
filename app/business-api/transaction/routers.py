@@ -1,7 +1,8 @@
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 import logging
-from typing import Optional
+from typing import Annotated, Optional
 
+from internal_identity import get_http_customer_id
 from models import Transaction
 from services import transaction_service_singleton as service
 
@@ -11,16 +12,30 @@ router = APIRouter()
 
 
 @router.get("/{account_id}")
-def get_transactions(account_id: str, payment_type: Optional[str] = Query(None), transaction_type: Optional[str] = Query(None), card_id: Optional[str] = Query(None)):
+def get_transactions(
+    account_id: str,
+    customer_id: Annotated[str, Depends(get_http_customer_id)],
+    payment_type: Optional[str] = Query(None),
+    transaction_type: Optional[str] = Query(None),
+    card_id: Optional[str] = Query(None),
+):
     """Get transactions for an account. Optionally filter by payment type.
     """
     logger.info("Received request to get transactions for accountid[%s], payment_type=%s, transaction_type=%s, card_id=%s", account_id, payment_type, transaction_type, card_id)
     try:
         if payment_type or transaction_type:
-            transactions = service.get_transactions_by_type(account_id,payment_type,transaction_type,card_id)
+            transactions = service.get_transactions_by_type(
+                account_id,
+                customer_id,
+                payment_type,
+                transaction_type,
+                card_id,
+            )
         else:
-            transactions = service.get_transactions(account_id)
+            transactions = service.get_transactions(account_id, customer_id)
         return transactions
+    except PermissionError as error:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(error)) from error
     except ValueError as ve:
         logger.exception("Validation error while getting transactions")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
@@ -30,12 +45,18 @@ def get_transactions(account_id: str, payment_type: Optional[str] = Query(None),
 
 
 @router.post("/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
-def notify_transaction(account_id: str, transaction: Transaction):
+def notify_transaction(
+    account_id: str,
+    transaction: Transaction,
+    customer_id: Annotated[str, Depends(get_http_customer_id)],
+):
     """Notify a new transaction for an account.
     """
     logger.info("Received request to notify transaction for accountid[%s]. %s", account_id, transaction.json())
     try:
-        service.notify_transaction(account_id, transaction)
+        service.notify_transaction(account_id, transaction, customer_id)
+    except PermissionError as error:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(error)) from error
     except ValueError as ve:
         logger.exception("Validation error while notifying transaction")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))

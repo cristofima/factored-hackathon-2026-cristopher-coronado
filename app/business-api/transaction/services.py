@@ -5,6 +5,12 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
+ACCOUNT_CUSTOMERS = {
+    "1000": "customer-alice",
+    "1010": "local-customer",
+    "1020": "customer-charlie",
+}
+
 
 class TransactionService:
     def __init__(self):
@@ -292,12 +298,14 @@ class TransactionService:
             ),
         ]
 
-    def get_transactions_by_recipient_name(self, account_id: str, name: str) -> List[Transaction]:
+    def get_transactions_by_recipient_name(
+        self,
+        account_id: str,
+        name: str,
+        customer_id: str,
+    ) -> List[Transaction]:
         logger.info("get_transactions_by_recipient_name called with account_id=%s, name=%s", account_id, name)
-        if not account_id:
-            raise ValueError("AccountId is empty or null")
-        if not account_id.isdigit():
-            raise ValueError("AccountId is not a valid number")
+        _authorize_account(account_id, customer_id)
         transactions = self.all_transactions.get(account_id)
         if transactions is None:
             return []
@@ -305,12 +313,9 @@ class TransactionService:
         filtered = [t for t in transactions if t.recipientName and name_lower in t.recipientName.lower()]
         return sorted(filtered, key=lambda t: t.timestamp, reverse=True)
 
-    def get_transactions(self, account_id: str) -> List[Transaction]:
+    def get_transactions(self, account_id: str, customer_id: str) -> List[Transaction]:
         logger.info("get_last_transactions called with account_id=%s", account_id)
-        if not account_id:
-            raise ValueError("AccountId is empty or null")
-        if not account_id.isdigit():
-            raise ValueError("AccountId is not a valid number")
+        _authorize_account(account_id, customer_id)
         transactions = self.last_transactions.get(account_id)
         if not transactions:
             return []
@@ -319,6 +324,7 @@ class TransactionService:
     def get_transactions_by_type(
         self,
         account_id: str ,
+        customer_id: str,
         payment_type: Optional[str] = None,
         transaction_type: Optional[str] = None,
         card_id: Optional[str] = None,
@@ -330,10 +336,7 @@ class TransactionService:
             transaction_type,
             card_id,
         )
-        if not account_id:
-            raise ValueError("AccountId is empty or null")
-        if not account_id.isdigit():
-            raise ValueError("AccountId is not a valid number")
+        _authorize_account(account_id, customer_id)
         transactions = self.all_transactions.get(account_id)
         if transactions is None:
             return []
@@ -346,12 +349,14 @@ class TransactionService:
             filtered = [t for t in filtered if t.cardId == card_id]
         return sorted(filtered, key=lambda t: t.timestamp, reverse=True)
 
-    def notify_transaction(self, account_id: str, transaction: Transaction) -> None:
+    def notify_transaction(
+        self,
+        account_id: str,
+        transaction: Transaction,
+        customer_id: str,
+    ) -> None:
         logger.info("notify_transaction called with account_id=%s, transaction=%s", account_id, transaction)
-        if not account_id:
-            raise ValueError("AccountId is empty or null")
-        if not account_id.isdigit():
-            raise ValueError("AccountId is not a valid number")
+        _authorize_account(account_id, customer_id)
         all_list = self.all_transactions.get(account_id)
         if all_list is None:
             raise RuntimeError(f"Cannot find all transactions for account id: {account_id}")
@@ -364,3 +369,12 @@ class TransactionService:
 
 # create a single service instance (in-memory sample data lives here)
 transaction_service_singleton = TransactionService()
+
+
+def _authorize_account(account_id: str, customer_id: str) -> None:
+    if not account_id:
+        raise ValueError("AccountId is empty or null")
+    if not account_id.isdigit():
+        raise ValueError("AccountId is not a valid number")
+    if ACCOUNT_CUSTOMERS.get(account_id) != customer_id:
+        raise PermissionError("Account does not belong to the authenticated customer")

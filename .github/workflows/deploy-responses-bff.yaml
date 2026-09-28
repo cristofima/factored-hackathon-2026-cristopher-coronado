@@ -1,0 +1,68 @@
+name: Deploy Responses BFF
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "app/responses-bff/**"
+      - ".github/workflows/deploy-responses-bff.yaml"
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: Development
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Azure/setup-azd@v2
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Configure azd environment
+        env:
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+        run: |
+          azd config set auth.useAzCliAuth true
+          azd env new development --subscription "$AZURE_SUBSCRIPTION_ID" --location "$AZURE_LOCATION" --no-prompt
+          azd env set AZURE_RESOURCE_GROUP "$AZURE_RESOURCE_GROUP"
+      - name: Configure JWT secret
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AUTH_USERS: ${{ secrets.RESPONSES_BFF_AUTH_USERS }}
+          JWT_SECRET_KEY: ${{ secrets.RESPONSES_BFF_JWT_SECRET }}
+          INTERNAL_IDENTITY_SECRET: ${{ secrets.INTERNAL_IDENTITY_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ ${#JWT_SECRET_KEY} -lt 32 ]; then
+            echo "::error::RESPONSES_BFF_JWT_SECRET must contain at least 32 characters"
+            exit 1
+          fi
+          if [ ${#INTERNAL_IDENTITY_SECRET} -lt 32 ]; then
+            echo "::error::INTERNAL_IDENTITY_SECRET must contain at least 32 characters"
+            exit 1
+          fi
+          if ! jq -e 'type == "array" and length > 0 and all(.[]; (.id | type == "string") and (.customer_id | type == "string") and (.email | type == "string") and (.password_hash | startswith("$argon2")) and (.locale | type == "string"))' <<< "$AUTH_USERS" > /dev/null; then
+            echo "::error::RESPONSES_BFF_AUTH_USERS must be a non-empty JSON array with valid Argon2 user records"
+            exit 1
+          fi
+          BFF_APP_NAME="$(az resource list --resource-group "$AZURE_RESOURCE_GROUP" --resource-type Microsoft.Web/sites --tag azd-service-name=responses-bff --query '[0].name' --output tsv)"
+          if [ -z "$BFF_APP_NAME" ]; then
+            echo "::error::Responses BFF App Service was not found in $AZURE_RESOURCE_GROUP"
+            exit 1
+          fi
+          az webapp config appsettings set \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$BFF_APP_NAME" \
+            --settings "JWT_SECRET_KEY=$JWT_SECRET_KEY" "AUTH_USERS=$AUTH_USERS" "INTERNAL_IDENTITY_SECRET=$INTERNAL_IDENTITY_SECRET" \
+            --output none
+      - name: Deploy Responses BFF
+        run: azd deploy responses-bff --no-prompt

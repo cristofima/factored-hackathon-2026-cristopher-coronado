@@ -1,8 +1,8 @@
 import { ShellHeader, type ShellHeaderConfig } from "./ShellHeader";
 import { StreamViewport } from "./StreamViewport";
 import { HistoryView } from "./HistoryView";
-import { Composer } from "./Composer";
-import { useChat } from "./ChatProvider";
+import { Composer } from "./TextComposer";
+import { useChat } from "./ResponsesChatProvider";
 import { cn } from "@/common/utils";
 
 interface ChatShellProps {
@@ -10,7 +10,13 @@ interface ChatShellProps {
 }
 
 export function ChatShell({ headerConfig }: ChatShellProps) {
-  const { historyOpen, attachmentImageSize, maxVisibleAttachments, composerConfig, shellContainerConfig } = useChat();
+  const {
+    historyOpen,
+    attachmentImageSize,
+    maxVisibleAttachments,
+    composerConfig,
+    shellContainerConfig,
+  } = useChat();
 
   // Default container styling (standalone mode)
   const {
@@ -24,13 +30,15 @@ export function ChatShell({ headerConfig }: ChatShellProps) {
   } = shellContainerConfig ?? {};
 
   return (
-    <div className={cn(
-      "flex h-full w-full flex-col overflow-hidden",
-      showBorder && `border ${borderClass}`,
-      showRoundedCorners && roundedClass,
-      showShadow && shadowClass,
-      backgroundColor
-    )}>
+    <div
+      className={cn(
+        "flex h-full w-full flex-col overflow-hidden",
+        showBorder && `border ${borderClass}`,
+        showRoundedCorners && roundedClass,
+        showShadow && shadowClass,
+        backgroundColor,
+      )}
+    >
       <ShellHeader config={headerConfig} />
       <div className="min-h-0 flex-1">
         {historyOpen ? (
@@ -38,7 +46,7 @@ export function ChatShell({ headerConfig }: ChatShellProps) {
         ) : (
           <div className="flex h-full flex-col">
             <div className="min-h-0 flex-1">
-              <StreamViewport 
+              <StreamViewport
                 attachmentImageSize={attachmentImageSize}
                 maxVisibleAttachments={maxVisibleAttachments}
               />

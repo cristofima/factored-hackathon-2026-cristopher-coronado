@@ -1,3 +1,5 @@
+import type { ActionConfig } from "./widgets/types";
+
 // ============================================================================
 // Thread & Status
 // ============================================================================
@@ -97,13 +99,13 @@ export interface AssistantMessageContent {
 export type UserMessageContent =
   | { type: "input_text"; text: string }
   | {
-      type: "input_tag";
-      id: string;
-      text: string;
-      data: Record<string, unknown>;
-      group: string | null;
-      interactive: boolean;
-    };
+    type: "input_tag";
+    id: string;
+    text: string;
+    data: Record<string, unknown>;
+    group: string | null;
+    interactive: boolean;
+  };
 
 export interface Annotation {
   type: "annotation";
@@ -369,7 +371,7 @@ export interface ChatContextValue {
   sendMessage: (text: string, attachments?: AttachmentMeta[]) => void;
   cancelStreaming: () => void;
   retryLastMessage: () => void;
-  sendWidgetAction: (threadId: string, itemId: string, action: any) => void;
+  sendWidgetAction: (threadId: string, itemId: string, action: ActionConfig) => void;
   createThread: (initialMessage?: string, options?: { title?: string }) => void;
   selectThread: (threadId: string) => void;
   toggleHistory: () => void;

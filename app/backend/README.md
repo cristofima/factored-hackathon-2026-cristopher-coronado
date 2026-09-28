@@ -1,124 +1,79 @@
-# Banking Assistant Copilot Backend
+# Banking Assistant Responses Agent
 
-A FastAPI-based multi-agent orchestration service that powers the banking assistant frontend. This microservice uses Azure OpenAI and the Agent Framework to provide intelligent banking support through specialized agents.
+This project hosts the Account and Transaction handoff workflow through the Foundry Responses protocol. It is a separate deployable from the browser-facing BFF under [`app/responses-bff`](../responses-bff).
 
-## 🏗️ Architecture
+## Runtime Flow
 
-This backend implements a **supervisor agent pattern** where:
+```mermaid
+flowchart LR
+    Browser --> BFF[Responses BFF]
+    BFF --> Agent[Responses agent]
+    Agent --> Account[Account MCP]
+    Agent --> Transaction[Transaction MCP]
+```
 
-- **Supervisor Agent**: Routes user requests to specialized domain agents
-- **Account Agent**: Handles account balance, payment methods, and beneficiaries
-- **Transaction Agent**: Manages banking movements and payment history
-- **Payment Agent**: Processes payment requests using bill details supplied by the user
+The browser never sends Azure credentials to Foundry. The BFF validates the application JWT and signs the verified `sub` and `customer_id` for this agent. The agent verifies that envelope and creates a fresh 60-second bearer for Account and Transaction MCP calls. In hosted mode, the BFF obtains its Azure token server-side before forwarding the request.
 
-## 🚀 Quick Start
+## Local Setup
 
-### Prerequisites
+Requirements:
 
-- Python 3.11 or higher and uv
-- Access to an Azure AI Services resource with an Azure OpenAI chat deployment
-- Azure CLI signed in with an identity assigned `Cognitive Services OpenAI User` on that resource for local development
+- Python 3.11 or newer
+- `uv`
+- Azure OpenAI access configured in `.env.dev`
+- Account MCP on port `8070`
+- Transaction MCP on port `8071`
 
-### Backend Setup
-
-#### 1. Navigate to the backend directory
+Install dependencies and run the local Responses host:
 
 ```powershell
 cd app/backend
-```
-
-#### 2. Install dependencies using uv
-
-```powershell
 uv sync --extra dev
+$env:PROFILE="dev"
+uv run python -m app.main_responses_host
 ```
 
-#### 3. Configure environment variables
+The agent listens on port `8088`. Browser traffic should go through the BFF on port `8080`, not directly to this process. The root `DEV - Full Stack Ordered` VS Code launch starts the supported local topology.
 
-Set `PROFILE=dev` before starting the backend. Its settings load `.env` and then `.env.dev`; use the latter for your local Azure OpenAI connection details. The endpoint must be the resource root URL, not a `/chat/completions` or `/openai/v1` route:
+## Configuration
+
+This directory is a separate `azd` project root because it has its own `azure.yaml` at `app/backend/azure.yaml`. The repository root `azure.yaml` (App Service stack) and this backend `azure.yaml` (hosted agent stack) do not share `azd` environment state automatically.
+
+When you run commands with `--cwd app/backend` (or directly from this folder), `azd` may prompt for:
+
+- A backend environment name
+- Azure subscription
+- Azure region/location
+
+Using the same environment name as root is fine for consistency, but state is still independent per project root.
+
+Configure the Foundry project endpoint and the name of a model deployment in that project:
 
 ```env
-# Azure OpenAI Settings
-AZURE_OPENAI_ENDPOINT=https://your-resource.services.ai.azure.com/
-AZURE_OPENAI_CHAT_DEPLOYMENT_NAME=your-chat-deployment
-
-# Azure Blob Storage for ChatKit attachments
-AZURE_STORAGE_ACCOUNT=your-storage-account
-AZURE_STORAGE_CONTAINER=content
-
-# Local MCP servers
-ACCOUNT_MCP_URL=http://localhost:8070
-TRANSACTION_MCP_URL=http://localhost:8071
-PAYMENT_MCP_URL=http://localhost:8072
+FOUNDRY_PROJECT_ENDPOINT=https://your-resource.services.ai.azure.com/api/projects/your-project
+AZURE_AI_PROJECT_ID=/subscriptions/<subscription-id>/resourceGroups/<resource-group>/providers/Microsoft.CognitiveServices/accounts/<account-name>/projects/<project-name>
+MODEL_DEPLOYMENT_NAME=gpt-4.1-mini
+ACCOUNT_MCP_URL=http://localhost:8070/mcp
+TRANSACTION_MCP_URL=http://localhost:8071/mcp
+INTERNAL_IDENTITY_SECRET=<shared-secret-at-least-32-characters>
 ```
 
-Sign in using `az login` in the same Azure CLI context used to start the backend. The VS Code Azure sign-in is independent of this identity. The backend obtains a Cognitive Services bearer token via `AzureCliCredential`; it does not use the signed-in VS Code account or an OpenAI API key in this profile.
+For hosted provisioning with `azd`, make sure the backend environment includes at least:
 
-#### 4. Run the development server
+- `FOUNDRY_PROJECT_ENDPOINT`
+- `AZURE_AI_PROJECT_ID`
+- `MODEL_DEPLOYMENT_NAME`
+- `ACCOUNT_MCP_URL`
+- `TRANSACTION_MCP_URL`
 
-**Option A: Using uvicorn directly**
+Local execution reads both `.env` and `.env.dev` when `PROFILE=dev` and uses the developer's Azure credential. Keep common MCP URLs in `.env` and environment-specific Foundry values in `.env.dev` so later files do not silently replace shared values.
+
+Hosted deployment is owned by [`azure.yaml`](azure.yaml) and uses managed identity. Foundry injects `FOUNDRY_PROJECT_ENDPOINT` into the hosted container; `MODEL_DEPLOYMENT_NAME=gpt-4.1-mini` is an application-defined declaration in the manifest. Neither manifest provisions the model deployment, and hosted deployment has not been verified by the local test suite.
+
+## Validation
 
 ```powershell
-$env:PROFILE="dev"
-uv run uvicorn app.main_chatkit_server:app --port 8080
+uv run pytest tests/test_hosted_workflow.py tests/test_settings.py -q
 ```
 
-The ChatKit endpoint is `http://localhost:8080/chatkit`; the root path returns 404 by design. Start the local MCP services before submitting a chat request. The root [README](../../README.md#local-development-vs-code) also describes the VS Code `F5` launch, which opens the frontend on port 5170.
-
-### Verified local inquiry
-
-On 2026-09-26, a browser `threads.create` request returned a transaction-history answer via `TransactionHistoryAgent`. Azure OpenAI chat completions returned HTTP 200, and `getAccountsByUserName` and `getTransactionsByRecipientName` both succeeded against local MCP services. An HTTP 200 on `/chatkit` alone only confirms that the SSE connection started; verify the assistant's final answer and tool events as well. This does not verify payment submission, end-user authorization, or hosted deployment.
-
----
-
-## 🎨 Frontend Setup
-
-### 1. Navigate to the frontend directory
-
-```powershell
-cd app/frontend/banking-web
-```
-
-### 2. Install dependencies
-
-```powershell
-npm install
-```
-
-### 3. Start the development server
-
-```powershell
-npm run dev
-```
-
-Open the URL printed by Vite (normally `http://localhost:5170/`).
-
----
-
-## 📁 Project Structure
-
-```
-app/backend/
-├── app/
-│   ├── main_chatkit_server.py  # FastAPI application entry point
-│   ├── routers/chatkit/        # ChatKit and attachment endpoints
-│   ├── agents/
-│   │   ├── azure_chat/
-│   │   │   ├── handoff_orchestrator.py  # Main routing agent
-│   │   │   ├── account_agent.py         # Account management
-│   │   │   ├── transaction_agent.py     # Transaction history
-│   │   │   └── payment_agent.py         # Payment processing
-│   ├── config/
-│   │   └── container_azure_chat.py      # DI container
-│   └── helpers/              # Azure service helpers
-├── pyproject.toml              # Project dependencies
-└── .env.dev                    # Optional local environment configuration
-```
-
----
-
-## 🌊 Streaming Support
-
-The backend streams ChatKit SSE events for progress, agent handoffs, tool calls, and assistant messages through `/chatkit`.
-
----
+The focused tests verify startup without eager MCP connections, the Foundry model configuration, and termination after an ordinary completed assistant response. The browser path has also been exercised locally through the BFF with a legitimate application JWT. Mock session tokens are intentionally unsupported; hosted delegated-identity transport remains pending validation.

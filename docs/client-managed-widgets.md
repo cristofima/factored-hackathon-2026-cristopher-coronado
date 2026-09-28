@@ -1,3 +1,6 @@
+> [!WARNING]
+> Historical ChatKit design reference only. See [technical-architecture.md](technical-architecture.md) for the active Responses architecture.
+
 # Client-Managed Widget System
 
 ## Overview
@@ -16,6 +19,7 @@ The server can send widgets in two modes:
 Server-managed widgets use a declarative DSL to define the UI structure. The server sends a complete widget definition that the client renders dynamically.
 
 **Structure:**
+
 ```python
 {
     "type": "widget",
@@ -41,6 +45,7 @@ Server-managed widgets use a declarative DSL to define the UI structure. The ser
 ```
 
 **Key characteristics:**
+
 - Item type is `"widget"`
 - Uses `widget` field containing the root component definition
 - Widget structure defined entirely by the server
@@ -54,6 +59,7 @@ See `widgets-rendering.md` for complete DSL documentation.
 Client-managed widgets are pre-built React components registered on the client. The server only sends a component name and arguments.
 
 **Structure:**
+
 ```python
 {
     "type": "client_widget",  # Indicates client-managed widget
@@ -68,6 +74,7 @@ Client-managed widgets are pre-built React components registered on the client. 
 ```
 
 **Key characteristics:**
+
 - Item type is `"client_widget"` (not `"widget"`)
 - Uses `name` to specify the registered React component
 - Uses `args` to pass data to the component
@@ -77,10 +84,12 @@ Client-managed widgets are pre-built React components registered on the client. 
 ### Field Reference
 
 **Server-Managed (DSL):**
+
 - `type`: Always `"widget"`
 - `widget`: Root widget component definition (required)
 
 **Client-Managed (React):**
+
 - `type`: Always `"client_widget"`
 - `name`: String identifier for the registered React component (required)
 - `args`: Dictionary of arguments passed to the component (optional)
@@ -96,29 +105,32 @@ The system includes these pre-registered widgets:
 Displays a tool execution approval UI with approve/reject buttons.
 
 **Required args:**
+
 - `tool_name`: Name of the tool to approve
 - `tool_args`: Arguments for the tool
 - `call_id`: Tool call ID
 - `request_id`: Request ID
 
 **Optional args:**
+
 - `title`: Custom title (default: "Approval Required")
 - `description`: Custom description
 
 **Example server response:**
+
 ```json
 {
-    "type": "client_widget",
-    "name": "tool-approval-request",
-    "args": {
-        "tool_name": "processPayment",
-        "tool_args": {
-            "account_id": "1010",
-            "amount": 103.25
-        },
-        "call_id": "call_abc123",
-        "request_id": "req_xyz789"
-    }
+  "type": "client_widget",
+  "name": "tool-approval-request",
+  "args": {
+    "tool_name": "processPayment",
+    "tool_args": {
+      "account_id": "1010",
+      "amount": 103.25
+    },
+    "call_id": "call_abc123",
+    "request_id": "req_xyz789"
+  }
 }
 ```
 
@@ -227,6 +239,7 @@ export function MyWidget({ args, itemId }: ClientWidgetProps) {
 ```
 
 **Action format:**
+
 ```typescript
 sendWidgetAction(itemId, {
   type: string,              // Action type identifier
@@ -264,7 +277,7 @@ export function MyWidget({ args, itemId }: ClientWidgetProps) {
       // Called when an error occurs
       setIsLoading(false);
       setError(error.message);
-    }
+    },
   });
 
   // ... rest of component
@@ -272,6 +285,7 @@ export function MyWidget({ args, itemId }: ClientWidgetProps) {
 ```
 
 **Callback types:**
+
 ```typescript
 interface WidgetActionCallbacks {
   onThreadStarted?: () => void;
@@ -281,6 +295,7 @@ interface WidgetActionCallbacks {
 ```
 
 **Common use cases for callbacks:**
+
 - **Disable buttons after submission** to prevent double-submit
 - **Show/hide loading indicators** during action processing
 - **Display error messages** when actions fail
@@ -288,6 +303,7 @@ interface WidgetActionCallbacks {
 - **Track action state** for analytics or debugging
 
 **Example: Preventing double-submit:**
+
 ```typescript
 export function ApprovalWidget({ args, itemId }: ClientWidgetProps) {
   const [isDisabled, setIsDisabled] = useState(false);
@@ -319,8 +335,8 @@ export function ApprovalWidget({ args, itemId }: ClientWidgetProps) {
   };
 
   return (
-    <Button 
-      onClick={handleApprove} 
+    <Button
+      onClick={handleApprove}
       disabled={isDisabled || loadingButton !== null}
       loading={loadingButton === 'approve'}
     >
@@ -336,8 +352,12 @@ export function ApprovalWidget({ args, itemId }: ClientWidgetProps) {
 
 The system provides helper functions in `widgetUtils.ts`:
 
-```typescript
-import { useSendWidgetAction, formatAsPython, createPythonCodeBlock } from "@/components/widgets";
+````typescript
+import {
+  useSendWidgetAction,
+  formatAsPython,
+  createPythonCodeBlock,
+} from "@/components/widgets";
 
 // Hook to send actions (use inside component)
 const sendWidgetAction = useSendWidgetAction();
@@ -353,7 +373,7 @@ const pythonStr = formatAsPython({ key: "value" });
 // Create a Python code block
 const codeBlock = createPythonCodeBlock("print('hello')");
 // Result: "```py\nprint('hello')\n```"
-```
+````
 
 **Additional Data Loading:**
 
@@ -365,8 +385,8 @@ export function MyDataWidget({ args }: ClientWidgetProps) {
 
   useEffect(() => {
     // Your custom API call
-    fetch('/api/my-data')
-      .then(res => res.json())
+    fetch("/api/my-data")
+      .then((res) => res.json())
       .then(setData);
   }, []);
 
@@ -386,6 +406,7 @@ export function MyDataWidget({ args }: ClientWidgetProps) {
 ## When to Use Each Mode
 
 ### Use Server-Managed (DSL)
+
 - **Simple, declarative UIs**: Forms, cards, lists, text displays
 - **Dynamic layouts**: Widget structure determined at runtime based on data
 - **Rapid prototyping**: Quick iteration without client code changes
@@ -394,12 +415,14 @@ export function MyDataWidget({ args }: ClientWidgetProps) {
 - **Backend control**: Server decides the complete UI structure
 
 **Examples:**
+
 - Approval requests with dynamic tool information
 - Data cards with varying field sets
 - Forms generated from schema
 - Status displays with conditional elements
 
 ### Use Client-Managed (React)
+
 - **Complex interactions**: Multi-step workflows, real-time updates
 - **Rich visualizations**: Charts, graphs, custom data displays
 - **Custom animations**: Transitions, loading states, micro-interactions
@@ -409,6 +432,7 @@ export function MyDataWidget({ args }: ClientWidgetProps) {
 - **Custom styling**: Pixel-perfect designs or brand-specific UIs
 
 **Examples:**
+
 - Interactive data dashboards
 - Multi-step approval workflows
 - Custom form builders
@@ -419,6 +443,7 @@ export function MyDataWidget({ args }: ClientWidgetProps) {
 ### Server-Managed (DSL) Example
 
 **Server sends complete UI definition:**
+
 ```python
 {
     "type": "widget",
@@ -480,12 +505,14 @@ export function MyDataWidget({ args }: ClientWidgetProps) {
 ```
 
 **Pros:**
+
 - ✅ No client code changes needed
 - ✅ Server has full control over UI
 - ✅ Easy to modify without deployments
 - ✅ Consistent rendering across instances
 
 **Cons:**
+
 - ❌ Verbose JSON structure
 - ❌ Runtime parsing overhead
 - ❌ Limited to available DSL components
@@ -494,6 +521,7 @@ export function MyDataWidget({ args }: ClientWidgetProps) {
 ### Client-Managed (React) Example
 
 **Server sends component reference:**
+
 ```python
 {
     "type": "client_widget",
@@ -508,6 +536,7 @@ export function MyDataWidget({ args }: ClientWidgetProps) {
 ```
 
 **Client React component:**
+
 ```tsx
 export function ToolApprovalRequest({ args, itemId }: ClientWidgetProps) {
   const { title, description, tool_name, call_id } = args;
@@ -548,6 +577,7 @@ export function ToolApprovalRequest({ args, itemId }: ClientWidgetProps) {
 ```
 
 **Pros:**
+
 - ✅ Clean, readable React code
 - ✅ Better performance (no runtime parsing)
 - ✅ Full React ecosystem access
@@ -555,6 +585,7 @@ export function ToolApprovalRequest({ args, itemId }: ClientWidgetProps) {
 - ✅ Easy to add complex interactions
 
 **Cons:**
+
 - ❌ Requires client deployment for changes
 - ❌ Must be registered before use
 - ❌ Less flexible for dynamic UIs
