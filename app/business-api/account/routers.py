@@ -1,8 +1,10 @@
-from fastapi import APIRouter, HTTPException, status
+from typing import Annotated, List
+
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from typing import List
 import logging
 
+from internal_identity import get_http_customer_id
 from models import Card
 from services import card_service_singleton
 
@@ -24,11 +26,16 @@ def _to_runtime_http_error(err: RuntimeError) -> HTTPException:
 
 
 @router.get("/accounts/{account_id}/cards", response_model=List[Card])
-def list_credit_cards(account_id: str):
+def list_credit_cards(
+    account_id: str,
+    customer_id: Annotated[str, Depends(get_http_customer_id)],
+):
     """Return all credit cards for a given account."""
     logger.info("List credit cards for account_id=%s", account_id)
     try:
-        return card_service_singleton.get_credit_cards(account_id)
+        return card_service_singleton.get_credit_cards(account_id, customer_id)
+    except PermissionError as error:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(error)) from error
     except ValueError as ve:
         logger.exception("Validation error while listing cards")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
@@ -38,27 +45,38 @@ def list_credit_cards(account_id: str):
 
 
 @router.get("/cards/{card_id}", response_model=Card)
-def get_card_details(card_id: str):
+def get_card_details(
+    card_id: str,
+    customer_id: Annotated[str, Depends(get_http_customer_id)],
+):
     """Return the card details for a single identifier."""
     logger.info("Get card details for card_id=%s", card_id)
     try:
-        card = card_service_singleton.get_card_details(card_id)
+        card = card_service_singleton.get_card_details(card_id, customer_id)
         if card is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Card not found")
         return card
     except ValueError as ve:
         logger.exception("Validation error while retrieving card detail")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
+    except PermissionError as error:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(error)) from error
 
 
 @router.post("/cards/{card_id}/recharge", response_model=Card)
-def recharge_card(card_id: str, request: CardAmountRequest):
+def recharge_card(
+    card_id: str,
+    request: CardAmountRequest,
+    customer_id: Annotated[str, Depends(get_http_customer_id)],
+):
     """Recharge the selected card.
 
     The request amount must be positive."""
     logger.info("Recharge card card_id=%s amount=%.2f", card_id, request.amount)
     try:
-        return card_service_singleton.recharge_card(card_id, request.amount)
+        return card_service_singleton.recharge_card(card_id, request.amount, customer_id)
+    except PermissionError as error:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(error)) from error
     except ValueError as ve:
         logger.exception("Validation error during recharge")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
@@ -71,11 +89,17 @@ def recharge_card(card_id: str, request: CardAmountRequest):
 
 
 @router.post("/cards/{card_id}/pay", response_model=Card)
-def pay_with_card(card_id: str, request: CardAmountRequest):
+def pay_with_card(
+    card_id: str,
+    request: CardAmountRequest,
+    customer_id: Annotated[str, Depends(get_http_customer_id)],
+):
     """Record a payment and debit the available balance."""
     logger.info("Pay with card card_id=%s amount=%.2f", card_id, request.amount)
     try:
-        return card_service_singleton.pay_with_card(card_id, request.amount)
+        return card_service_singleton.pay_with_card(card_id, request.amount, customer_id)
+    except PermissionError as error:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(error)) from error
     except ValueError as ve:
         logger.exception("Validation error during payment")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
