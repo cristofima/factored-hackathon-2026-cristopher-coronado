@@ -157,6 +157,16 @@ For iterative agent updates only:
 azd deploy --cwd app/backend
 ```
 
+### Python dependency artifact for App Service zip deploy
+
+The three Python MCP APIs (`account`, `transaction`, `payment`) are deployed independently from the root `azure.yaml`. For App Service zip deploy, each service directory must include its own `requirements.txt` so Oryx can install runtime dependencies. Keep `pyproject.toml` as the development source of truth and regenerate `requirements.txt` from it before deployment changes.
+
+```shell
+uv pip compile app/business-api/account/pyproject.toml -o app/business-api/account/requirements.txt
+uv pip compile app/business-api/transaction/pyproject.toml -o app/business-api/transaction/requirements.txt
+uv pip compile app/business-api/payment/pyproject.toml -o app/business-api/payment/requirements.txt
+```
+
 The current ChatKit server keeps threads, items, and attachment metadata in local SQLite; Blob storage holds uploaded attachment bytes. Foundry Responses history, linked by `conversation` or `previous_response_id`, is separate and does not replace ChatKit persistence. No Cosmos DB is provisioned, and a durable per-user ChatKit store is still required before production deployment.
 
 For more info about deployment click [here](./docs/deployment-guide.md)
