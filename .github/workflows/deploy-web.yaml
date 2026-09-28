@@ -28,8 +28,10 @@ jobs:
         env:
           AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
           AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
         run: |
           azd config set auth.useAzCliAuth true
           azd env new development --subscription "$AZURE_SUBSCRIPTION_ID" --location "$AZURE_LOCATION" --no-prompt
+          azd env set AZURE_RESOURCE_GROUP "$AZURE_RESOURCE_GROUP"
       - name: Deploy web
         run: azd deploy web --no-prompt
