@@ -42,9 +42,9 @@ runs:
       working-directory: ${{ inputs.project-path }}
       run: |
         set -euo pipefail
-        if uv sync --dev --frozen --no-build; then
+        if uv sync --dev --frozen; then
           echo "Installed dependencies with --dev"
-        elif uv sync --frozen --no-build; then
+        elif uv sync --frozen; then
           echo "Installed dependencies without --dev"
         else
           echo "::error::Unable to sync dependencies for ${{ inputs.project-path }}"
