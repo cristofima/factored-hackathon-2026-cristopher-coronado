@@ -147,6 +147,75 @@ EDA and scope selection only read source files and overwrite artifacts with the 
 date-derived name. Loading uses PostgreSQL upsert by primary key, so repeating a window
 does not create duplicate rows. Existing rows with matching primary keys are updated.
 
+## Monthly Product Snapshots
+
+`product_monthly_snapshots` is an estimated operational projection built from the existing
+PostgreSQL `products` and `transactions` rows. It does not rerun CSV ingestion. Each row
+stores a product's reconstructed closing balance for one complete calendar month, that
+month's approved transaction movement, and the current-balance anchor used by the
+calculation.
+
+The source stores every transaction amount as a positive value and does not provide a
+debit/credit direction column. Profile the selected data before building snapshots:
+
+```powershell
+uv run --project app/business-api/data --env-file app/business-api/data/.env python app/business-api/data/scripts/profile_transaction_semantics.py --customer-ids CUSTOMER_A,CUSTOMER_B
+```
+
+The profile reports aggregate statuses, types, signs, date coverage, and product ownership
+or currency mismatches. The dataset has no external accounting source, signed amount,
+transfer destination, or reversal reference. Digital events were also tested as a possible
+cross-check, but they do not link to transactions by identifier, amount, or time.
+
+The snapshot scripts therefore use this explicit default estimation policy:
+
+| Source value                                    | Snapshot treatment                                   |
+| ----------------------------------------------- | ---------------------------------------------------- |
+| `Approved`                                      | Included; every other status has zero balance effect |
+| `Deposit`                                       | Credit                                               |
+| `Payment`, `Purchase`, `Transfer`, `Withdrawal` | Debit                                                |
+| `Adjustment`                                    | Excluded because its direction is unknown            |
+
+`Transfer` is treated as an outbound movement from the row's `product_id`. The policy is
+stored on every snapshot. `excluded_approved_transaction_amount` reports the unsigned
+adjustments in that month, while `balance_uncertainty_amount` accumulates excluded amounts
+between the snapshot close and the current-balance anchor. The estimated balance range is
+`closing_balance ± balance_uncertainty_amount`.
+
+Apply the schema migration after the classification is approved:
+
+```powershell
+uv run --project app/business-api/data --env-file app/business-api/data/.env alembic -c app/business-api/data/alembic.ini upgrade head
+```
+
+Run a non-persisting calculation first. The default policy above requires no classification
+arguments:
+
+```powershell
+uv run --project app/business-api/data --env-file app/business-api/data/.env python app/business-api/data/scripts/build_monthly_snapshots.py --customer-ids CUSTOMER_A,CUSTOMER_B --dry-run
+```
+
+```powershell
+uv run --project app/business-api/data --env-file app/business-api/data/.env python app/business-api/data/scripts/build_monthly_snapshots.py --customer-ids CUSTOMER_A,CUSTOMER_B
+```
+
+The default window begins in the first loaded transaction month and ends in the month
+before the latest loaded transaction date. This excludes a partial current month. Use
+first-of-month ISO dates with `--start-month` and `--end-month` to narrow the window.
+Rebuilding is idempotent by `(product_id, snapshot_month)`.
+
+Verify with the identical customer scope and optional month boundaries:
+
+```powershell
+uv run --project app/business-api/data --env-file app/business-api/data/.env python app/business-api/data/scripts/verify_monthly_snapshots.py --customer-ids CUSTOMER_A,CUSTOMER_B
+```
+
+Use `--credit-types`, `--debit-types`, and `--excluded-types` together to override the
+default. The three sets must be disjoint and classify every observed approved type.
+
+Omitting `--customer-ids` requires the explicit `--allow-all-customers` switch because an
+unscoped build may create snapshots for every product.
+
 ## Individual Commands
 
 These commands are intended for diagnosis or rerunning one stage. Execute them in the
