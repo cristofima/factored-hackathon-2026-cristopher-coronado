@@ -72,6 +72,35 @@ class Product(SQLModel, table=True):
     last_transaction_date: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True)))
 
 
+class ProductMonthlySnapshot(SQLModel, table=True):
+    __tablename__ = "product_monthly_snapshots"
+    __table_args__ = (
+        Index("ix_product_monthly_snapshots_month", "snapshot_month"),
+    )
+
+    product_id: str = Field(primary_key=True, foreign_key="products.product_id", max_length=64)
+    snapshot_month: date = Field(primary_key=True)
+    closing_balance: Decimal = Field(sa_column=Column(Numeric(20, 4), nullable=False))
+    currency: str = Field(max_length=8)
+    approved_transaction_count: int
+    net_transaction_amount: Decimal = Field(sa_column=Column(Numeric(20, 4), nullable=False))
+    excluded_approved_transaction_count: int
+    excluded_approved_transaction_amount: Decimal = Field(
+        sa_column=Column(Numeric(20, 4), nullable=False)
+    )
+    balance_uncertainty_amount: Decimal = Field(
+        sa_column=Column(Numeric(20, 4), nullable=False)
+    )
+    anchor_balance: Decimal = Field(sa_column=Column(Numeric(20, 4), nullable=False))
+    anchor_date: date
+    calculation_method: str = Field(max_length=64)
+    transaction_policy: str = Field(max_length=512)
+    calculated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+
+
 class TransactionRecord(SQLModel, table=True):
     __tablename__ = "transactions"
     __table_args__ = (
