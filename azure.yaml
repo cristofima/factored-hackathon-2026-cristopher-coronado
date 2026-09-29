@@ -6,6 +6,21 @@ services:
     project: ./app/business-api/account
     language: python
     host: appservice
+    hooks:
+      prepackage:
+        windows:
+          shell: pwsh
+          run: Copy-Item -Recurse -Force ../shared/banking_shared ./banking_shared
+        posix:
+          shell: sh
+          run: cp -R ../shared/banking_shared ./banking_shared
+      postpackage:
+        windows:
+          shell: pwsh
+          run: Remove-Item -Recurse -Force ./banking_shared
+        posix:
+          shell: sh
+          run: rm -rf ./banking_shared
   payment:
     project: ./app/business-api/payment
     language: python
@@ -14,10 +29,40 @@ services:
     project: ./app/business-api/transaction
     language: python
     host: appservice
+    hooks:
+      prepackage:
+        windows:
+          shell: pwsh
+          run: Copy-Item -Recurse -Force ../shared/banking_shared ./banking_shared
+        posix:
+          shell: sh
+          run: cp -R ../shared/banking_shared ./banking_shared
+      postpackage:
+        windows:
+          shell: pwsh
+          run: Remove-Item -Recurse -Force ./banking_shared
+        posix:
+          shell: sh
+          run: rm -rf ./banking_shared
   responses-bff:
     project: ./app/responses-bff
     language: python
     host: appservice
+    hooks:
+      prepackage:
+        windows:
+          shell: pwsh
+          run: Copy-Item -Recurse -Force ../business-api/shared/banking_shared ./banking_shared
+        posix:
+          shell: sh
+          run: cp -R ../business-api/shared/banking_shared ./banking_shared
+      postpackage:
+        windows:
+          shell: pwsh
+          run: Remove-Item -Recurse -Force ./banking_shared
+        posix:
+          shell: sh
+          run: rm -rf ./banking_shared
   web:
     project: ./app/frontend/banking-web
     language: js
