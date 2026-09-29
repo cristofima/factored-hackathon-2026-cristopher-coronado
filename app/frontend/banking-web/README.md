@@ -19,17 +19,33 @@ The Vite proxy routes:
 | `/api/accounts/*`     | `http://localhost:8070` |
 | `/api/transactions/*` | `http://localhost:8071` |
 | `/responses`          | `http://localhost:8080` |
+| `/auth/*`             | `http://localhost:8080` |
 
 ## Environment
 
-| Variable                   | Purpose                                         | Local default                    |
-| -------------------------- | ----------------------------------------------- | -------------------------------- |
-| `VITE_BACKEND_URI`         | Fallback base for relative REST calls           | `/api` in code                   |
-| `VITE_ACCOUNT_API_URL`     | Deployed Account API base, including `/api`     | Falls back to `VITE_BACKEND_URI` |
-| `VITE_TRANSACTION_API_URL` | Deployed Transaction API base, including `/api` | Falls back to `VITE_BACKEND_URI` |
-| `VITE_RESPONSES_API_URL`   | Responses BFF endpoint                          | `/responses` in code             |
+| Variable                   | Purpose                                         | Local default                     |
+| -------------------------- | ----------------------------------------------- | --------------------------------- |
+| `VITE_BACKEND_URI`         | Fallback base for relative REST calls           | `/api` in code                    |
+| `VITE_ACCOUNT_API_URL`     | Deployed Account API base, including `/api`     | Falls back to `VITE_BACKEND_URI`  |
+| `VITE_TRANSACTION_API_URL` | Deployed Transaction API base, including `/api` | Falls back to `VITE_BACKEND_URI`  |
+| `VITE_RESPONSES_API_URL`   | Responses BFF endpoint                          | `/responses` in code              |
+| `VITE_RESPONSES_BFF_URL`   | BFF base URL for login, profile, and accounts   | Empty; same-origin `/auth` routes |
 
-The frontend signs in through the BFF at `/auth/login`, keeps the short-lived application JWT in browser storage, and restores verified identity through `/auth/me`. The BFF currently verifies environment-configured Argon2 users; PostgreSQL-backed user persistence remains pending. The frontend does not create users, fixed bearer tokens, or synthetic profiles.
+The frontend signs in through the [Responses BFF](../../responses-bff/README.md) at `/auth/login`, keeps the short-lived application JWT in browser storage, and restores verified identity through `/auth/me`. The BFF verifies PostgreSQL-backed Argon2 users and returns the persisted customer name. Navigation uses that name, with an email fallback. The frontend does not create users, fixed bearer tokens, or synthetic profiles.
+
+## Account Page
+
+The Account page calls `/auth/me/accounts` with the application JWT. The BFF selects only
+savings and checking products owned by the verified user/customer association. One account
+is displayed directly; multiple accounts expose a selector with the type and masked number
+(product ID fallback). Loading, retryable errors, and no-account states are explicit.
+
+The holder comes from the authenticated profile. Type, status, opening date, currency,
+and account number come from PostgreSQL; absent values are not fabricated. The Account
+Codes section appears only when a stored number exists. SWIFT, IBAN, and routing numbers
+are omitted because the schema does not provide them. Agreements and Privacy & Security
+Policy are unchanged inherited placeholders. Credit-card management is unavailable in
+this prototype and does not execute simulated card operations.
 
 ## Validation
 
