@@ -32,6 +32,8 @@ description: A Python sample app using Foundry Responses for account and transac
 
 This hackathon prototype extends Microsoft's public [Azure-Samples/agent-openai-python-banking-assistant](https://github.com/Azure-Samples/agent-openai-python-banking-assistant) sample. The current workflow focuses on Account and Transaction inquiries through Foundry Responses. Data persistence, dynamic localization, hosted validation, and evaluation work are tracked in [the prototype plan](./plan/README.md).
 
+For the 2026-10-05 submission, the target audience is retail banking customers who need fast support resolution and clear balance-movement explanations. Dataset profiling shows higher monthly activity in 2026 than 2025 for selected customers, but the core value proposition remains workflow clarity, approval control, and end-to-end case traceability rather than high-volume optimization alone. The demo scope includes one contextual product recommendation after case resolution, with strict guardrails (single recommendation, rationale shown, and opt-out support) to avoid spam-like behavior.
+
 A banking personal assistant designed to revolutionize the way users interact with their bank account information, transaction history, and payment functionalities. Utilizing the power of generative AI within a multi-agent architecture, this assistant aims to provide a seamless, conversational interface through which users can effortlessly access and manage their financial data.
 
 Even if specific to banking scenarios, this sample can be used for other business use cases as technical reference architecture concerning customer support chatbots or virtual assistants using Microsoft Agent Framework to implement supervisor based orchestration for multiple domains agents that need to integrate with business domains API through MCP. AI-powered assistants in other domains by adapting the agents tools and backend services to your specific business needs.
@@ -56,6 +58,8 @@ Business scenario
 <br/>
 
 Users can converse with the assistant to inquire about account balances and review recent transactions instead of navigating traditional menus. The active workflow does not execute payments.
+
+The submission MVP extends this flow into support operations: users can open a support case from conversation context, track status progression, complete at least one meaningful approval step, and receive a contextual product recommendation only after case resolution.
 
 The business APIs currently serve sample data. The Payment service and invoice samples remain as inherited artifacts but are not connected to the agent. The BFF provides prototype login with environment-configured Argon2 users; PostgreSQL-backed users and banking data remain pending.
 
