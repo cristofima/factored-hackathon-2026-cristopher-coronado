@@ -13,6 +13,7 @@ from bff.auth import router as auth_router
 from bff.credentials import create_azure_credential
 from bff.responses import AsyncCredential, router as responses_router
 from bff.settings import Settings
+from bff.user_repository import SqlModelUserRepository, UserRepository
 
 
 CredentialFactory = Callable[[Settings], AsyncCredential]
@@ -22,13 +23,16 @@ def create_app(
     settings: Settings | None = None,
     transport: httpx.AsyncBaseTransport | None = None,
     credential_factory: CredentialFactory = create_azure_credential,
+    user_repository: UserRepository | None = None,
 ) -> FastAPI:
     """Create the BFF with application-lifetime upstream resources."""
     app_settings = settings or Settings()
+    app_user_repository = user_repository or SqlModelUserRepository()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.settings = app_settings
+        app.state.user_repository = app_user_repository
         app.state.http_client = httpx.AsyncClient(timeout=None, transport=transport)
         app.state.azure_credential = (
             credential_factory(app_settings)
