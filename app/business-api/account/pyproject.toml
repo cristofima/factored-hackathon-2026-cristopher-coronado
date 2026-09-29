@@ -11,3 +11,6 @@ dependencies = [
     "fastapi[all]==0.141.1",
     "uvicorn==0.54.0",
 ]
+
+[dependency-groups]
+dev = ["pytest==9.1.1", "pytest-asyncio==1.4.0"]

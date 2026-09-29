@@ -1,0 +1,32 @@
+name: Deploy Web
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "app/frontend/banking-web/**"
+      - "!app/frontend/banking-web/**/*.md"
+      - ".github/workflows/cd-web.yaml"
+      - ".github/actions/cd-azure/**"
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: Development
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/cd-azure
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          location: ${{ vars.AZURE_LOCATION }}
+          resource-group: ${{ vars.AZURE_RESOURCE_GROUP }}
+      - name: Deploy web
+        run: azd deploy web --no-prompt

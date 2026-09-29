@@ -6,7 +6,9 @@ on:
       - main
     paths:
       - "app/responses-bff/**"
-      - ".github/workflows/deploy-responses-bff.yaml"
+      - "!app/responses-bff/**/*.md"
+      - ".github/workflows/cd-responses-bff.yaml"
+      - ".github/actions/cd-azure/**"
   workflow_dispatch:
 
 permissions:
@@ -19,21 +21,13 @@ jobs:
     environment: Development
     steps:
       - uses: actions/checkout@v4
-      - uses: Azure/setup-azd@v2
-      - uses: azure/login@v2
+      - uses: ./.github/actions/cd-azure
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      - name: Configure azd environment
-        env:
-          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-          AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
-          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
-        run: |
-          azd config set auth.useAzCliAuth true
-          azd env new development --subscription "$AZURE_SUBSCRIPTION_ID" --location "$AZURE_LOCATION" --no-prompt
-          azd env set AZURE_RESOURCE_GROUP "$AZURE_RESOURCE_GROUP"
+          location: ${{ vars.AZURE_LOCATION }}
+          resource-group: ${{ vars.AZURE_RESOURCE_GROUP }}
       - name: Configure JWT secret
         env:
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}

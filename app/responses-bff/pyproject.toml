@@ -13,7 +13,7 @@ dependencies = [
     "uvicorn==0.54.0",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = ["asgi-lifespan", "pytest==9.1.1", "pytest-asyncio==1.4.0"]
 
 [tool.setuptools.packages.find]

@@ -1,9 +1,36 @@
 ## Purpose
-<!-- Describe the intention of the changes being proposed. What problem does it solve or functionality does it add? -->
-* ...
 
-## Does this introduce a breaking change?
-<!-- Mark one with an "x". -->
+<!-- What problem are we solving and why does this change exist? -->
+
+## Changes by Scope
+
+<!-- Describe relevant changes grouped by scope. Keep only scopes that apply. -->
+
+- ## **Backend**:
+- ## **Responses BFF**:
+- ## **Frontend**:
+- ## **Business API**:
+- ## **Data**:
+- ## **Infra**:
+- ## **Docs**:
+
+## Type of Change
+
+<!-- Mark all that apply. -->
+
+- [ ] Feature (`feat`)
+- [ ] Bug fix (`fix`)
+- [ ] Refactor (`refactor`)
+- [ ] Performance (`perf`)
+- [ ] Tests (`test`)
+- [ ] Documentation (`docs`)
+- [ ] Build/Dependencies (`build`)
+- [ ] CI (`ci`)
+- [ ] Chore (`chore`)
+
+## Breaking Change
+
+<!-- Mark one. If yes, explain impact and migration required. -->
 
 - [ ] Yes
 - [ ] No
@@ -24,22 +51,50 @@
 -->
 
 ## How to Test
-*  Get the code
 
-```
-git clone [repo-address]
-cd [repo-name]
-git checkout [branch-name]
-```
+<!-- Provide exact commands and manual checks performed. -->
 
-* Test the code
-<!-- Add steps to run the tests suite and/or manually test -->
-```
+### Commands Run
+
+```bash
+# Example:
+# uv run pytest app/backend/tests/test_hosted_workflow.py -q
 ```
 
-## What to Check
-Verify that the following are valid
-* ...
+### Manual Validation
+
+<!-- Example: login flow, account inquiry, transaction inquiry, locale behavior, UI checks. -->
+
+-
+
+### Not Tested
+
+<!-- List intentionally untested areas and why. Use N/A if fully tested. -->
+
+## Evidence
+
+<!-- Add screenshots or recordings for frontend/UX changes. Use N/A if not applicable. -->
+
+- N/A
+
+## Impact and Risk
+
+<!-- Mark what applies and add short notes where needed. -->
+
+- [ ] Security/Auth impact
+- [ ] Data model or migration impact
+- [ ] API or contract impact
+- [ ] Infra/Deployment impact
+- [ ] No significant risk identified
+
+## Checklist
+
+- [ ] Tests were added or updated for changed behavior, or a clear reason is provided
+- [ ] No secrets, passwords, or tokens were added to code/logs/config
+- [ ] Documentation was updated when behavior or workflows changed
 
 ## Other Information
-<!-- Add any other helpful information that may be needed here. -->
+
+<!-- Add any additional context reviewers should know. -->
+
+-
