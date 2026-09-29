@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from collections.abc import Callable, Iterator
 from datetime import date
 from pathlib import Path
@@ -10,19 +11,25 @@ from typing import Any
 from sqlalchemy.dialects.postgresql import insert
 from sqlmodel import Session, SQLModel
 
+DATA_DIR = Path(__file__).resolve().parents[1]
+if str(DATA_DIR) not in sys.path:
+    sys.path.insert(0, str(DATA_DIR))
+
 from database import create_database_engine
 from models import Branch, Customer, Product, ServiceAgent, TransactionRecord
-from scripts.inspect_sources import build_inventory
-from scripts.shared import (
+from inspect_sources import build_inventory
+from shared import (
     DEFAULT_END_DATE,
     DEFAULT_START_DATE,
     batched,
     csv_rows,
     optional,
+    parse_customer_ids,
     parse_date,
     parse_datetime,
     parse_decimal,
     transaction_files,
+    partition_date,
 )
 
 Row = dict[str, Any]
@@ -34,7 +41,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--start-date", type=date.fromisoformat, default=DEFAULT_START_DATE)
     parser.add_argument("--end-date", type=date.fromisoformat, default=DEFAULT_END_DATE)
-    parser.add_argument("--batch-size", type=int, default=2_000)
+    parser.add_argument("--batch-size", type=int, default=50)
+    parser.add_argument("--customer-ids")
     return parser.parse_args()
 
 
@@ -64,6 +72,44 @@ def map_customer(row: dict[str, str]) -> Row:
         "registration_branch_id": optional(row["registration_branch_id"]),
         "customer_status": optional(row["customer_status"]),
     }
+
+
+def sanitize_customers_registration_branch(
+    rows: Iterator[Row],
+    valid_branch_ids: set[str],
+) -> tuple[Iterator[Row], dict[str, int]]:
+    stats = {"invalid_registration_branch_refs": 0}
+
+    def _iterator() -> Iterator[Row]:
+        for row in rows:
+            branch_id = row.get("registration_branch_id")
+            if branch_id and branch_id not in valid_branch_ids:
+                row = dict(row)
+                row["registration_branch_id"] = None
+                stats["invalid_registration_branch_refs"] += 1
+            yield row
+
+    return _iterator(), stats
+
+
+def sanitize_optional_branch_fk(
+    rows: Iterator[Row],
+    fk_field: str,
+    valid_branch_ids: set[str],
+    metric_name: str,
+) -> tuple[Iterator[Row], dict[str, int]]:
+    stats = {metric_name: 0}
+
+    def _iterator() -> Iterator[Row]:
+        for row in rows:
+            branch_id = row.get(fk_field)
+            if branch_id and branch_id not in valid_branch_ids:
+                row = dict(row)
+                row[fk_field] = None
+                stats[metric_name] += 1
+            yield row
+
+    return _iterator(), stats
 
 
 def map_service_agent(row: dict[str, str]) -> Row:
@@ -115,9 +161,29 @@ def map_transaction(row: dict[str, str]) -> Row:
     }
 
 
-def mapped_rows(path: Path, mapper: Callable[[dict[str, str]], Row]) -> Iterator[Row]:
+def mapped_rows(
+    path: Path,
+    mapper: Callable[[dict[str, str]], Row],
+    customer_ids: set[str] | None = None,
+) -> Iterator[Row]:
     for row in csv_rows(path):
+        if customer_ids is not None and row.get("customer_id", "").strip() not in customer_ids:
+            continue
         yield mapper(row)
+
+
+def validate_transaction_products(
+    rows: Iterator[Row],
+    valid_product_ids: set[str] | None,
+) -> Iterator[Row]:
+    for row in rows:
+        product_id = str(row["product_id"])
+        if valid_product_ids is not None and product_id not in valid_product_ids:
+            raise ValueError(
+                f"Transaction {row['transaction_id']} references product outside customer filter: "
+                f"{product_id}"
+            )
+        yield row
 
 
 def upsert_batches(
@@ -129,16 +195,17 @@ def upsert_batches(
     processed = 0
     primary_keys = [column.name for column in model.__table__.primary_key.columns]
     for batch in batched(rows, batch_size):
-        statement = insert(model).values(batch)
-        updates = {
-            column.name: getattr(statement.excluded, column.name)
-            for column in model.__table__.columns
-            if column.name not in primary_keys
-        }
-        session.exec(
-            statement.on_conflict_do_update(index_elements=primary_keys, set_=updates)
-        )
-        processed += len(batch)
+        for row in batch:
+            statement = insert(model).values(row)
+            updates = {
+                column.name: getattr(statement.excluded, column.name)
+                for column in model.__table__.columns
+                if column.name not in primary_keys
+            }
+            session.exec(
+                statement.on_conflict_do_update(index_elements=primary_keys, set_=updates)
+            )
+            processed += 1
     return processed
 
 
@@ -147,46 +214,169 @@ def main() -> None:
     if args.batch_size < 1:
         raise ValueError("batch-size must be greater than zero")
 
+    requested_customer_ids = parse_customer_ids(args.customer_ids)
+    customer_filter = set(requested_customer_ids) if requested_customer_ids else None
     inventory = build_inventory(args.source, args.start_date, args.end_date)
-    counts: dict[str, int] = {}
+    counts: dict[str, int] = {"transactions": 0}
+    adjustments: dict[str, int] = {}
+    day_results: list[dict[str, Any]] = []
+    failed_days: list[dict[str, str]] = []
+    transaction_partition_files = transaction_files(args.source, args.start_date, args.end_date)
+    total_days = len(transaction_partition_files)
     engine = create_database_engine()
+
     with Session(engine) as session:
         try:
+            branch_rows = list(mapped_rows(args.source / "branches.csv", map_branch))
+            valid_branch_ids = {
+                str(row["branch_id"])
+                for row in branch_rows
+                if row.get("branch_id")
+            }
             counts["branches"] = upsert_batches(
-                session, Branch, mapped_rows(args.source / "branches.csv", map_branch), args.batch_size
+                session, Branch, iter(branch_rows), args.batch_size
             )
+            mapped_customer_rows = list(
+                mapped_rows(
+                    args.source / "customers.csv",
+                    map_customer,
+                    customer_filter,
+                )
+            )
+            if customer_filter:
+                found_customer_ids = {
+                    str(row["customer_id"])
+                    for row in mapped_customer_rows
+                }
+                missing_customer_ids = sorted(customer_filter - found_customer_ids)
+                if missing_customer_ids:
+                    raise ValueError(
+                        "Requested customer IDs were not found: "
+                        + ", ".join(missing_customer_ids)
+                    )
+
+            customer_rows, customer_adjustments = sanitize_customers_registration_branch(
+                iter(mapped_customer_rows),
+                valid_branch_ids,
+            )
+            adjustments.update(customer_adjustments)
             counts["customers"] = upsert_batches(
-                session, Customer, mapped_rows(args.source / "customers.csv", map_customer), args.batch_size
+                session, Customer, customer_rows, args.batch_size
             )
+            service_agent_rows, service_agent_adjustments = sanitize_optional_branch_fk(
+                mapped_rows(args.source / "service_agents.csv", map_service_agent),
+                "assigned_branch_id",
+                valid_branch_ids,
+                "invalid_assigned_branch_refs",
+            )
+            adjustments.update(service_agent_adjustments)
             counts["service_agents"] = upsert_batches(
                 session,
                 ServiceAgent,
-                mapped_rows(args.source / "service_agents.csv", map_service_agent),
+                service_agent_rows,
                 args.batch_size,
             )
+            product_rows = list(
+                mapped_rows(
+                    args.source / "products.csv",
+                    map_product,
+                    customer_filter,
+                )
+            )
+            valid_product_ids = (
+                {str(row["product_id"]) for row in product_rows}
+                if customer_filter is not None
+                else None
+            )
             counts["products"] = upsert_batches(
-                session, Product, mapped_rows(args.source / "products.csv", map_product), args.batch_size
-            )
-            transaction_rows = (
-                mapped
-                for path in transaction_files(args.source, args.start_date, args.end_date)
-                for mapped in mapped_rows(path, map_transaction)
-            )
-            counts["transactions"] = upsert_batches(
-                session, TransactionRecord, transaction_rows, args.batch_size
+                session,
+                Product,
+                iter(product_rows),
+                args.batch_size,
             )
             session.commit()
         except Exception:
             session.rollback()
             raise
 
+    for index, path in enumerate(transaction_partition_files, start=1):
+        day = partition_date(path)
+        with Session(engine) as session:
+            try:
+                transaction_rows = validate_transaction_products(
+                    mapped_rows(path, map_transaction, customer_filter),
+                    valid_product_ids,
+                )
+                sanitized_transaction_rows, transaction_adjustments = sanitize_optional_branch_fk(
+                    transaction_rows,
+                    "branch_id",
+                    valid_branch_ids,
+                    "invalid_transaction_branch_refs",
+                )
+                loaded_rows = upsert_batches(
+                    session, TransactionRecord, sanitized_transaction_rows, args.batch_size
+                )
+                session.commit()
+                counts["transactions"] += loaded_rows
+                adjustments["invalid_transaction_branch_refs"] = (
+                    adjustments.get("invalid_transaction_branch_refs", 0)
+                    + transaction_adjustments["invalid_transaction_branch_refs"]
+                )
+                day_results.append(
+                    {
+                        "date": day.isoformat(),
+                        "status": "loaded",
+                        "rows_loaded": loaded_rows,
+                        "path": str(path.relative_to(args.source)).replace("\\", "/"),
+                    }
+                )
+                print(
+                    f"OK day={day.isoformat()} rows={loaded_rows} "
+                    f"progress={index}/{total_days}"
+                )
+            except Exception as exc:
+                session.rollback()
+                error = str(exc)
+                day_results.append(
+                    {
+                        "date": day.isoformat(),
+                        "status": "failed",
+                        "rows_loaded": 0,
+                        "path": str(path.relative_to(args.source)).replace("\\", "/"),
+                        "error": error,
+                    }
+                )
+                failed_days.append({"date": day.isoformat(), "error": error})
+                print(
+                    f"FAIL day={day.isoformat()} progress={index}/{total_days} "
+                    f"error={error}"
+                )
+
+    loaded_days = len(day_results) - len(failed_days)
+    status = "completed" if not failed_days else "completed_with_errors"
+    print(
+        "Summary "
+        f"days_total={total_days} days_loaded={loaded_days} "
+        f"days_failed={len(failed_days)} rows_loaded_total={counts['transactions']}"
+    )
+
     manifest = {
-        "status": "completed",
+        "status": status,
         "migration_revision": "20260928_0001",
+        "customer_filter": {
+            "mode": "selected_customers" if requested_customer_ids else "all_customers",
+            "customer_ids": list(requested_customer_ids),
+        },
         "transaction_window": inventory["transaction_window"],
         "files": inventory["files"],
         "processed_rows": counts,
+        "adjustments": adjustments,
         "rejected_rows": 0,
+        "days_total": total_days,
+        "days_loaded": loaded_days,
+        "days_failed": len(failed_days),
+        "failed_days": failed_days,
+        "day_results": day_results,
     }
     args.manifest.parent.mkdir(parents=True, exist_ok=True)
     args.manifest.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
