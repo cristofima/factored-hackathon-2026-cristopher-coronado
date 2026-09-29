@@ -12,8 +12,29 @@ DEFAULT_END_DATE = date(2026, 5, 31)
 DIMENSION_FILES = ("branches.csv", "customers.csv", "service_agents.csv", "products.csv")
 
 
+def parse_customer_ids(value: str | None) -> tuple[str, ...]:
+    if value is None:
+        return ()
+
+    customer_ids = tuple(
+        dict.fromkeys(customer_id.strip() for customer_id in value.split(",") if customer_id.strip())
+    )
+    if not customer_ids:
+        raise ValueError("customer-ids must contain at least one customer ID")
+    return customer_ids
+
+
 def parse_date(value: str | None) -> date | None:
-    return date.fromisoformat(value) if value else None
+    if not value:
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    try:
+        return date.fromisoformat(text)
+    except ValueError:
+        normalized = text.replace("Z", "+00:00")
+        return datetime.fromisoformat(normalized).date()
 
 
 def parse_datetime(value: str | None) -> datetime | None:
