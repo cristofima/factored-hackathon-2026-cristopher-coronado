@@ -1,0 +1,38 @@
+name: Responses BFF CI
+
+on:
+  push:
+    branches: ["main", "develop", "feature/*", "refactor/*"]
+    paths:
+      - "app/responses-bff/**"
+      - "!app/responses-bff/**/*.md"
+      - ".github/workflows/ci-responses-bff.yml"
+      - ".github/actions/ci-python/**"
+  pull_request:
+    branches: ["main", "develop"]
+    types: [opened, reopened, synchronize, ready_for_review]
+    paths:
+      - "app/responses-bff/**"
+      - "!app/responses-bff/**/*.md"
+      - ".github/workflows/ci-responses-bff.yml"
+      - ".github/actions/ci-python/**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  build-and-test:
+    name: Build & Test (responses-bff)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: ./.github/actions/ci-python
+        with:
+          project-path: app/responses-bff
+          artifact-name: responses-bff-test-results
+          run-tests: "true"

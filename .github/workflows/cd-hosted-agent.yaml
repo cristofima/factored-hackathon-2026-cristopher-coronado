@@ -7,7 +7,8 @@ on:
     paths:
       - "app/backend/**"
       - "!app/backend/**/*.md"
-      - ".github/workflows/deploy-hosted-agent.yaml"
+      - ".github/workflows/cd-hosted-agent.yaml"
+      - ".github/actions/cd-azure/**"
   workflow_dispatch:
 
 permissions:
@@ -24,19 +25,19 @@ jobs:
     environment: Development
     steps:
       - uses: actions/checkout@v4
-      - uses: Azure/setup-azd@v2
-      - name: Install Foundry extensions
-        run: azd -C app/backend ext install microsoft.foundry
-      - uses: azure/login@v2
+      - uses: ./.github/actions/cd-azure
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      - name: Configure azd environment
+          location: ${{ vars.AZURE_LOCATION }}
+          resource-group: ${{ vars.AZURE_RESOURCE_GROUP }}
+          working-directory: app/backend
+      - name: Install Foundry extensions
+        run: azd -C app/backend ext install microsoft.foundry
+      - name: Configure Foundry environment
         env:
-          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
           AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
-          AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
           FOUNDRY_PROJECT_ENDPOINT: ${{ vars.FOUNDRY_PROJECT_ENDPOINT }}
           AZURE_AI_PROJECT_ID: ${{ vars.AZURE_AI_PROJECT_ID }}
           MODEL_DEPLOYMENT_NAME: ${{ vars.MODEL_DEPLOYMENT_NAME }}
@@ -47,8 +48,6 @@ jobs:
           OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT: ${{ vars.OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT }}
         run: |
           set -euo pipefail
-          azd -C app/backend config set auth.useAzCliAuth true
-          azd -C app/backend env new development --subscription "$AZURE_SUBSCRIPTION_ID" --location "$AZURE_LOCATION" --no-prompt
           for var in AZURE_AI_PROJECT_ID FOUNDRY_PROJECT_ENDPOINT MODEL_DEPLOYMENT_NAME; do
             if [ -z "${!var}" ]; then
               echo "::error::Missing required GitHub environment variable: $var"

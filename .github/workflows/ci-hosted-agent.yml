@@ -1,0 +1,38 @@
+name: Hosted Agent CI
+
+on:
+  push:
+    branches: ["main", "develop", "feature/*", "refactor/*"]
+    paths:
+      - "app/backend/**"
+      - "!app/backend/**/*.md"
+      - ".github/workflows/ci-hosted-agent.yml"
+      - ".github/actions/ci-python/**"
+  pull_request:
+    branches: ["main", "develop"]
+    types: [opened, reopened, synchronize, ready_for_review]
+    paths:
+      - "app/backend/**"
+      - "!app/backend/**/*.md"
+      - ".github/workflows/ci-hosted-agent.yml"
+      - ".github/actions/ci-python/**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  build-and-test:
+    name: Build & Test (Hosted Agent)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: ./.github/actions/ci-python
+        with:
+          project-path: app/backend
+          artifact-name: backend-test-results
+          run-tests: "true"

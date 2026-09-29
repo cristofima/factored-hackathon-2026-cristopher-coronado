@@ -1,0 +1,51 @@
+name: Azure CD setup
+description: Configure Azure authentication and the shared azd environment for deployment.
+
+inputs:
+  client-id:
+    description: Azure federated identity client ID.
+    required: true
+  tenant-id:
+    description: Azure tenant ID.
+    required: true
+  subscription-id:
+    description: Azure subscription ID.
+    required: true
+  location:
+    description: Azure deployment location.
+    required: true
+  resource-group:
+    description: Azure resource group name.
+    required: true
+  working-directory:
+    description: Directory containing the azd project.
+    required: false
+    default: .
+  azd-environment:
+    description: azd environment name.
+    required: false
+    default: development
+
+runs:
+  using: composite
+  steps:
+    - uses: Azure/setup-azd@v2
+    - name: Azure login
+      uses: azure/login@v2
+      with:
+        client-id: ${{ inputs.client-id }}
+        tenant-id: ${{ inputs.tenant-id }}
+        subscription-id: ${{ inputs.subscription-id }}
+    - name: Configure azd environment
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        AZURE_SUBSCRIPTION_ID: ${{ inputs.subscription-id }}
+        AZURE_LOCATION: ${{ inputs.location }}
+        AZURE_RESOURCE_GROUP: ${{ inputs.resource-group }}
+        AZD_ENVIRONMENT: ${{ inputs.azd-environment }}
+      run: |
+        set -euo pipefail
+        azd config set auth.useAzCliAuth true
+        azd env new "$AZD_ENVIRONMENT" --subscription "$AZURE_SUBSCRIPTION_ID" --location "$AZURE_LOCATION" --no-prompt
+        azd env set AZURE_RESOURCE_GROUP "$AZURE_RESOURCE_GROUP"

@@ -151,7 +151,7 @@ dependencies = [
     { name = "uvicorn" },
 ]
 
-[package.optional-dependencies]
+[package.dev-dependencies]
 dev = [
     { name = "asgi-lifespan" },
     { name = "pytest" },
@@ -160,18 +160,21 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "asgi-lifespan", marker = "extra == 'dev'" },
     { name = "azure-identity", specifier = "==1.25.3" },
     { name = "fastapi", specifier = "==0.141.1" },
     { name = "httpx", specifier = "==0.28.1" },
     { name = "pwdlib", extras = ["argon2"], specifier = ">=0.2,<1" },
     { name = "pydantic-settings", specifier = ">=2.0,<3" },
     { name = "pyjwt", specifier = "==2.10.1" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = "==9.1.1" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = "==1.4.0" },
     { name = "uvicorn", specifier = "==0.54.0" },
 ]
-provides-extras = ["dev"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "asgi-lifespan" },
+    { name = "pytest", specifier = "==9.1.1" },
+    { name = "pytest-asyncio", specifier = "==1.4.0" },
+]
 
 [[package]]
 name = "certifi"
