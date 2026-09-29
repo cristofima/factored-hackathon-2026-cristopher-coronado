@@ -61,7 +61,7 @@ Users can converse with the assistant to inquire about account balances and revi
 
 The submission MVP extends this flow into support operations: users can open a support case from conversation context, track status progression, complete at least one meaningful approval step, and receive a contextual product recommendation only after case resolution.
 
-The business APIs currently serve sample data. The Payment service and invoice samples remain as inherited artifacts but are not connected to the agent. The BFF provides prototype login with environment-configured Argon2 users; PostgreSQL-backed users and banking data remain pending.
+The Account and Transaction APIs read banking data from PostgreSQL through a shared SQLModel package and enforce ownership in their service layer. The Payment service and invoice samples remain as inherited artifacts but are not connected to the agent. The [Responses BFF](./app/responses-bff/README.md) authenticates persisted users with Argon2, returns customer names, and supplies customer-owned accounts to the Account page.
 
 ### Key Features
 
@@ -162,13 +162,15 @@ azd deploy --cwd app/backend
 The three Python MCP APIs (`account`, `transaction`, `payment`) and the Responses BFF are deployed independently from the root `azure.yaml`. For App Service zip deploy, each Python service directory must include its own `requirements.txt` so Oryx can install runtime dependencies. Keep `pyproject.toml` and the `uv` lock files as the development source of truth and regenerate `requirements.txt` before deployment changes.
 
 ```shell
-uv pip compile app/business-api/account/pyproject.toml -o app/business-api/account/requirements.txt
-uv pip compile app/business-api/transaction/pyproject.toml -o app/business-api/transaction/requirements.txt
+uv pip compile app/business-api/account/pyproject.toml --no-emit-package banking-shared -o app/business-api/account/requirements.txt
+uv pip compile app/business-api/transaction/pyproject.toml --no-emit-package banking-shared -o app/business-api/transaction/requirements.txt
 uv pip compile app/business-api/payment/pyproject.toml -o app/business-api/payment/requirements.txt
-uv export --project app/responses-bff --no-dev --no-hashes --no-emit-project --output-file app/responses-bff/requirements.txt
+uv export --project app/responses-bff --no-dev --no-hashes --no-emit-project --no-emit-package banking-shared --output-file app/responses-bff/requirements.txt
 ```
 
-Foundry Responses maintains conversation history when requests link turns with a signed user-bound `conversation` value. The BFF rejects conversation identifiers that belong to a different authenticated user. It currently verifies environment-configured Argon2 users and issues short-lived HS256 JWTs; PostgreSQL-backed identity persistence remains pending.
+Account, Transaction, and the BFF consume the canonical SQLModel package from `app/business-api/shared` during development. Their `azd` prepackage hooks copy that importable package into each isolated App Service zip, and postpackage hooks remove the temporary copies. The `--no-emit-package` option keeps machine-local editable paths out of the Oryx dependency artifact.
+
+Foundry Responses maintains conversation history when requests link turns with a signed user-bound `conversation` value. The BFF rejects conversation identifiers that belong to a different authenticated user. It verifies PostgreSQL-backed Argon2 identities and issues short-lived HS256 JWTs.
 
 For more info about deployment click [here](./docs/deployment-guide.md)
 
@@ -191,11 +193,11 @@ Do not run `azd down` against an existing shared resource group as a rollback st
 
 Start the Account MCP service (8070), Transaction MCP service (8071), local Responses agent (8088), Responses BFF (8080), and Vite frontend (5170). The BFF uses `RESPONSES_UPSTREAM_MODE=local`, so browser requests never call Foundry directly during local validation.
 
-In VS Code, press `F5` with `DEV - Full Stack Ordered` to start all five services and open the frontend at `http://localhost:5170/`. The frontend task waits for Vite to report that URL; port `5170` must be available for this launch configuration.
+In VS Code, press `F5` with `DEV - Full Stack Ordered` to start all five services and open the frontend at `http://localhost:5170/`. The frontend task waits for Vite to report that URL; port `5170` must be available for this launch configuration. Set `DATABASE_URL` in the ignored root `.env.dev` so Account, Transaction, and the BFF use the seeded PostgreSQL database.
 
 The BFF exposes the protected Responses endpoint at `http://localhost:8080/responses`; the local agent listens at `http://localhost:8088/responses`.
 
-For local Azure OpenAI inference with `PROFILE=dev`, sign in with `az login` using an identity that has the `Cognitive Services OpenAI User` role on the configured Azure AI Services resource. Configure approved Argon2 test users in the BFF's ignored local environment and sign in through the frontend. Do not substitute a fixed development bearer token.
+For local Azure OpenAI inference with `PROFILE=dev`, sign in with `az login` using an identity that has the `Cognitive Services OpenAI User` role on the configured Azure AI Services resource. Create approved persisted test identities through the [demo user seeder](./app/business-api/data/README.md#seed-demo-users) and sign in through the frontend. Do not substitute a fixed development bearer token.
 
 <h2><img src="./docs/assets/supporting-documentation.png" width="48" />
 Supporting documentation
@@ -203,7 +205,7 @@ Supporting documentation
 
 ### Restrict access to the public web app
 
-The root Terraform stack does not configure network access restrictions for the public web app. Prototype JWT authentication and dummy-data ownership checks exist, but do not expose real customer data until PostgreSQL ownership relationships, hosted identity transport, and deployment controls are verified.
+The root Terraform stack does not configure network access restrictions for the public web app. Prototype JWT authentication and persisted ownership checks exist, but do not expose real customer data until hosted identity transport, deployment controls, and the complete authorization validation matrix are verified.
 
 ### Prototype limitations
 
@@ -211,9 +213,9 @@ This repository is a hackathon prototype. It demonstrates an architecture patter
 
 Current limitations to keep explicit:
 
-- End-user login uses environment-configured Argon2 identities and short-lived JWTs; it is not a production identity lifecycle.
-- PostgreSQL-backed users, account ownership relationships, and banking data are not implemented.
-- Account and Transaction enforce ownership over dummy mappings, which must be preserved and revalidated when repositories replace them.
+- End-user login uses PostgreSQL-backed Argon2 identities and short-lived JWTs; it is not a production identity lifecycle.
+- The frontend displays persisted customer names and owned accounts, including explicit multi-account selection. Account codes absent from the schema are omitted; Agreements and Privacy & Security Policy remain inherited placeholders.
+- Account and Transaction use persisted product ownership and transaction rows. Their read-only PostgreSQL integration tests cover authorized, foreign-customer, and missing-resource access, but the full browser validation matrix still requires an approved local test login.
 - MCP and internal API authorization must be enforced in service code (`customer_id` ownership checks), not inferred from prompts.
 - The frontend must not call Foundry or agent endpoints directly; browser traffic must go through the Responses BFF.
 - The BFF validates application identity and proxies upstream requests, but this does not replace per-resource authorization in business services.
@@ -240,9 +242,9 @@ In short: the intended secure pattern is `frontend -> BFF -> hosted agent -> aut
 
 The sample does not cover the following aspects, essential to the security of the solution:
 
-- **Prototype identities only**: The BFF verifies environment-configured Argon2 users and issues short-lived JWTs. Registration, password reset, revocation, and PostgreSQL persistence are not implemented.
+- **Prototype identity lifecycle**: The BFF verifies PostgreSQL-backed Argon2 users and issues short-lived JWTs. Registration, password reset, MFA, and revocation are not implemented.
 - **Local identity chain only**: Signed BFF-to-agent identity and 60-second agent-to-MCP bearers are validated locally. Hosted delegated-identity transport remains unverified.
-- **Dummy ownership data**: Account and Transaction service methods enforce `customer_id` ownership over sample mappings. Real database relationships and authorization tests remain pending.
+- **Persisted ownership checks**: Account and Transaction service methods enforce `customer_id` ownership through PostgreSQL product relationships and transaction-row filters. Hosted transport and full browser scenario validation remain pending.
 - **Conversation binding is application-scoped**: The BFF binds conversation identifiers to verified JWT subjects, but production persistence, lifecycle, and hosted isolation still require validation.
 
 When deploying to production with real customer data, consider implementing:
