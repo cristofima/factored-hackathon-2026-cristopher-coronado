@@ -1,9 +1,15 @@
 from __future__ import annotations
 
 from logging.config import fileConfig
+from pathlib import Path
+import sys
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
+
+DATA_DIR = Path(__file__).resolve().parents[1]
+if str(DATA_DIR) not in sys.path:
+    sys.path.insert(0, str(DATA_DIR))
 
 from database import get_database_url
 from models import SQLModel

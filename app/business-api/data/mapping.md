@@ -5,17 +5,15 @@ The loader uses `C:\Factored\data` only as a local source supplied through
 
 ## Load Scope
 
-| Target           | Source                 | Selection                                                |
-| ---------------- | ---------------------- | -------------------------------------------------------- |
-| `branches`       | `branches.csv`         | All rows                                                 |
-| `customers`      | `customers.csv`        | All rows                                                 |
-| `service_agents` | `service_agents.csv`   | All rows                                                 |
-| `products`       | `products.csv`         | All rows                                                 |
-| `transactions`   | Daily transaction CSVs | `process_date` from 2025-12-01 through 2026-05-31        |
-| `users`          | Prototype-owned seed   | Two or three selected customers; no source password data |
-
-The transaction window contains 182 complete daily partitions. June 2026 is excluded
-because the available month ends on June 17.
+| Target                      | Source                               | Selection                                                         |
+| --------------------------- | ------------------------------------ | ----------------------------------------------------------------- |
+| `branches`                  | `branches.csv`                       | Complete shared catalog                                           |
+| `customers`                 | `customers.csv`                      | Requested customer IDs, or all rows when no filter is supplied    |
+| `service_agents`            | `service_agents.csv`                 | Complete shared catalog                                           |
+| `products`                  | `products.csv`                       | Products owned by the selected customers                          |
+| `transactions`              | Daily transaction CSVs               | Selected customers and the requested inclusive date window        |
+| `product_monthly_snapshots` | PostgreSQL `products`/`transactions` | Derived complete months for the requested customer and date scope |
+| `users`                     | Authentication workstream            | Never populated by the data loader                                |
 
 ## Tool Mapping
 
@@ -50,4 +48,11 @@ because the available month ends on June 17.
 - Service agents are loaded for referential context but are outside the active Account
   and Transaction workflow.
 - Payment, campaign, digital-event, complaint, call-center, transcript, and survey data
-  are outside this load.
+  are outside this load. A full-day cross-check found no digital event linked to a
+  transaction by customer, amount, and time, so digital events cannot supply accounting
+  direction.
+- Transaction amounts are unsigned in the source and the loaded schema has no direction
+  or reversal-reference column. Monthly snapshots are explicitly estimated: approved
+  deposits are credits; payments, purchases, transfers, and withdrawals are debits;
+  adjustments are excluded; all non-approved statuses have zero balance effect. Snapshot
+  rows persist the policy and the accumulated unsigned adjustment amount as uncertainty.
