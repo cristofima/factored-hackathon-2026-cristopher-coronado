@@ -12,14 +12,15 @@ This directory contains the GitHub Actions workflows used to deploy application 
 
 ## Workflow inventory
 
-| Workflow file               | Purpose                            | Trigger path                             | azd project root | Deploy command                                             |
-| --------------------------- | ---------------------------------- | ---------------------------------------- | ---------------- | ---------------------------------------------------------- |
-| `deploy-account.yaml`       | Deploy Account API App Service     | `app/business-api/account/**`            | repository root  | `azd deploy account --no-prompt`                           |
-| `deploy-payment.yaml`       | Deploy Payment API App Service     | `app/business-api/payment/**`            | repository root  | `azd deploy payment --no-prompt`                           |
-| `deploy-transaction.yaml`   | Deploy Transaction API App Service | `app/business-api/transaction/**`        | repository root  | `azd deploy transaction --no-prompt`                       |
-| `deploy-responses-bff.yaml` | Deploy JWT-protected Responses BFF | `app/responses-bff/**`                   | repository root  | `azd deploy responses-bff --no-prompt`                     |
-| `deploy-web.yaml`           | Deploy frontend Web App Service    | `app/frontend/banking-web/**`            | repository root  | `azd deploy web --no-prompt`                               |
-| `deploy-hosted-agent.yaml`  | Deploy Foundry hosted agent        | `app/backend/**` and `workflow_dispatch` | `app/backend`    | `azd -C app/backend deploy home-banking-agent --no-prompt` |
+| Workflow file               | Purpose                              | Trigger path                             | azd project root | Deploy command                                             |
+| --------------------------- | ------------------------------------ | ---------------------------------------- | ---------------- | ---------------------------------------------------------- |
+| `data-ci.yml`               | Validate Data Python build and tests | `app/business-api/data/**`               | n/a              | n/a                                                        |
+| `deploy-account.yaml`       | Deploy Account API App Service       | `app/business-api/account/**`            | repository root  | `azd deploy account --no-prompt`                           |
+| `deploy-payment.yaml`       | Deploy Payment API App Service       | `app/business-api/payment/**`            | repository root  | `azd deploy payment --no-prompt`                           |
+| `deploy-transaction.yaml`   | Deploy Transaction API App Service   | `app/business-api/transaction/**`        | repository root  | `azd deploy transaction --no-prompt`                       |
+| `deploy-responses-bff.yaml` | Deploy JWT-protected Responses BFF   | `app/responses-bff/**`                   | repository root  | `azd deploy responses-bff --no-prompt`                     |
+| `deploy-web.yaml`           | Deploy frontend Web App Service      | `app/frontend/banking-web/**`            | repository root  | `azd deploy web --no-prompt`                               |
+| `deploy-hosted-agent.yaml`  | Deploy Foundry hosted agent          | `app/backend/**` and `workflow_dispatch` | `app/backend`    | `azd -C app/backend deploy home-banking-agent --no-prompt` |
 
 ## Why two azd project roots exist
 
@@ -100,6 +101,21 @@ must not be read as evidence that either feature is active.
 - If no files in a workflow path change, that workflow does not run on push.
 - Manual runs are enabled for `deploy-hosted-agent.yaml` and `deploy-responses-bff.yaml` (`workflow_dispatch`).
 - All workflows are non-interactive (`--no-prompt`) and fail fast when required values are missing.
+
+## Data CI workflow details
+
+`data-ci.yml` validates the Python data module under `app/business-api/data` without acting as a style gate.
+
+- Blocking checks:
+  - Dependency install (`uv sync --dev --frozen --no-build`)
+  - Python syntax/bytecode compile check (`python -m compileall -q .`)
+  - Tests (`pytest -q tests --junitxml=junit.xml`)
+- Non-blocking signals:
+  - Coverage summary (only when `coverage.xml` exists)
+  - Test and coverage artifact upload (`junit.xml`, optional `coverage.xml`)
+- Not included by design:
+  - Strict lint/style gating (for example max line length)
+  - SonarQube scan
 
 ## Troubleshooting
 
