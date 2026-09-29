@@ -7,6 +7,7 @@ on:
     paths:
       - "app/responses-bff/**"
       - "!app/responses-bff/**/*.md"
+      - "app/business-api/shared/**"
       - ".github/workflows/cd-responses-bff.yaml"
       - ".github/actions/cd-azure/**"
   workflow_dispatch:
@@ -28,10 +29,9 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
           location: ${{ vars.AZURE_LOCATION }}
           resource-group: ${{ vars.AZURE_RESOURCE_GROUP }}
-      - name: Configure JWT secret
+      - name: Configure BFF secrets
         env:
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
-          AUTH_USERS: ${{ secrets.RESPONSES_BFF_AUTH_USERS }}
           JWT_SECRET_KEY: ${{ secrets.RESPONSES_BFF_JWT_SECRET }}
           INTERNAL_IDENTITY_SECRET: ${{ secrets.INTERNAL_IDENTITY_SECRET }}
         run: |
@@ -44,10 +44,6 @@ jobs:
             echo "::error::INTERNAL_IDENTITY_SECRET must contain at least 32 characters"
             exit 1
           fi
-          if ! jq -e 'type == "array" and length > 0 and all(.[]; (.id | type == "string") and (.customer_id | type == "string") and (.email | type == "string") and (.password_hash | startswith("$argon2")) and (.locale | type == "string"))' <<< "$AUTH_USERS" > /dev/null; then
-            echo "::error::RESPONSES_BFF_AUTH_USERS must be a non-empty JSON array with valid Argon2 user records"
-            exit 1
-          fi
           BFF_APP_NAME="$(az resource list --resource-type Microsoft.Web/sites --query "[?resourceGroup=='$AZURE_RESOURCE_GROUP' && contains(name, 'responses-bff')].name | [0]" --output tsv)"
           if [ -z "$BFF_APP_NAME" ]; then
             echo "::error::Responses BFF App Service was not found in $AZURE_RESOURCE_GROUP"
@@ -56,7 +52,7 @@ jobs:
           az webapp config appsettings set \
             --resource-group "$AZURE_RESOURCE_GROUP" \
             --name "$BFF_APP_NAME" \
-            --settings "JWT_SECRET_KEY=$JWT_SECRET_KEY" "AUTH_USERS=$AUTH_USERS" "INTERNAL_IDENTITY_SECRET=$INTERNAL_IDENTITY_SECRET" \
+            --settings "JWT_SECRET_KEY=$JWT_SECRET_KEY" "INTERNAL_IDENTITY_SECRET=$INTERNAL_IDENTITY_SECRET" \
             --output none
       - name: Deploy Responses BFF
         run: azd deploy responses-bff --no-prompt
