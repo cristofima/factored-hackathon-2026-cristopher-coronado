@@ -1,0 +1,120 @@
+name: Python CI
+description: Set up a Python project, verify syntax, run tests, and publish test artifacts.
+
+inputs:
+  project-path:
+    description: Path to the Python project.
+    required: true
+  python-version:
+    description: Python version used by the project.
+    required: false
+    default: "3.11"
+  pytest-path:
+    description: Preferred test directory relative to the project.
+    required: false
+    default: tests
+  artifact-name:
+    description: Name of the uploaded test artifact.
+    required: false
+    default: python-test-results
+  run-tests:
+    description: Whether pytest should run when a test directory exists.
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v7.0.0
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Set up uv
+      uses: astral-sh/setup-uv@v8.3.2
+      with:
+        enable-cache: true
+        save-cache: true
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install dependencies
+      shell: bash
+      working-directory: ${{ inputs.project-path }}
+      run: |
+        set -euo pipefail
+        if uv sync --dev --frozen --no-build; then
+          echo "Installed dependencies with --dev"
+        elif uv sync --frozen --no-build; then
+          echo "Installed dependencies without --dev"
+        else
+          echo "::error::Unable to sync dependencies for ${{ inputs.project-path }}"
+          exit 1
+        fi
+
+    - name: Compile check (syntax)
+      shell: bash
+      working-directory: ${{ inputs.project-path }}
+      run: uv run --frozen --no-sync --no-build python -m compileall -q .
+
+    - name: Detect test path
+      id: detect-tests
+      shell: bash
+      working-directory: ${{ inputs.project-path }}
+      run: |
+        set -euo pipefail
+        if [ -d "${{ inputs.pytest-path }}" ]; then
+          echo "path=${{ inputs.pytest-path }}" >> "$GITHUB_OUTPUT"
+          echo "exists=true" >> "$GITHUB_OUTPUT"
+        elif [ -d "tests" ]; then
+          echo "path=tests" >> "$GITHUB_OUTPUT"
+          echo "exists=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "path=" >> "$GITHUB_OUTPUT"
+          echo "exists=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Run tests
+      if: ${{ inputs.run-tests == 'true' && steps.detect-tests.outputs.exists == 'true' }}
+      shell: bash
+      working-directory: ${{ inputs.project-path }}
+      run: uv run --frozen --no-sync --no-build pytest -q "${{ steps.detect-tests.outputs.path }}" --junitxml=junit.xml
+
+    - name: Skip tests (no test directory)
+      if: ${{ inputs.run-tests == 'true' && steps.detect-tests.outputs.exists != 'true' }}
+      shell: bash
+      working-directory: ${{ inputs.project-path }}
+      run: echo "No tests directory found in ${{ inputs.project-path }}; skipping pytest"
+
+    - name: Upload test and coverage artifacts
+      if: ${{ !cancelled() }}
+      uses: actions/upload-artifact@v7.0.1
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: |
+          ${{ inputs.project-path }}/junit.xml
+          ${{ inputs.project-path }}/coverage.xml
+        retention-days: 14
+        if-no-files-found: ignore
+
+    - name: Coverage summary
+      if: ${{ !cancelled() && hashFiles(format('{0}/coverage.xml', inputs.project-path)) != '' }}
+      continue-on-error: true
+      uses: irongut/CodeCoverageSummary@v1.3.0
+      with:
+        filename: ${{ inputs.project-path }}/coverage.xml
+        format: markdown
+        output: both
+
+    - name: Add coverage summary to job summary
+      if: ${{ !cancelled() && hashFiles(format('{0}/coverage.xml', inputs.project-path)) != '' }}
+      continue-on-error: true
+      shell: bash
+      run: cat code-coverage-results.md >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Test report
+      if: ${{ !cancelled() && github.event_name == 'push' && hashFiles(format('{0}/junit.xml', inputs.project-path)) != '' }}
+      uses: dorny/test-reporter@v3.0.0
+      with:
+        name: Pytest Results (${{ inputs.project-path }})
+        path: ${{ inputs.project-path }}/junit.xml
+        reporter: python-xunit

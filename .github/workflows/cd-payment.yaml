@@ -1,0 +1,32 @@
+name: Deploy Payment API
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "app/business-api/payment/**"
+      - "!app/business-api/payment/**/*.md"
+      - ".github/workflows/cd-payment.yaml"
+      - ".github/actions/cd-azure/**"
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: Development
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/cd-azure
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          location: ${{ vars.AZURE_LOCATION }}
+          resource-group: ${{ vars.AZURE_RESOURCE_GROUP }}
+      - name: Deploy payment
+        run: azd deploy payment --no-prompt
