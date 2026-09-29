@@ -1,0 +1,38 @@
+name: Account CI
+
+on:
+  push:
+    branches: ["main", "develop", "feature/*", "refactor/*"]
+    paths:
+      - "app/business-api/account/**"
+      - "!app/business-api/account/**/*.md"
+      - ".github/workflows/ci-account.yml"
+      - ".github/actions/ci-python/**"
+  pull_request:
+    branches: ["main", "develop"]
+    types: [opened, reopened, synchronize, ready_for_review]
+    paths:
+      - "app/business-api/account/**"
+      - "!app/business-api/account/**/*.md"
+      - ".github/workflows/ci-account.yml"
+      - ".github/actions/ci-python/**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  build-and-test:
+    name: Build & Test (account)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: ./.github/actions/ci-python
+        with:
+          project-path: app/business-api/account
+          artifact-name: account-test-results
+          run-tests: "true"

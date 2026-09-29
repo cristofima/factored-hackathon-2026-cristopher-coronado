@@ -1,13 +1,14 @@
-name: Deploy Account API
+name: Deploy Transaction API
 
 on:
   push:
     branches:
       - main
     paths:
-      - "app/business-api/account/**"
-      - "!app/business-api/account/**/*.md"
-      - ".github/workflows/deploy-account.yaml"
+      - "app/business-api/transaction/**"
+      - "!app/business-api/transaction/**/*.md"
+      - ".github/workflows/cd-transaction.yaml"
+      - ".github/actions/cd-azure/**"
   workflow_dispatch:
 
 permissions:
@@ -20,21 +21,13 @@ jobs:
     environment: Development
     steps:
       - uses: actions/checkout@v4
-      - uses: Azure/setup-azd@v2
-      - uses: azure/login@v2
+      - uses: ./.github/actions/cd-azure
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      - name: Configure azd environment
-        env:
-          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-          AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
-          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
-        run: |
-          azd config set auth.useAzCliAuth true
-          azd env new development --subscription "$AZURE_SUBSCRIPTION_ID" --location "$AZURE_LOCATION" --no-prompt
-          azd env set AZURE_RESOURCE_GROUP "$AZURE_RESOURCE_GROUP"
+          location: ${{ vars.AZURE_LOCATION }}
+          resource-group: ${{ vars.AZURE_RESOURCE_GROUP }}
       - name: Configure internal identity secret
         env:
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
@@ -45,9 +38,9 @@ jobs:
             echo "::error::INTERNAL_IDENTITY_SECRET must contain at least 32 characters"
             exit 1
           fi
-          APP_NAME="$(az resource list --resource-type Microsoft.Web/sites --query "[?resourceGroup=='$AZURE_RESOURCE_GROUP' && contains(name, 'account')].name | [0]" --output tsv)"
+          APP_NAME="$(az resource list --resource-type Microsoft.Web/sites --query "[?resourceGroup=='$AZURE_RESOURCE_GROUP' && contains(name, 'transaction')].name | [0]" --output tsv)"
           if [ -z "$APP_NAME" ]; then
-            echo "::error::Account App Service was not found in $AZURE_RESOURCE_GROUP"
+            echo "::error::Transaction App Service was not found in $AZURE_RESOURCE_GROUP"
             exit 1
           fi
           az webapp config appsettings set \
@@ -55,5 +48,5 @@ jobs:
             --name "$APP_NAME" \
             --settings "INTERNAL_IDENTITY_SECRET=$INTERNAL_IDENTITY_SECRET" \
             --output none
-      - name: Deploy account
-        run: azd deploy account --no-prompt
+      - name: Deploy transaction
+        run: azd deploy transaction --no-prompt

@@ -1,0 +1,38 @@
+name: Payment CI
+
+on:
+  push:
+    branches: ["main", "develop", "feature/*", "refactor/*"]
+    paths:
+      - "app/business-api/payment/**"
+      - "!app/business-api/payment/**/*.md"
+      - ".github/workflows/ci-payment.yml"
+      - ".github/actions/ci-python/**"
+  pull_request:
+    branches: ["main", "develop"]
+    types: [opened, reopened, synchronize, ready_for_review]
+    paths:
+      - "app/business-api/payment/**"
+      - "!app/business-api/payment/**/*.md"
+      - ".github/workflows/ci-payment.yml"
+      - ".github/actions/ci-python/**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  build-and-test:
+    name: Build & Test (payment)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: ./.github/actions/ci-python
+        with:
+          project-path: app/business-api/payment
+          artifact-name: payment-test-results
+          run-tests: "true"
