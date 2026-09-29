@@ -14,8 +14,8 @@ The loader upserts tables in dependency order:
 4. `products`
 5. `transactions`
 
-The `users` table is not populated by this pipeline. Application identities are managed
-separately by the authentication workstream.
+The pipeline does not populate the `users` table. Create selected demo identities
+separately with `seed_demo_users.py` after their customer rows have been loaded.
 
 ## Pipeline
 
@@ -42,6 +42,7 @@ DATABASE_URL=postgresql+psycopg://...
 DATA_SOURCE_DIR=C:/Factored/data
 DATA_ARTIFACTS_DIR=C:/Factored/factored-hackathon-2026-cristopher-coronado/app/business-api/data/artifacts
 DATA_MANIFEST_DIR=C:/Factored/factored-hackathon-2026-cristopher-coronado/app/business-api/data/artifacts
+DEMO_USER_PASSWORD=
 ```
 
 | Variable             | Purpose                                                                           |
@@ -50,6 +51,7 @@ DATA_MANIFEST_DIR=C:/Factored/factored-hackathon-2026-cristopher-coronado/app/bu
 | `DATA_SOURCE_DIR`    | Directory containing dimension CSVs and the partitioned `transactions` directory. |
 | `DATA_ARTIFACTS_DIR` | Directory for EDA profiles and scope manifests.                                   |
 | `DATA_MANIFEST_DIR`  | Directory for load manifests. This is a directory, not a JSON filename.           |
+| `DEMO_USER_PASSWORD` | Shared password hashed for users created by `seed_demo_users.py`.                 |
 
 The orchestrator derives a new manifest filename from the requested window. A fixed
 `DATA_MANIFEST_PATH` is intentionally not used because it would overwrite the evidence
@@ -57,6 +59,10 @@ from a previous run.
 
 Always pass the environment file explicitly to `uv`; it is ignored by Git and is not
 loaded automatically.
+
+Copy `app/business-api/data/.env.example` to the ignored
+`app/business-api/data/.env`, replace its example values, and keep the real password out
+of source control.
 
 ## Recommended Command
 
@@ -146,6 +152,30 @@ Summary days_total=N days_loaded=N days_failed=N rows_loaded_total=N
 EDA and scope selection only read source files and overwrite artifacts with the same
 date-derived name. Loading uses PostgreSQL upsert by primary key, so repeating a window
 does not create duplicate rows. Existing rows with matching primary keys are updated.
+
+## Seed Demo Users
+
+After loading the selected customers, create their persisted login identities with one
+shared password from `DEMO_USER_PASSWORD`:
+
+```powershell
+uv run --project app/business-api/data --env-file app/business-api/data/.env python app/business-api/data/scripts/seed_demo_users.py --customer-ids CUSTOMER_A,CUSTOMER_B,CUSTOMER_C
+```
+
+The command uses each customer's stored email. Locale is inferred from `customers.country`:
+`Brazil` or `Brasil` maps to `pt`, and every other country maps to `es`. Pass
+`--locale es` or `--locale pt` only when every selected user needs the same explicit
+override.
+
+Seeding is idempotent by `customer_id`. Existing matching users keep their user ID while
+email, password hash, and locale are refreshed. Users outside the selected list are not
+deleted or changed. Unknown customer IDs are reported and skipped without stopping valid
+customers in the same command. A non-secret manifest is written under
+`DATA_ARTIFACTS_DIR`.
+
+The [Responses BFF](../../responses-bff/README.md) authenticates directly against these persisted rows. Configure its
+`DATABASE_URL` to point to the same database; no user JSON or copied password hash is
+required in the BFF environment.
 
 ## Monthly Product Snapshots
 
