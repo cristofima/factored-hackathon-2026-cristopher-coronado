@@ -67,7 +67,10 @@ Set these in **Settings > Environments > Development > Variables**.
 
 ### Responses BFF secret (`cd-responses-bff.yaml`)
 
-Set `RESPONSES_BFF_JWT_SECRET` and `RESPONSES_BFF_AUTH_USERS` under **Settings > Environments > Development > Secrets**. The JWT secret must contain at least 32 characters. `RESPONSES_BFF_AUTH_USERS` is a JSON array of `id`, `customer_id`, `email`, `password_hash`, and `locale` fields; each password hash must be Argon2. The workflow writes both values directly to App Service settings, so Terraform and `azd` environment state never contain them.
+Set `RESPONSES_BFF_JWT_SECRET` under **Settings > Environments > Development > Secrets**.
+It must contain at least 32 characters. The workflow writes it directly to App Service
+settings, so Terraform and `azd` environment state never contain it. Terraform configures
+the BFF `DATABASE_URL` for the shared PostgreSQL database.
 
 ### Internal identity secret
 
@@ -105,8 +108,8 @@ Optional (observability and tracing behavior):
 `cd-responses-bff.yaml` performs these steps:
 
 1. Authenticates with Azure via OIDC and selects the root `development` azd environment.
-2. Validates `RESPONSES_BFF_JWT_SECRET` and `RESPONSES_BFF_AUTH_USERS` without printing them.
-3. Writes `JWT_SECRET_KEY` and `AUTH_USERS` directly to the provisioned BFF App Service.
+2. Validates `RESPONSES_BFF_JWT_SECRET` without printing it.
+3. Writes `JWT_SECRET_KEY` directly to the provisioned BFF App Service.
 4. Deploys only `responses-bff`.
 
 The BFF App Service uses its system-assigned managed identity to call Foundry. Terraform grants that identity the built-in `Foundry Agent Consumer` role and the project-scoped delegated user identity action required by the Responses endpoint.
