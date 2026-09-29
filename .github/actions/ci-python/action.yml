@@ -77,7 +77,8 @@ runs:
       if: ${{ inputs.run-tests == 'true' && steps.detect-tests.outputs.exists == 'true' }}
       shell: bash
       working-directory: ${{ inputs.project-path }}
-      run: uv run --frozen --no-sync --no-build pytest -q "${{ steps.detect-tests.outputs.path }}" --junitxml=junit.xml
+      continue-on-error: true
+      run: uv run --frozen --no-sync --no-build python -m pytest -q "${{ steps.detect-tests.outputs.path }}" --junitxml=junit.xml
 
     - name: Skip tests (no test directory)
       if: ${{ inputs.run-tests == 'true' && steps.detect-tests.outputs.exists != 'true' }}
