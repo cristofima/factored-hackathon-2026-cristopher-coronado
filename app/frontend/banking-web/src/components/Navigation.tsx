@@ -16,7 +16,13 @@ export default function Navigation() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
-  const initials = user?.email ? user.email.slice(0, 2).toUpperCase() : "EB";
+  const displayName = user?.name || user?.email || "Account";
+  const nameParts = user?.name?.trim().split(/\s+/);
+  const lastInitial =
+    nameParts && nameParts.length > 1 ? nameParts[nameParts.length - 1][0] : "";
+  const initials = nameParts?.length
+    ? `${nameParts[0][0]}${lastInitial}`.toUpperCase()
+    : user?.email?.slice(0, 2).toUpperCase() || "EB";
 
   const handleLogout = () => {
     logout();
@@ -46,11 +52,14 @@ export default function Navigation() {
       </div>
 
       <div className="flex items-center space-x-4">
-        <div className="text-right">
-          <div className="text-sm font-medium text-slate-900">
-            Banking customer
+        <div className="text-right min-w-0 max-w-48 sm:max-w-64">
+          <div
+            className="text-sm font-medium text-slate-900 truncate"
+            title={displayName}
+          >
+            {displayName}
           </div>
-          <div className="text-xs text-slate-500">
+          <div className="text-xs text-slate-500 truncate">
             {user?.email ?? "loading…"}
           </div>
         </div>
@@ -62,7 +71,7 @@ export default function Navigation() {
               className="flex items-center space-x-2 h-auto p-2 hover:bg-slate-50"
             >
               <Avatar className="h-8 w-8">
-                <AvatarImage alt={user?.email ?? "Banking customer"} />
+                <AvatarImage alt={displayName} />
                 <AvatarFallback className="bg-primary text-primary-foreground text-sm">
                   {initials}
                 </AvatarFallback>
@@ -73,9 +82,7 @@ export default function Navigation() {
           <DropdownMenuContent align="end" className="w-56 bg-white">
             <DropdownMenuLabel>
               <div>
-                <div className="font-medium">
-                  {user?.email ?? "Banking customer"}
-                </div>
+                <div className="font-medium break-words">{displayName}</div>
                 <div className="text-xs text-slate-400">
                   Customer {user?.customerId}
                 </div>
