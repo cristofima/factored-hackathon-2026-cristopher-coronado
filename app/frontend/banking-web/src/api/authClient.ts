@@ -7,6 +7,7 @@ export interface AuthenticatedUser {
     customerId: string;
     email: string;
     locale: string;
+    name: string | null;
 }
 
 interface AuthenticatedUserResponse {
@@ -14,6 +15,7 @@ interface AuthenticatedUserResponse {
     customer_id: string;
     email: string;
     locale: string;
+    name?: string | null;
 }
 
 interface LoginResponse {
@@ -21,11 +23,38 @@ interface LoginResponse {
     user: AuthenticatedUserResponse;
 }
 
+export interface AccountSummary {
+    id: string;
+    type: string;
+    status: string | null;
+    opened: string | null;
+    number: string | null;
+    currency: string;
+}
+
+export const getAccounts = async (signal?: AbortSignal): Promise<AccountSummary[]> => {
+    const token = getAuthToken();
+    if (!token) {
+        throw new Error("Sign in to view your accounts");
+    }
+    const response = await fetch(`${AUTH_API_URL}/auth/me/accounts`, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal,
+    });
+    if (!response.ok) {
+        throw new Error(response.status === 401
+            ? "Your session has expired. Sign in again."
+            : "Accounts are temporarily unavailable");
+    }
+    return response.json();
+};
+
 const mapUser = (user: AuthenticatedUserResponse): AuthenticatedUser => ({
     id: user.sub,
     customerId: user.customer_id,
     email: user.email,
     locale: user.locale,
+    name: user.name ?? null,
 });
 
 export const login = async (email: string, password: string): Promise<AuthenticatedUser> => {

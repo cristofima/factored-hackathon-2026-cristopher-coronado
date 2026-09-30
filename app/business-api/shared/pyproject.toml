@@ -1,0 +1,10 @@
+[project]
+name = "banking-shared"
+version = "0.1.0"
+description = "Shared SQLModel schema and database helpers for the banking services."
+requires-python = ">=3.11"
+dependencies = ["psycopg[binary]>=3.3.3", "sqlmodel>=0.0.37"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

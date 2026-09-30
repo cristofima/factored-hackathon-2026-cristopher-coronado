@@ -6,6 +6,7 @@ on:
     paths:
       - "app/responses-bff/**"
       - "!app/responses-bff/**/*.md"
+      - "app/business-api/shared/**"
       - ".github/workflows/ci-responses-bff.yml"
       - ".github/actions/ci-python/**"
   pull_request:
@@ -14,6 +15,7 @@ on:
     paths:
       - "app/responses-bff/**"
       - "!app/responses-bff/**/*.md"
+      - "app/business-api/shared/**"
       - ".github/workflows/ci-responses-bff.yml"
       - ".github/actions/ci-python/**"
 

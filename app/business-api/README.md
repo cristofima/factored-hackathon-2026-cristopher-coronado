@@ -1,6 +1,6 @@
 # Banking Assistant Business API - Python FastMCP Services
 
-A collection of Python-based FastMCP servers that provide simulated banking tools used by the Banking Assistant Copilot application. These microservices expose banking operations through the Model Context Protocol (MCP) for seamless integration with AI agents.
+A collection of Python-based FastMCP servers used by the Banking Assistant. Account and Transaction read PostgreSQL-backed dataset rows through the shared SQLModel package and expose inquiry tools through the Model Context Protocol (MCP). Payment remains an inherited compatibility service outside the active workflow.
 
 ## 🏗️ Architecture
 
@@ -176,9 +176,13 @@ The Payment service remains in this directory but is not connected to the active
 
 Account and Transaction MCP endpoints require a short-lived bearer created by the
 Responses agent from BFF-verified identity. Their `services.py` methods enforce
-`customer_id` ownership over the current dummy mappings before returning customer-owned
-resources. Keep those checks in the service layer when PostgreSQL repositories replace
-the mappings; tool descriptions and agent instructions are not authorization boundaries.
+`customer_id` ownership through persisted product relationships and transaction-row
+filters before returning customer-owned resources. Keep those checks in the service layer;
+tool descriptions and agent instructions are not authorization boundaries.
+
+The [Responses BFF](../responses-bff/README.md) separately reads persisted users,
+customer names, and owned savings/checking products for browser login and the Account
+page. Browser application JWTs are not substitutes for the internal MCP bearer.
 
 ## 🐛 Development & Debugging
 
@@ -192,4 +196,6 @@ Do not spend additional effort expanding dummy-data scenarios. Repeat the owners
 conversation-isolation, and transaction checks against PostgreSQL-backed hackathon data
 when it is available.
 
-The services provide simulated banking data for development and testing purposes. In a production environment, these would connect to real banking systems and databases.
+Account and Transaction use loaded hackathon dataset rows, not live bank integrations.
+The [data module guide](data/README.md) covers ingestion and demo identity seeding.
+Production banking integration and deployment security controls remain outside this prototype.
