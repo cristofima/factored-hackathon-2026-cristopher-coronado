@@ -24,6 +24,8 @@ import NotFound from "./pages/NotFound";
 import Login from "./pages/Login";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { AgentResponseProvider } from "@/context/AgentResponseContext";
+import { UiLocaleProvider } from "@/context/UiLocaleProvider";
+import { useTranslation } from "react-i18next";
 
 const queryClient = new QueryClient();
 
@@ -43,13 +45,16 @@ const ProtectedShell = () => (
 );
 
 const RequireAuth = ({ children }: { children: ReactNode }) => {
+  const { t } = useTranslation();
   const { user, loading } = useAuth();
   const location = useLocation();
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <p className="text-base text-slate-500">Restoring your workspace…</p>
+        <p className="text-base text-slate-500">
+          {t("Restoring your workspace...")}
+        </p>
       </div>
     );
   }
@@ -68,24 +73,26 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route
-              element={
-                <RequireAuth>
-                  <ProtectedShell />
-                </RequireAuth>
-              }
-            >
-              <Route index element={<Dashboard />} />
-              <Route path="credit-cards" element={<CreditCardManagement />} />
-              <Route path="portfolio" element={<InvestmentPortfolio />} />
-              <Route path="analytics" element={<TransactionAnalytics />} />
-              <Route path="account" element={<Account />} />
-              <Route path="support" element={<Support />} />
-              <Route path="*" element={<NotFound />} />
-            </Route>
-          </Routes>
+          <UiLocaleProvider>
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route
+                element={
+                  <RequireAuth>
+                    <ProtectedShell />
+                  </RequireAuth>
+                }
+              >
+                <Route index element={<Dashboard />} />
+                <Route path="credit-cards" element={<CreditCardManagement />} />
+                <Route path="portfolio" element={<InvestmentPortfolio />} />
+                <Route path="analytics" element={<TransactionAnalytics />} />
+                <Route path="account" element={<Account />} />
+                <Route path="support" element={<Support />} />
+                <Route path="*" element={<NotFound />} />
+              </Route>
+            </Routes>
+          </UiLocaleProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
