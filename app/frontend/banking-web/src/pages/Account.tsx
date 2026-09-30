@@ -51,11 +51,9 @@ export default function Account() {
     : "Not available";
 
   return (
-    <div className="p-8 max-w-6xl mx-auto space-y-8">
-      <h1 className="text-3xl font-bold mb-2 text-slate-900">
-        Account Overview
-      </h1>
-      <p className="text-slate-600 mb-6 text-base">
+    <div className="p-6 max-w-6xl space-y-6">
+      <h1 className="text-2xl font-bold text-foreground">Account Overview</h1>
+      <p className="max-w-3xl text-sm text-muted-foreground">
         Access your essential account details, codes, agreements, and policy
         information. For any questions, please contact{" "}
         <a
@@ -96,7 +94,7 @@ export default function Account() {
             id="account-selector"
             value={selectedId}
             onChange={(event) => setSelectedId(event.target.value)}
-            className="w-full max-w-xl rounded-md border border-input bg-background p-3"
+            className="h-10 w-full max-w-xl rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {accounts.map((item) => (
               <option key={item.id} value={item.id}>
@@ -107,63 +105,60 @@ export default function Account() {
           </select>
         </div>
       )}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-start">
         {/* General Information */}
-        <Card className="p-8 shadow-xl border border-slate-200 flex-1">
+        <Card className="p-5 shadow-sm md:col-start-1">
           <section>
-            <h2 className="text-xl font-semibold mb-2 text-slate-800 flex items-center gap-2">
+            <h2 className="text-base font-semibold mb-4">
               General Information
             </h2>
-            <div className="text-slate-700 text-base leading-relaxed">
-              <div className="mb-2 break-words">
-                <span className="font-medium">Account Holder:</span>{" "}
-                {user?.name || user?.email || "Not available"}
+            <dl className="space-y-3 text-sm">
+              <div className="grid grid-cols-[8rem_minmax(0,1fr)] gap-3">
+                <dt className="text-muted-foreground">Account Holder</dt>
+                <dd className="break-words font-medium">
+                  {user?.name || user?.email || "Not available"}
+                </dd>
               </div>
               {account && (
                 <>
-                  <div className="mb-2">
-                    <span className="font-medium">Account Type:</span>{" "}
-                    {account.type}
+                  <div className="grid grid-cols-[8rem_minmax(0,1fr)] gap-3">
+                    <dt className="text-muted-foreground">Account Type</dt>
+                    <dd>{account.type}</dd>
                   </div>
-                  <div className="mb-2">
-                    <span className="font-medium">Status:</span>{" "}
-                    {account.status || "Not available"}
+                  <div className="grid grid-cols-[8rem_minmax(0,1fr)] gap-3">
+                    <dt className="text-muted-foreground">Status</dt>
+                    <dd>{account.status || "Not available"}</dd>
                   </div>
-                  <div className="mb-2">
-                    <span className="font-medium">Opened:</span> {opened}
+                  <div className="grid grid-cols-[8rem_minmax(0,1fr)] gap-3">
+                    <dt className="text-muted-foreground">Opened</dt>
+                    <dd>{opened}</dd>
                   </div>
-                  <div>
-                    <span className="font-medium">Currency:</span>{" "}
-                    {account.currency}
+                  <div className="grid grid-cols-[8rem_minmax(0,1fr)] gap-3">
+                    <dt className="text-muted-foreground">Currency</dt>
+                    <dd>{account.currency}</dd>
                   </div>
                 </>
               )}
-            </div>
+            </dl>
           </section>
         </Card>
         {/* Account Codes */}
         {account?.number && (
-          <Card className="p-8 shadow-xl border border-slate-200 flex-1">
+          <Card className="p-5 shadow-sm md:col-start-2 md:row-start-1">
             <section>
-              <h2 className="text-xl font-semibold mb-2 text-slate-800 flex items-center gap-2">
-                Account Codes
-              </h2>
-              <div className="grid grid-cols-1 gap-4 text-slate-700">
-                <div>
-                  <span className="font-medium">Account Number:</span>{" "}
-                  <span className="font-mono break-all">{account.number}</span>
-                </div>
-              </div>
+              <h2 className="text-base font-semibold mb-4">Account Codes</h2>
+              <dl className="space-y-2 text-sm">
+                <dt className="text-muted-foreground">Account Number</dt>
+                <dd className="font-mono break-all">{account.number}</dd>
+              </dl>
             </section>
           </Card>
         )}
         {/* Agreements */}
-        <Card className="p-8 shadow-xl border border-slate-200 flex-1">
+        <Card className="p-5 shadow-sm md:col-start-1 md:row-start-2">
           <section>
-            <h2 className="text-xl font-semibold mb-2 text-slate-800 flex items-center gap-2">
-              Agreements
-            </h2>
-            <ul className="list-disc ml-6 text-slate-700 space-y-2">
+            <h2 className="text-base font-semibold mb-4">Agreements</h2>
+            <ul className="list-disc ml-5 text-sm space-y-3">
               <li>
                 <a href="#" className="text-blue-600 underline font-medium">
                   Terms of Service
@@ -187,12 +182,12 @@ export default function Account() {
           </section>
         </Card>
         {/* Policy */}
-        <Card className="p-8 shadow-xl border border-slate-200 flex-1">
+        <Card className="p-5 shadow-sm md:col-start-2 md:row-start-2">
           <section>
-            <h2 className="text-xl font-semibold mb-2 text-slate-800 flex items-center gap-2">
+            <h2 className="text-base font-semibold mb-4">
               Privacy & Security Policy
             </h2>
-            <div className="text-slate-700 text-base leading-relaxed">
+            <div className="text-sm leading-relaxed">
               <p className="mb-2">
                 Your privacy and security are our top priorities. We use
                 industry-leading encryption and security practices to protect

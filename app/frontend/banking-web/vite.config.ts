@@ -13,14 +13,9 @@ export default defineConfig(({ mode }) => ({
     port: 5170,
     host: "0.0.0.0",
     proxy: {
-      // Proxy API requests to local backend server on port 8080
-      '/api/accounts/': {
-        target: 'http://localhost:8070',
-        changeOrigin: true
-      },
-      '/api/transactions/': {
-        target: 'http://localhost:8071',
-        changeOrigin: true
+      "/accounts": {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
       },
       "/responses": {
         target: 'http://localhost:8080',
