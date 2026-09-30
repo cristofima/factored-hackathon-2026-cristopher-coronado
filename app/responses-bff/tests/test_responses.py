@@ -25,8 +25,11 @@ from bff.settings import Settings
 TEST_SECRET = "test-secret-key-with-at-least-32-bytes"
 
 
-def test_internal_identity_signs_verified_email_without_browser_credentials() -> None:
+@pytest.mark.parametrize("locale", ["es", "pt", "en", "en-US", "fr"])
+def test_internal_identity_signs_verified_email_without_browser_credentials(locale: str) -> None:
     user = _authenticated_user("user-a")
+    user = AuthenticatedUser(sub=user.sub, customer_id=user.customer_id,
+                             email=user.email, locale=locale)
 
     identity = create_internal_identity(user, TEST_SECRET)
 
@@ -37,6 +40,7 @@ def test_internal_identity_signs_verified_email_without_browser_credentials() ->
         "sub": user.sub,
         "customer_id": user.customer_id,
         "email": user.email,
+        "locale": user.locale,
     }
     assert hmac.compare_digest(
         signature,

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import {
   AlertCircle,
   Atom,
@@ -583,6 +584,7 @@ function ClientToolCallRenderer({ item }: { item: ClientToolCallItem }) {
 // Error Item Renderer
 // ============================================================================
 function ErrorItemRenderer({ item }: { item: ErrorItem }) {
+  const { t } = useTranslation();
   const { retryLastMessage } = useChat();
 
   return (
@@ -590,15 +592,23 @@ function ErrorItemRenderer({ item }: { item: ErrorItem }) {
       <div className="flex items-start gap-3">
         <AlertCircle className="h-5 w-5 flex-shrink-0 text-destructive" />
         <div className="flex-1">
-          <p className="font-medium text-destructive">Error</p>
+          <p className="font-medium text-destructive">{t("Error")}</p>
           {item.message && (
-            <p className="mt-1 text-sm text-foreground">{item.message}</p>
+            <p className="mt-1 text-sm text-foreground">
+              {t(
+                item.code === "AUTH_REQUIRED" || item.http_status === 401
+                  ? "Session expired"
+                  : item.code === "ACCESS_DENIED" || item.http_status === 403
+                    ? "Access denied"
+                    : "Request failed",
+              )}
+            </p>
           )}
-          <p className="mt-1 text-xs text-muted-foreground">
-            {item.http_status
-              ? `HTTP ${item.http_status}`
-              : `Code: ${item.code}`}
-          </p>
+          {item.http_status && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              {`HTTP ${item.http_status}`}
+            </p>
+          )}
         </div>
         {item.allow_retry && (
           <Button
@@ -608,7 +618,7 @@ function ErrorItemRenderer({ item }: { item: ErrorItem }) {
             className="flex-shrink-0 gap-2"
           >
             <RefreshCw className="h-3.5 w-3.5" />
-            Retry
+            {t("Retry")}
           </Button>
         )}
       </div>

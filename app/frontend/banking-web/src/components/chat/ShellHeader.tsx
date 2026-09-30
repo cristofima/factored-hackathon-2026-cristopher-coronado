@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/common/utils";
 import { useChat } from "./ResponsesChatProvider";
+import { useTranslation } from "react-i18next";
 
 export interface ShellHeaderConfig {
   /** Show/hide the entire header */
@@ -39,6 +40,7 @@ interface ShellHeaderProps {
 }
 
 export function ShellHeader({ config }: ShellHeaderProps) {
+  const { t } = useTranslation();
   const { activeThread, createThread, historyOpen, toggleHistory } = useChat();
 
   const {
@@ -46,9 +48,9 @@ export function ShellHeader({ config }: ShellHeaderProps) {
     showIcon = true,
     icon: IconComponent = Sparkles,
     showTitle = true,
-    titleLabel = "Banking copilot",
+    titleLabel = t("Banking copilot"),
     showActiveThread = true,
-    activeThreadFallback = "Untitled thread",
+    activeThreadFallback = t("Untitled thread"),
     showNewThreadButton = true,
     showHistoryButton = true,
     customContent,
@@ -103,11 +105,11 @@ export function ShellHeader({ config }: ShellHeaderProps) {
                   onClick={() => createThread()}
                 >
                   <SquarePen className="h-4 w-4" />
-                  <span className="sr-only">Start new thread</span>
+                  <span className="sr-only">{t("Start new thread")}</span>
                 </Button>
               </TooltipTrigger>
               <TooltipContent sideOffset={6}>
-                Start a fresh conversation
+                {t("Start a fresh conversation")}
               </TooltipContent>
             </Tooltip>
           )}
@@ -125,11 +127,11 @@ export function ShellHeader({ config }: ShellHeaderProps) {
                   )}
                 >
                   <History className="h-4 w-4" />
-                  <span className="sr-only">View history</span>
+                  <span className="sr-only">{t("View history")}</span>
                 </Button>
               </TooltipTrigger>
               <TooltipContent sideOffset={6}>
-                {historyOpen ? "Close history" : "Show thread history"}
+                {t(historyOpen ? "Close history" : "Show thread history")}
               </TooltipContent>
             </Tooltip>
           )}

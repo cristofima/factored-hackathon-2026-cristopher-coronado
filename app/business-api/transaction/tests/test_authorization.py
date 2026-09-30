@@ -29,28 +29,28 @@ def session_factory() -> Callable[[], Session]:
                     product_id="account-owned",
                     product_number="ACCOUNT-NUMBER",
                     customer_id="customer-owned",
-                    product_type="Cuenta Corriente",
+                    product_type="Checking Account",
                     currency="USD",
                 ),
                 Product(
                     product_id="card-owned",
                     product_number="4111111111111111",
                     customer_id="customer-owned",
-                    product_type="Tarjeta Cr\u00e9dito",
+                    product_type="Credit Card",
                     currency="USD",
                 ),
                 Product(
                     product_id="account-foreign",
                     product_number="FOREIGN-NUMBER",
                     customer_id="customer-foreign",
-                    product_type="Cuenta Ahorro",
+                    product_type="Savings Account",
                     currency="USD",
                 ),
                 Product(
                     product_id="card-foreign",
                     product_number="5555555555554444",
                     customer_id="customer-foreign",
-                    product_type="Tarjeta D\u00e9bito",
+                    product_type="Debit Card",
                     currency="USD",
                 ),
             ]
@@ -158,7 +158,7 @@ def test_duplicate_owned_numbers_are_denied(session_factory: Callable[[], Sessio
     with session_factory() as session:
         session.add(Product(
             product_id="duplicate", customer_id="customer-owned",
-            product_type="Cuenta Ahorro", currency="USD", product_number="ACCOUNT-NUMBER",
+            product_type="Savings Account", currency="USD", product_number="ACCOUNT-NUMBER",
         ))
         session.commit()
 
@@ -199,3 +199,29 @@ def test_foreign_and_missing_products_are_indistinguishable(
             product_id,
             "customer-owned",
         )
+
+
+@pytest.mark.parametrize("label", ("Debit Card", "Tarjeta D\u00e9bito"))
+def test_owned_debit_card_transactions_are_masked(
+    session_factory: Callable[[], Session], label: str,
+) -> None:
+    with session_factory() as session:
+        product = session.get(Product, "card-owned")
+        assert product is not None
+        product.product_type = label
+        session.add(product)
+        session.commit()
+
+    if label != "Debit Card":
+        with pytest.raises(PermissionError, match="authenticated customer"):
+            TransactionService(session_factory).get_transactions_by_type(
+                "ACCOUNT-NUMBER", "customer-owned", card_id="4111111111111111",
+            )
+        return
+
+    transactions = TransactionService(session_factory).get_transactions_by_type(
+        "ACCOUNT-NUMBER", "customer-owned", card_id="4111111111111111",
+    )
+
+    assert [transaction.id for transaction in transactions] == ["card-tx-1"]
+    assert transactions[0].product_number == "**** 1111"

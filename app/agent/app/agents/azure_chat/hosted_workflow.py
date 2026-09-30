@@ -9,6 +9,7 @@ from app.agents.azure_chat.account_agent import AccountAgent
 from app.agents.azure_chat.transaction_agent import TransactionHistoryAgent
 from app.helpers.handoff_middleware import HandoffNarrationMiddleware
 from app.helpers.no_history_provider import NoHistoryProvider
+from app.helpers.user_profile_provider import UserProfileProvider
 
 
 TRIAGE_INSTRUCTIONS = """
@@ -54,7 +55,7 @@ def build_hosted_workflow(
         name="triage_agent",
         description="Routes banking requests to the account or transaction specialist.",
         require_per_service_call_history_persistence=True,
-        context_providers=[NoHistoryProvider()],
+        context_providers=[NoHistoryProvider(), UserProfileProvider(internal_identity_secret)],
         middleware=[HandoffNarrationMiddleware()],
     )
     account_agent = AccountAgent(

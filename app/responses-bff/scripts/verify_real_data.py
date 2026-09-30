@@ -23,6 +23,12 @@ from uuid import uuid4
 
 from banking_shared.database import get_database_url
 from banking_shared.models import Customer, Product, TransactionRecord, User
+from banking_shared.product_types import (
+    ACCOUNT_PRODUCT_TYPES,
+    CARD_PRODUCT_TYPES,
+    card_type as shared_card_type,
+    normalize_product_type,
+)
 from sqlalchemy import func
 from sqlmodel import Session, create_engine, select
 
@@ -33,8 +39,6 @@ from bff.user_repository import SqlModelUserRepository
 
 START = date(2026, 6, 1)
 END = date(2026, 6, 17)
-ACCOUNT_TYPES = ("Cuenta Ahorro", "Cuenta Corriente")
-CARD_TYPES = ("Tarjeta Cr\u00e9dito", "Tarjeta D\u00e9bito")
 EMAILS = ("mariana.flores@gmail.com", "raul.contreras518@hotmail.com")
 
 
@@ -91,9 +95,12 @@ def iso(value: date | datetime | None) -> str | None:
 
 
 def card_type(product: Product) -> str:
-    return {CARD_TYPES[0]: "credit", CARD_TYPES[1]: "debit"}.get(
-        product.product_type, product.product_type
-    )
+    return shared_card_type(product.product_type)
+
+
+def masked_card_number(product: Product) -> str | None:
+    return (f"**** {product.product_number[-4:]}"
+            if product.product_number and len(product.product_number) > 4 else None)
 
 
 def fields_equal(actual: Any, expected: dict[str, object]) -> bool:
@@ -101,7 +108,9 @@ def fields_equal(actual: Any, expected: dict[str, object]) -> bool:
 
 
 def account_expected(product: Product, customer: Customer) -> dict[str, object]:
-    return {"id": product.product_id, "userName": customer.email,
+        return {"accountNumber": product.product_number.strip()
+            if product.product_number and product.product_number.strip() else None,
+            "userName": customer.email,
             "accountHolderFullName": " ".join(filter(None, (customer.first_name,
                                                            customer.last_name))),
             "currency": product.currency, "activationDate": iso(product.opening_date),
@@ -110,22 +119,24 @@ def account_expected(product: Product, customer: Customer) -> dict[str, object]:
 
 
 def card_expected(product: Product) -> dict[str, object]:
-    return {"id": product.product_id, "type": card_type(product), "name": product.product_type,
+    return {"type": card_type(product), "name": normalize_product_type(product.product_type),
             "activationDate": iso(product.opening_date),
             "expirationDate": iso(product.expiration_date), "status": product.product_status,
             "balance": float(product.current_balance)
             if product.current_balance is not None else None,
             "limit": float(product.credit_limit) if product.credit_limit is not None else None,
-            "circuit": None, "number": None, "cvv": None, "rechargedAmount": None}
+            "circuit": None, "number": masked_card_number(product), "cvv": None,
+            "rechargedAmount": None}
 
 
 def transaction_expected(record: TransactionRecord, product: Product) -> dict[str, object]:
     return {"id": record.transaction_id, "type": record.transaction_type,
-            "recipientName": record.merchant_name, "accountId": record.product_id,
+            "recipientName": record.merchant_name,
+            "product_number": masked_card_number(product)
+            if product.product_type in CARD_PRODUCT_TYPES else product.product_number,
             "paymentType": record.channel, "amount": float(record.amount),
             "timestamp": iso(record.transaction_date), "category": record.transaction_category,
             "status": record.transaction_status,
-            "cardId": record.product_id if product.product_type in CARD_TYPES else None,
             "description": None, "flowType": None, "recipientBankReference": None}
 
 
@@ -145,7 +156,7 @@ def verify_pages(evidence: Evidence, repo: SqlModelUserRepository, user: User,
                  product: Product, expected: list[TransactionRecord]) -> None:
     collected: list[TransactionRecord] = []
     for offset in range(0, len(expected) + 7, 7):
-        result = repo.list_transactions(user.id, user.customer_id, product.product_id,
+        result = repo.list_transactions(user.id, user.customer_id, product.product_number,
                                         START, END, 7, offset)
         if result is None:
             evidence.equal("bff_pagination", False, True)
@@ -159,37 +170,37 @@ def verify_pages(evidence: Evidence, repo: SqlModelUserRepository, user: User,
     evidence.equal("bff_pagination", [item.model_dump() for item in collected],
                    [item.model_dump() for item in expected])
     evidence.equal("bff_empty_window", repo.list_transactions(
-        user.id, user.customer_id, product.product_id, date(1900, 1, 1),
+        user.id, user.customer_id, product.product_number, date(1900, 1, 1),
         date(1900, 1, 1), 7, 0), ([], 0))
 
 
 def verify_filters(evidence: Evidence, service: Any, product: Product, customer_id: str,
                    rows: list[TransactionRecord]) -> None:
     compare_transactions(evidence, "transaction_latest", service.get_transactions(
-        product.product_id, customer_id), rows[:5], product)
+        product.product_number, customer_id), rows[:5], product)
     compare_transactions(evidence, "transaction_unfiltered", service.get_transactions_by_type(
-        product.product_id, customer_id), rows, product)
+        product.product_number, customer_id), rows, product)
     for field, argument in (("transaction_type", "transaction_type"), ("channel", "payment_type")):
         for value in {getattr(row, field) for row in rows} - {None, ""}:
             compare_transactions(evidence, f"transaction_{argument}",
-                                 service.get_transactions_by_type(product.product_id, customer_id,
+                                 service.get_transactions_by_type(product.product_number, customer_id,
                                                                   **{argument: value}),
                                  [row for row in rows if getattr(row, field) == value], product)
             evidence.counts["filter_queries"] += 1
     compare_transactions(evidence, "transaction_empty_filter", service.get_transactions_by_type(
-        product.product_id, customer_id, transaction_type=str(uuid4())), [], product)
+        product.product_number, customer_id, transaction_type=str(uuid4())), [], product)
     merchant = next((row.merchant_name for row in rows if row.merchant_name), None)
     fragment = re.search(r"[A-Za-z0-9]+", merchant or "")
     if fragment:
         name = fragment.group()
         compare_transactions(evidence, "transaction_recipient",
                              service.get_transactions_by_recipient_name(
-                                 product.product_id, name, customer_id),
+                                 product.product_number, name, customer_id),
                              [row for row in rows if name.lower() in
                               (row.merchant_name or "").lower()], product)
     compare_transactions(evidence, "transaction_empty_recipient",
                          service.get_transactions_by_recipient_name(
-                             product.product_id, str(uuid4()), customer_id), [], product)
+                             product.product_number, str(uuid4()), customer_id), [], product)
 
 
 def verify_user(session: Session, factory: Callable[[], Session], user: User, foreign: User,
@@ -204,8 +215,9 @@ def verify_user(session: Session, factory: Callable[[], Session], user: User, fo
     customer = session.exec(select(Customer).where(Customer.customer_id == user.customer_id)).one()
     products = list(session.exec(select(Product).where(
         Product.customer_id == user.customer_id).order_by(Product.product_id)).all())
-    owned_accounts = [product for product in products if product.product_type in ACCOUNT_TYPES]
-    owned_cards = [product for product in products if product.product_type in CARD_TYPES]
+    owned_accounts = [product for product in products
+                      if product.product_type in ACCOUNT_PRODUCT_TYPES]
+    owned_cards = [product for product in products if product.product_type in CARD_PRODUCT_TYPES]
     all_rows = list(session.exec(select(TransactionRecord).where(
         TransactionRecord.customer_id == user.customer_id).order_by(
         TransactionRecord.transaction_date.desc(), TransactionRecord.transaction_id.desc())).all())
@@ -232,37 +244,39 @@ def verify_user(session: Session, factory: Callable[[], Session], user: User, fo
             row.customer_id == customer_id for row in product_rows), True)
         rows = [row for row in all_rows if row.product_id == product.product_id]
         verify_filters(evidence, transactions, product, customer_id, rows)
-        if product.product_type in ACCOUNT_TYPES:
+        if product.product_type in ACCOUNT_PRODUCT_TYPES:
             verify_pages(evidence, repo, user, product,
                          [row for row in window_rows if row.product_id == product.product_id])
-            detail = accounts.get_account_details(product.product_id, customer_id)
+            detail = accounts.get_account_details(product.product_number, customer_id)
             evidence.equal("account_details", fields_equal(detail, account_expected(
                 product, customer)), True)
-            summaries = [{"id": card.product_id, "type": card_type(card), "name": None,
+            summaries = [{"number": masked_card_number(card), "type": card_type(card), "name": None,
                           "activationDate": iso(card.opening_date),
                           "expirationDate": iso(card.expiration_date)} for card in owned_cards]
             evidence.equal("account_card_summaries", [item.model_dump() for item in
                            (detail.paymentMethods or [])], summaries)
-            returned = cards.get_credit_cards(product.product_id, customer_id)
+            returned = cards.get_credit_cards(product.product_number, customer_id)
             evidence.equal("cards_list", len(returned) == len(owned_cards) and all(
                 fields_equal(item, card_expected(card))
                 for item, card in zip(returned, owned_cards)), True)
             for card in owned_cards:
                 compare_transactions(evidence, "transaction_card_filter",
-                    transactions.get_transactions_by_type(product.product_id, customer_id,
-                                                          card_id=card.product_id),
+                    transactions.get_transactions_by_type(product.product_number, customer_id,
+                                                          card_id=card.product_number),
                     [row for row in all_rows if row.product_id == card.product_id], card)
-        if product.product_type in CARD_TYPES:
-            card = cards.get_card_details(product.product_id, customer_id)
+        if product.product_type in CARD_PRODUCT_TYPES:
+            card = cards.get_card_details(product.product_number, customer_id)
             evidence.equal("card_details", fields_equal(card, card_expected(product)), True)
             evidence.equal("card_balances_exact", card.balance is None
                            if product.current_balance is None else
                            Decimal(str(card.balance)) == product.current_balance, True)
     foreign_product = session.exec(select(Product).where(
-        Product.customer_id == foreign.customer_id, Product.product_type.in_(ACCOUNT_TYPES))).first()
+        Product.customer_id == foreign.customer_id,
+        Product.product_type.in_(ACCOUNT_PRODUCT_TYPES))).first()
     missing = str(uuid4())
-    evidence.equal("missing_product_verified", session.get(Product, missing), None)
-    for label, identifier in (("missing", missing), ("foreign", foreign_product.product_id)):
+    evidence.equal("missing_product_verified", session.exec(select(Product).where(
+        Product.product_number == missing)).first(), None)
+    for label, identifier in (("missing", missing), ("foreign", foreign_product.product_number)):
         evidence.equal(f"bff_{label}", repo.list_transactions(
             user.id, customer_id, identifier, START, END, 7, 0), None)
         for method in (accounts.get_account_details, cards.get_credit_cards,
@@ -272,7 +286,7 @@ def verify_user(session: Session, factory: Callable[[], Session], user: User, fo
     evidence.equal("bff_mismatched_accounts", repo.list_accounts(user.id, foreign.customer_id), [])
     evidence.equal("bff_mismatched_name", repo.find_customer_name(user.id, foreign.customer_id), None)
     evidence.equal("bff_mismatched_transactions", repo.list_transactions(
-        user.id, foreign.customer_id, foreign_product.product_id, START, END, 7, 0), None)
+        user.id, foreign.customer_id, foreign_product.product_number, START, END, 7, 0), None)
     evidence.denied("account_mismatched_email", lambda: users.get_accounts_by_user_name(
         foreign.email, customer_id))
     evidence.counts.update(accounts=len(owned_accounts), cards=len(owned_cards),

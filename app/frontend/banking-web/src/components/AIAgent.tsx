@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import {
   MessageCircle,
-  Send,
   X,
   Minimize2,
   Maximize2,
@@ -22,13 +22,10 @@ import {
   type ComposerConfig,
   type ShellContainerConfig,
 } from "@/components/chat";
-import type {
-  StarterPrompt,
-  ThreadItem,
-  Thread,
-} from "@/components/chat/types";
+import type { StarterPrompt } from "@/components/chat/types";
 
 export default function AIAgent() {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [showInvitation, setShowInvitation] = useState(true);
@@ -47,17 +44,17 @@ export default function AIAgent() {
   const BANKING_STARTER_PROMPTS: StarterPrompt[] = [
     {
       id: "account-review",
-      title: "Review my accounts",
-      description: "Account details and recorded balances",
+      title: t("Review my accounts"),
+      description: t("Account details and recorded balances"),
       icon: "💳",
-      content: "Show my bank accounts and their recorded balances",
+      content: t("Show my bank accounts and their recorded balances"),
     },
     {
       id: "transactions-search",
-      title: "Investigate payments",
-      description: "Search through your payments based on various criteria.",
+      title: t("Review transactions"),
+      description: t("Search your transaction history"),
       icon: "🛡️",
-      content: "when was last time I've paid contoso?",
+      content: t("Show my latest transactions"),
     },
   ];
 
@@ -75,7 +72,7 @@ export default function AIAgent() {
     // icon: Bot,                            // Custom icon (import from lucide-react)
     showTitle: false, // Show/hide title label           // Custom title text
     showActiveThread: false, // Show/hide active thread name
-    activeThreadFallback: "Untitled thread", // Text when no thread selected
+    activeThreadFallback: t("Untitled thread"), // Text when no thread selected
     showNewThreadButton: true, // Show/hide new thread button
     showHistoryButton: false, // Show/hide history toggle button
     // customContent: <div>Custom Header</div> // Completely replace header content
@@ -84,7 +81,7 @@ export default function AIAgent() {
   // Configure composer appearance and behavior
   // All properties are optional - omit to use defaults
   const composerConfig: ComposerConfig = {
-    placeholder: "Type your message...",
+    placeholder: t("Type your message..."),
     buttonSize: "sm", // "sm" | "md" | "lg"
     showAttachmentCounter: false, // Show/hide attachment counter
     maxAttachments: 5, // Maximum number of attachments
@@ -198,11 +195,12 @@ export default function AIAgent() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="text-sm font-semibold text-slate-900 mb-1">
-                    AI Assistant Ready
+                    {t("AI Assistant Ready")}
                   </h3>
                   <p className="text-xs text-slate-600 mb-2">
-                    Need help with banking tasks? I can assist with accounts and
-                    transaction history.
+                    {t(
+                      "Need help with banking tasks? I can assist with accounts and transaction history.",
+                    )}
                   </p>
                   <Button
                     size="sm"
@@ -212,11 +210,12 @@ export default function AIAgent() {
                     }}
                     className="text-xs h-7 bg-blue-600 hover:bg-blue-700"
                   >
-                    Start Chat
+                    {t("Start Chat")}
                   </Button>
                 </div>
                 <button
                   onClick={() => setShowInvitation(false)}
+                  aria-label={t("Close")}
                   className="text-slate-400 hover:text-slate-600 transition-colors"
                 >
                   <X className="h-4 w-4" />
@@ -229,6 +228,7 @@ export default function AIAgent() {
         {/* Chat Button */}
         <Button
           onClick={() => setIsOpen(true)}
+          aria-label={t("Start Chat")}
           className="h-14 w-14 rounded-full bg-blue-600 hover:bg-blue-700 shadow-professional-lg animate-bounce-gentle"
           size="icon"
         >
@@ -252,7 +252,7 @@ export default function AIAgent() {
         <div
           onMouseDown={handleResizeStart}
           className="absolute top-0 left-0 w-6 h-6 cursor-nwse-resize hover:bg-blue-100 transition-colors group z-10"
-          title="Drag to resize"
+          title={t("Drag to resize")}
         >
           <GripVertical className="h-4 w-4 text-slate-400 group-hover:text-blue-600 rotate-45 absolute top-1 left-1" />
         </div>
@@ -266,11 +266,11 @@ export default function AIAgent() {
           </div>
           <div>
             <h3 className="font-semibold text-sm text-slate-900">
-              AI Banking Assistant
+              {t("AI Banking Assistant")}
             </h3>
             <p className="text-xs text-slate-600 flex items-center">
               <span className="w-2 h-2 bg-green-500 rounded-full mr-1"></span>
-              Online & Ready to Help
+              {t("Online & Ready to Help")}
             </p>
           </div>
         </div>
@@ -279,6 +279,8 @@ export default function AIAgent() {
             variant="ghost"
             size="icon"
             onClick={() => setIsMinimized(!isMinimized)}
+            aria-label={t(isMinimized ? "Maximize" : "Minimize")}
+            title={t(isMinimized ? "Maximize" : "Minimize")}
             className="h-8 w-8 hover:bg-slate-100"
           >
             {isMinimized ? (
@@ -291,6 +293,8 @@ export default function AIAgent() {
             variant="ghost"
             size="icon"
             onClick={() => setIsOpen(false)}
+            aria-label={t("Close")}
+            title={t("Close")}
             className="h-8 w-8 hover:bg-slate-100"
           >
             <X className="h-4 w-4" />
@@ -308,6 +312,11 @@ export default function AIAgent() {
       >
         <ChatProvider
           starterPrompts={BANKING_STARTER_PROMPTS}
+          welcomeHeaderConfig={{
+            icon: <Sparkles className="h-8 w-8 text-primary" />,
+            title: t("Welcome to Banking Assistant"),
+            subtitle: t("How can I help with your accounts or transactions?"),
+          }}
           chatServerUrl={chatServerUrl}
           retryConfig={retryConfig}
           attachmentImageSize="lg"

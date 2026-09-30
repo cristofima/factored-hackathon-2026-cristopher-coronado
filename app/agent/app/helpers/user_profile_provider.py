@@ -10,7 +10,7 @@ from typing import Any
 
 from agent_framework import AgentSession, ContextProvider, SessionContext
 
-from app.helpers.user_profile_helper import UserProfileHelper
+from app.common.internal_identity import get_internal_principal
 
 import logging
 
@@ -35,10 +35,6 @@ class UserProfileProvider(ContextProvider):
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _get_logged_user_email(self) -> str:
-        """Return the email of the currently logged-in user."""
-        return UserProfileHelper.get_user_email(self._internal_identity_secret)
-
     @staticmethod
     def _get_current_timestamp() -> str:
         """Return the current date-time formatted as a string."""
@@ -57,7 +53,10 @@ class UserProfileProvider(ContextProvider):
         state: dict[str, Any],
     ) -> None:
         """Provide user profile context before each agent call."""
-        user_email = self._get_logged_user_email()
+        principal = get_internal_principal(self._internal_identity_secret)
+        user_email = principal.email
+        if user_email is None:
+            raise ValueError("Authenticated request email is required")
         current_timestamp = self._get_current_timestamp()
 
         logger.debug(
@@ -77,4 +76,12 @@ class UserProfileProvider(ContextProvider):
         context.extend_instructions(
             self.source_id,
             f"Current timestamp: {current_timestamp}",
+        )
+        language = {"es": "Spanish", "pt": "Portuguese", "en": "English"}[principal.locale]
+        context.extend_instructions(
+            self.source_id,
+            f"Respond to the user in {language} ({principal.locale}), including errors and "
+            "unavailable-operation explanations. Use this authenticated profile language "
+            "regardless of the language of the user's messages or conversation history. "
+            "Keep tool calls and operational data unchanged.",
         )

@@ -17,6 +17,25 @@ The loader upserts tables in dependency order:
 The pipeline does not populate the `users` table. Create selected demo identities
 separately with `seed_demo_users.py` after their customer rows have been loaded.
 
+## Product Types
+
+Ingestion normalizes `products.product_type` using the shared
+[product catalog](../shared/banking_shared/product_types.py). Canonical labels are
+Savings Account, Checking Account, Investment, Mortgage Loan, Personal Loan,
+Insurance, Credit Card and Debit Card. Known Spanish source labels, including
+both personal-loan spellings, are accepted with surrounding whitespace, case and
+accent normalization. Unknown scoped types reject the dimension transaction before
+commit; products outside a selected customer filter do not affect that load.
+
+Account, Transaction and BFF category queries use only canonical English labels.
+Spanish compatibility belongs to ingestion normalization, not database query filters.
+BFF product types and Account
+card names are canonical English; Account card `type` remains `credit`/`debit`.
+This does not migrate existing database rows. The user reports manually converting
+historical labels; that conversion was not independently verified in this follow-up.
+Rerun live scoped parity verification before closing the data gate.
+The existing manifest count/orphan checks do not independently verify label semantics.
+
 ## Pipeline
 
 Use `run_pipeline.py` for normal operation. It executes the individual scripts in this

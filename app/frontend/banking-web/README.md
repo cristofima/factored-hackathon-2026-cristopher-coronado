@@ -33,6 +33,42 @@ in-scope financial screens and have no direct-service Vite proxy.
 
 The frontend signs in through the [Responses BFF](../../responses-bff/README.md) at `/auth/login`, keeps the short-lived application JWT in browser storage, and restores verified identity through `/auth/me`. The BFF verifies PostgreSQL-backed Argon2 users and returns the persisted customer name. Navigation uses that name, with an email fallback. The frontend does not create users, fixed bearer tokens, or synthetic profiles.
 
+## Localization
+
+The [locale provider](src/context/UiLocaleProvider.tsx) uses the authenticated BFF
+profile's exact `es`, `pt`, or `en` locale. Missing, regional or unsupported values fall
+back to English; clearing the profile returns the UI to English. Login is always English.
+There is no browser-language detection, language selector or separately stored UI locale.
+
+The independent JSON catalogs for [English](src/locales/en.json),
+[Spanish](src/locales/es.json) and [Portuguese](src/locales/pt.json) have matching flat
+UI keys and nested transaction groups. [TypeScript configuration](src/i18n.ts) imports them statically; JSON separation
+does not introduce lazy loading or network requests. The catalogs cover navigation, financial screens, loading,
+empty and retry states, chat controls and generic approval controls. Product labels are
+translated for display; stored values, identifiers, precision and conversation messages
+are not rewritten. The chat welcome is static localized UI and does not send an automatic
+request to the agent. Actual agent responses use the separately verified signed backend
+locale context, not frontend translation.
+
+The `transactions.types`, `transactions.categories`, and `transactions.statuses`
+groups translate six types (including Payment), six categories, and four statuses
+in the financial table. Unknown values retain their original label; nulls show the
+localized unavailable state. Backend values still drive filters and calculations.
+Agent-generated Markdown, merchant names and channels are not translated by these groups.
+Nested lookups explicitly enable the dot separator without changing flat-key lookup.
+
+Controlled [BFF error codes](../../responses-bff/README.md#controlled-errors) are mapped
+to local UI messages. Raw backend details and unexpected exception messages are not
+displayed; login errors remain English.
+
+The frontend suite passed with 42 tests before the final Payment/category additions.
+The subsequent focused i18n suite passed with 13 tests, covering all transaction labels,
+catalog parity and unknown-label fallback; modified-file diagnostics were clean.
+Focused localization lint and production build passed before those final additions; the build retains a large-chunk
+warning. Full TypeScript checking reports existing errors in chat rendering/provider
+types and legacy BFF mocks. Authenticated browser localization, responsive layouts and
+live multilingual conversations were not validated in this change.
+
 ## Account Page
 
 The Account page calls `/auth/me/accounts` with the application JWT. The BFF selects only

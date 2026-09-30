@@ -1,5 +1,5 @@
 import { formatDistanceToNow } from "date-fns";
-import { Clock, FolderPlus, NotebookText } from "lucide-react";
+import { Clock, FolderPlus } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,8 +8,11 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/common/utils";
 import { useChat } from "./ResponsesChatProvider";
+import { useTranslation } from "react-i18next";
+import { enUS, es, pt } from "date-fns/locale";
 
 export function HistoryView() {
+  const { t, i18n } = useTranslation();
   const {
     threads,
     activeThreadId,
@@ -56,6 +59,12 @@ export function HistoryView() {
                 <span>
                   {formatDistanceToNow(new Date(thread.created_at), {
                     addSuffix: true,
+                    locale:
+                      i18n.language === "es"
+                        ? es
+                        : i18n.language === "pt"
+                          ? pt
+                          : enUS,
                   })}
                 </span>
                 <Badge
@@ -68,7 +77,7 @@ export function HistoryView() {
               </div>
               <div>
                 <p className="text-sm font-semibold text-foreground">
-                  {thread.title || "Untitled thread"}
+                  {thread.title || t("Untitled thread")}
                 </p>
               </div>
               {previewText && (
@@ -91,10 +100,10 @@ export function HistoryView() {
     <div className="flex flex-1 flex-col items-center justify-center gap-6 p-6 text-center">
       <div className="space-y-1">
         <p className="text-lg font-semibold text-foreground">
-          Start a new banking conversation
+          {t("Start a new banking conversation")}
         </p>
         <p className="text-sm text-muted-foreground">
-          Choose a template prompt or craft your own request.
+          {t("Choose a template prompt or craft your own request.")}
         </p>
       </div>
       <div className="grid w-full max-w-2xl gap-3 sm:grid-cols-2">
@@ -127,14 +136,14 @@ export function HistoryView() {
       <div className="flex items-center justify-between border-b border-border/70 px-4 py-3">
         <div>
           <p className="text-xs uppercase tracking-wide text-muted-foreground">
-            Thread history
+            {t("Thread history")}
           </p>
           <p className="text-sm font-medium text-foreground">
-            Pick a conversation or spin up a new one.
+            {t("Pick a conversation or spin up a new one.")}
           </p>
         </div>
         <Button size="sm" className="gap-1" onClick={() => createThread()}>
-          <FolderPlus className="h-4 w-4" /> New thread
+          <FolderPlus className="h-4 w-4" /> {t("New thread")}
         </Button>
       </div>
 
@@ -145,14 +154,7 @@ export function HistoryView() {
           <div className="flex flex-col gap-2 px-4 py-3 text-xs text-muted-foreground">
             <div className="flex items-center gap-2">
               <Clock className="h-3.5 w-3.5" />
-              <span>Threads are sorted by most recent activity.</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <NotebookText className="h-3.5 w-3.5" />
-              <span>
-                Starter prompts will appear when you archive your existing
-                threads.
-              </span>
+              <span>{t("Threads are sorted by most recent activity.")}</span>
             </div>
           </div>
         </>
