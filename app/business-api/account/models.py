@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 
 
 class PaymentMethodSummary(BaseModel):
-    id: str
+    number: Optional[str] = None
     type: str
     name: Optional[str] = None
     activationDate: Optional[str] = None
@@ -11,7 +11,6 @@ class PaymentMethodSummary(BaseModel):
 
 
 class PaymentMethod(BaseModel):
-    id: str
     type: str
     activationDate: Optional[str] = None
     expirationDate: Optional[str] = None
@@ -22,7 +21,6 @@ class PaymentMethod(BaseModel):
 
 
 class Card(BaseModel):
-    id: str
     #credit,debit,recharge
     type: str
     #Visa, Master Card, Amex, Diners Club, Discover
@@ -47,7 +45,10 @@ class Beneficiary(BaseModel):
 
 
 class Account(BaseModel):
-    id: str
+    accountNumber: Optional[str] = Field(
+        default=None,
+        description="Persisted bank account product number; never the internal product id",
+    )
     userName: str
     accountHolderFullName: str
     currency: str

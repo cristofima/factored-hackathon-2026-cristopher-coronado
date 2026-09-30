@@ -153,15 +153,15 @@ def _get_owned_product(
 ) -> Product:
     statement = (
         select(Product)
-        .where(Product.product_id == product_id)
+        .where(Product.product_number == product_id)
         .where(Product.customer_id == customer_id)
     )
     if product_types is not None:
         statement = statement.where(Product.product_type.in_(product_types))
-    product = session.exec(statement).first()
-    if product is None:
+    products = session.exec(statement.limit(2)).all()
+    if len(products) != 1:
         raise PermissionError("Account does not belong to the authenticated customer")
-    return product
+    return products[0]
 
 
 def _to_account(product: Product, customer: Customer, cards: list[Product]) -> Account:
@@ -169,7 +169,11 @@ def _to_account(product: Product, customer: Customer, cards: list[Product]) -> A
         part for part in (customer.first_name, customer.last_name) if part
     )
     return Account(
-        id=product.product_id,
+        accountNumber=(
+            product.product_number.strip()
+            if product.product_number and product.product_number.strip()
+            else None
+        ),
         userName=customer.email,
         accountHolderFullName=full_name,
         currency=product.currency,
@@ -181,7 +185,7 @@ def _to_account(product: Product, customer: Customer, cards: list[Product]) -> A
 
 def _to_payment_method_summary(product: Product) -> PaymentMethodSummary:
     return PaymentMethodSummary(
-        id=product.product_id,
+        number=f"**** {product.product_number[-4:]}" if product.product_number and len(product.product_number) > 4 else None,
         type=_card_type(product.product_type),
         activationDate=_date_value(product.opening_date),
         expirationDate=_date_value(product.expiration_date),
@@ -190,8 +194,11 @@ def _to_payment_method_summary(product: Product) -> PaymentMethodSummary:
 
 def _to_payment_method(product: Product) -> PaymentMethod:
     return PaymentMethod(
-        id=product.product_id,
         type=_card_type(product.product_type),
+        cardNumber=(
+            f"**** {product.product_number[-4:]}"
+            if product.product_number and len(product.product_number) > 4 else None
+        ),
         activationDate=_date_value(product.opening_date),
         expirationDate=_date_value(product.expiration_date),
         availableBalance=_decimal_float(product.current_balance),
@@ -201,8 +208,11 @@ def _to_payment_method(product: Product) -> PaymentMethod:
 
 def _to_card(product: Product) -> Card:
     return Card(
-        id=product.product_id,
         type=_card_type(product.product_type),
+        number=(
+            f"**** {product.product_number[-4:]}"
+            if product.product_number and len(product.product_number) > 4 else None
+        ),
         name=product.product_type,
         activationDate=_date_value(product.opening_date),
         expirationDate=_date_value(product.expiration_date),
