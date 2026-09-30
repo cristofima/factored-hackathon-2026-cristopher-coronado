@@ -22,3 +22,9 @@ output "AZURE_AI_FOUNDRY_ACCOUNT_NAME" { value = azapi_resource.foundry_account_
 output "AZURE_AI_FOUNDRY_PROJECT_NAME" { value = azapi_resource.foundry_project.name }
 output "AZURE_OPENAI_ENDPOINT" { value = azapi_resource.foundry_account_dedicated.output.properties.endpoint }
 output "FOUNDRY_PROJECT_ENDPOINT" { value = "https://${azapi_resource.foundry_account_dedicated.name}.services.ai.azure.com/api/projects/${azapi_resource.foundry_project.name}" }
+
+output "AZURE_POSTGRES_SERVER_NAME" { value = azapi_resource.postgres_server.name }
+output "AZURE_POSTGRES_DATABASE_NAME" { value = azapi_resource.postgres_database.name }
+output "AZURE_POSTGRES_HOST" { value = azapi_resource.postgres_server.output.properties.fullyQualifiedDomainName }
+output "AZURE_POSTGRES_PORT" { value = 5432 }
+output "AZURE_POSTGRES_ADMIN_USERNAME" { value = azapi_resource.postgres_server.output.properties.administratorLogin }

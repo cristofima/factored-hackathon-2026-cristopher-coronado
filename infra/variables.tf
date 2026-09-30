@@ -68,3 +68,57 @@ variable "foundry_project_name" {
   type        = string
   default     = null
 }
+
+variable "postgres_location" {
+  description = "Optional PostgreSQL region override; defaults to the existing resource group region."
+  type        = string
+  default     = null
+}
+
+variable "postgres_server_name" {
+  description = "Optional override for Azure Database for PostgreSQL Flexible Server name."
+  type        = string
+  default     = null
+}
+
+variable "postgres_database_name" {
+  description = "Primary PostgreSQL database name used by the application data pipeline."
+  type        = string
+  default     = "banking"
+}
+
+variable "postgres_admin_username" {
+  description = "Administrator login name for PostgreSQL Flexible Server."
+  type        = string
+  default     = "pgadmin"
+}
+
+variable "postgres_admin_password" {
+  description = "Administrator login password for PostgreSQL Flexible Server."
+  type        = string
+  sensitive   = true
+}
+
+variable "postgres_sku_name" {
+  description = "PostgreSQL Flexible Server SKU for the single development environment."
+  type        = string
+  default     = "B_Standard_B1ms"
+}
+
+variable "postgres_storage_mb" {
+  description = "Allocated storage in MB for PostgreSQL Flexible Server."
+  type        = number
+  default     = 32768
+}
+
+variable "postgres_version" {
+  description = "PostgreSQL major version."
+  type        = string
+  default     = "15"
+}
+
+variable "postgres_backup_retention_days" {
+  description = "Backup retention in days for PostgreSQL Flexible Server."
+  type        = number
+  default     = 7
+}
