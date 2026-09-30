@@ -5,8 +5,8 @@ on:
     branches:
       - main
     paths:
-      - "app/backend/**"
-      - "!app/backend/**/*.md"
+      - "app/agent/**"
+      - "!app/agent/**/*.md"
       - ".github/workflows/cd-hosted-agent.yaml"
       - ".github/actions/cd-azure/**"
   workflow_dispatch:
@@ -32,9 +32,9 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
           location: ${{ vars.AZURE_LOCATION }}
           resource-group: ${{ vars.AZURE_RESOURCE_GROUP }}
-          working-directory: app/backend
+          working-directory: app/agent
       - name: Install Foundry extensions
-        run: azd -C app/backend ext install microsoft.foundry
+        run: azd -C app/agent ext install microsoft.foundry
       - name: Configure Foundry environment
         env:
           AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
@@ -63,9 +63,9 @@ jobs:
                      AZURE_EXPERIMENTAL_ENABLE_GENAI_TRACING \
                      OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT \
                      INTERNAL_IDENTITY_SECRET; do
-            azd -C app/backend env set "$var" "${!var}"
+            azd -C app/agent env set "$var" "${!var}"
           done
       - name: Deploy hosted agent
-        run: azd -C app/backend deploy home-banking-agent --no-prompt
+        run: azd -C app/agent deploy home-banking-agent --no-prompt
       - name: Show agent status
-        run: azd -C app/backend ai agent show --no-prompt
+        run: azd -C app/agent ai agent show --no-prompt
