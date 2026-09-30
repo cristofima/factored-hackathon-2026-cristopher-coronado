@@ -12,14 +12,14 @@ flowchart LR
     Agent --> Transaction[Transaction MCP]
 ```
 
-- `app/backend`: Account/Transaction handoff workflow and Responses host.
+- `app/agent`: Account/Transaction handoff workflow and Responses host.
 - `app/responses-bff`: application JWT boundary and Responses proxy.
 - `app/business-api/account`: Account REST and MCP service.
 - `app/business-api/transaction`: Transaction REST and MCP service.
 - `app/business-api/data`: SQLModel/Alembic schema and verified CSV-to-PostgreSQL pipeline.
 - `app/frontend/banking-web`: React/Vite banking UI and Responses stream client.
 - `infra`: Terraform for the App Service stack and Foundry resources.
-- `app/backend/azure.yaml`: separate azd root for the hosted Foundry agent.
+- `app/agent/azure.yaml`: separate azd root for the hosted Foundry agent.
 
 Payment remains under `app/business-api/payment` and in the root infrastructure for compatibility, but it is not part of the active agent workflow. Do not reconnect it, modify that service as part of agent work, or reintroduce ChatKit and attachment uploads.
 
@@ -80,12 +80,12 @@ uv run --project app/business-api/data --env-file app/business-api/data/.env pyt
 - Use Python 3.11+, modern type annotations, async I/O, and `uv`.
 - Keep MCP tools thin; put business logic and authorization in service modules.
 - Keep agent instructions and tool schemas in English. The JWT already carries `locale`, but final-response locale injection remains pending until the context provider uses the verified per-request claim.
-- Preserve the separate root App Service and `app/backend` hosted-agent azd projects.
+- Preserve the separate root App Service and `app/agent` hosted-agent azd projects.
 
 ## Focused Checks
 
 ```powershell
-cd app/backend
+cd app/agent
 uv run pytest tests/test_hosted_workflow.py tests/test_settings.py -q
 
 cd ../responses-bff
