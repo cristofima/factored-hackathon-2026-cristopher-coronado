@@ -8,6 +8,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from banking_shared.product_types import normalize_product_type
 from sqlalchemy.dialects.postgresql import insert
 from sqlmodel import Session, SQLModel
 
@@ -129,7 +130,7 @@ def map_product(row: dict[str, str]) -> Row:
     return {
         "product_id": row["product_id"],
         "customer_id": row["customer_id"],
-        "product_type": row["product_type"],
+        "product_type": normalize_product_type(row["product_type"]),
         "product_number": optional(row["product_number"]),
         "currency": row["currency"],
         "current_balance": parse_decimal(row["current_balance"]),
