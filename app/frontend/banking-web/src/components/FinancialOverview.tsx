@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { ArrowRight, RefreshCw } from "lucide-react";
 import { AccountSummary, getAccounts } from "@/api/authClient";
 import { FinancialTransaction, getTransactions } from "@/api/financialClient";
+import { errorTranslationKey } from "@/api/errors";
 import {
   calendarDate,
   decimalString,
@@ -11,11 +12,13 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useTranslation } from "react-i18next";
 
 export default function FinancialOverview({
   analytics = false,
 }: Readonly<{ analytics?: boolean }>) {
   const { user } = useAuth();
+  const { t } = useTranslation();
   const [params, setParams] = useSearchParams();
   const requestedId = params.get("account") ?? "";
   const [accounts, setAccounts] = useState<AccountSummary[]>([]);
@@ -53,7 +56,7 @@ export default function FinancialOverview({
       .catch((cause: unknown) => {
         if (!controller.signal.aborted)
           setAccountsError(
-            cause instanceof Error ? cause.message : "Accounts are unavailable",
+            errorTranslationKey(cause, "Accounts are unavailable"),
           );
       })
       .finally(() => {
@@ -88,11 +91,7 @@ export default function FinancialOverview({
       })
       .catch((cause: unknown) => {
         if (!controller.signal.aborted)
-          setError(
-            cause instanceof Error
-              ? cause.message
-              : "Transactions are unavailable",
-          );
+          setError(errorTranslationKey(cause, "Transactions are unavailable"));
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
@@ -108,18 +107,14 @@ export default function FinancialOverview({
     update();
   };
   const visible = analytics ? records : records.slice(0, 5);
+  const errorKey = error ?? "Transactions are unavailable";
   return (
     <section className="p-6 space-y-6 animate-fade-in">
       <h1 className="text-2xl font-bold">
-        {analytics ? "Transaction Analytics" : "Dashboard Overview"}
+        {t(analytics ? "Transaction Analytics" : "Dashboard Overview")}
       </h1>
-      <p className="text-sm text-muted-foreground">
-        Persisted account data via authenticated BFF. Transaction dates show the
-        calendar date returned by the service, without browser timezone
-        conversion.
-      </p>
-      {accountsLoading && <output>Loading accounts...</output>}
-      {accountsError && <div role="alert">{accountsError}</div>}
+      {accountsLoading && <output>{t("Loading accounts...")}</output>}
+      {accountsError && <div role="alert">{t(accountsError)}</div>}
       {(accountsError || error) && (
         <Button
           variant="outline"
@@ -129,18 +124,20 @@ export default function FinancialOverview({
               : setAttempt((value) => value + 1)
           }
         >
-          <RefreshCw className="mr-2 h-4 w-4" aria-hidden="true" /> Retry
+          <RefreshCw className="mr-2 h-4 w-4" aria-hidden="true" /> {t("Retry")}
         </Button>
       )}
       {!accountsLoading && !accountsError && !accounts.length && (
-        <output>No bank accounts are registered for this customer.</output>
+        <output>
+          {t("No bank accounts are registered for this customer.")}
+        </output>
       )}
       {!!accounts.length && (
         <div className="flex flex-wrap gap-4 items-end border-b pb-5">
           <label className="space-y-2 min-w-0 w-80 text-sm font-medium">
-            <span>Account</span>
+            <span>{t("Account")}</span>
             <select
-              aria-label="Account"
+              aria-label={t("Account")}
               value={selectedId}
               onChange={(event) =>
                 changeWindow(() => {
@@ -159,16 +156,16 @@ export default function FinancialOverview({
                   value={item.number ?? ""}
                   disabled={!item.number}
                 >
-                  {item.type} - {item.number ?? "Number unavailable"} (
+                  {t(item.type)} - {item.number ?? t("Number unavailable")} (
                   {item.currency})
                 </option>
               ))}
             </select>
           </label>
           <label className="space-y-2 text-sm font-medium">
-            <span className="block">Start date</span>
+            <span className="block">{t("Start date")}</span>
             <input
-              aria-label="Start date"
+              aria-label={t("Start date")}
               type="date"
               value={start}
               onChange={(event) =>
@@ -178,9 +175,9 @@ export default function FinancialOverview({
             />
           </label>
           <label className="space-y-2 text-sm font-medium">
-            <span className="block">End date</span>
+            <span className="block">{t("End date")}</span>
             <input
-              aria-label="End date"
+              aria-label={t("End date")}
               type="date"
               value={end}
               onChange={(event) =>
@@ -195,59 +192,59 @@ export default function FinancialOverview({
         <Card className="max-w-xl shadow-sm">
           <CardHeader className="pb-3">
             <CardTitle className="text-base">
-              Selected Account Balance
+              {t("Selected Account Balance")}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold break-all tabular-nums mb-2">
               {account.balance === null
-                ? "Not available"
+                ? t("Not available")
                 : `${account.currency} ${account.balance}`}
             </p>
             <p className="text-sm text-muted-foreground">
-              Stored current balance, not a balance for the selected transaction
-              window. Status: {account.status ?? "Not available"}.
+              {t("Balance context", {
+                status: account.status ?? t("Not available"),
+              })}
             </p>
           </CardContent>
         </Card>
       )}
-      {loading && <output>Loading the complete transaction window...</output>}
-      {error && <div role="alert">{error}</div>}
+      {loading && (
+        <output>{t("Loading the complete transaction window...")}</output>
+      )}
+      {error && <div role="alert">{t(errorKey)}</div>}
       {account && !loading && !error && (
         <>
           <p className="text-sm text-muted-foreground">
-            {records.length} transaction records in {start} through {end}{" "}
-            (inclusive). All pages loaded for this read; concurrent dataset
-            changes may require a refresh.
+            {t("Window context", { count: records.length, start, end })}
           </p>
           {analytics && (
             <>
               <p className="text-sm text-muted-foreground">
-                Derived movement totals, not income or spending classifications:
-                Approved only; Deposit inflow; Payment, Purchase, Transfer and
-                Withdrawal outflow. Adjustments, unknown types, other statuses
-                and negative amounts are excluded. No mixed-currency totals.
-                Transfers follow this dataset policy, not amount signs.
+                {t("Movement policy")}
               </p>
-              <p>{summary.excluded} records excluded from movement totals.</p>
+              <p>{t("Excluded records", { count: summary.excluded })}</p>
               <div className="grid gap-4 md:grid-cols-2">
                 {[...summary.currencies].map(([currency, totals]) => (
                   <Card key={currency}>
                     <CardHeader>
-                      <CardTitle>{currency} movements</CardTitle>
+                      <CardTitle>
+                        {t("{{currency}} movements", { currency })}
+                      </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-2 break-all">
                       <p>
-                        Inflow: {currency} {decimalString(totals.inflow)}
+                        {t("Inflow")}: {currency} {decimalString(totals.inflow)}
                       </p>
                       <p>
-                        Outflow: {currency} {decimalString(totals.outflow)}
+                        {t("Outflow")}: {currency}{" "}
+                        {decimalString(totals.outflow)}
                       </p>
                       <p>
-                        Net movement: {currency}{" "}
+                        {t("Net movement")}: {currency}{" "}
                         {decimalString(totals.inflow - totals.outflow)}
                       </p>
-                      <p>{totals.count} classified records</p>
+                      <p>{t("Classified records", { count: totals.count })}</p>
                     </CardContent>
                   </Card>
                 ))}
@@ -257,16 +254,17 @@ export default function FinancialOverview({
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
-                {analytics
-                  ? "Transactions in Selected Window"
-                  : "Recent Transactions in Selected Window"}
+                {t(
+                  analytics
+                    ? "Transactions in Selected Window"
+                    : "Recent Transactions in Selected Window",
+                )}
               </CardTitle>
             </CardHeader>
             <CardContent>
               {!records.length ? (
                 <output className="block py-6 text-sm text-muted-foreground">
-                  No transactions in this date window. Try a window within the
-                  loaded dataset.
+                  {t("Empty window")}
                 </output>
               ) : (
                 <div className="overflow-x-auto">
@@ -282,7 +280,7 @@ export default function FinancialOverview({
                           "Amount",
                         ].map((heading) => (
                           <th key={heading} className="p-3 whitespace-nowrap">
-                            {heading}
+                            {t(heading)}
                           </th>
                         ))}
                       </tr>
@@ -297,17 +295,36 @@ export default function FinancialOverview({
                             {record.date.slice(0, 10)}
                           </td>
                           <td className="p-3">
-                            {record.merchant ?? "Not available"}
+                            {record.merchant ?? t("Not available")}
                           </td>
                           <td className="p-3">
-                            {record.type ?? "Not available"} /{" "}
-                            {record.category ?? "Not available"}
+                            {record.type === null
+                              ? t("Not available")
+                              : t(`transactions.types.${record.type}`, {
+                                  keySeparator: ".",
+                                  defaultValue: record.type,
+                                })}{" "}
+                            /{" "}
+                            {record.category === null
+                              ? t("Not available")
+                              : t(
+                                  `transactions.categories.${record.category}`,
+                                  {
+                                    keySeparator: ".",
+                                    defaultValue: record.category,
+                                  },
+                                )}
                           </td>
                           <td className="p-3">
-                            {record.channel ?? "Not available"}
+                            {record.channel ?? t("Not available")}
                           </td>
                           <td className="p-3">
-                            {record.status ?? "Not available"}
+                            {record.status === null
+                              ? t("Not available")
+                              : t(`transactions.statuses.${record.status}`, {
+                                  keySeparator: ".",
+                                  defaultValue: record.status,
+                                })}
                           </td>
                           <td className="p-3 whitespace-nowrap text-right font-medium tabular-nums">
                             {record.currency} {record.amount}
@@ -325,7 +342,7 @@ export default function FinancialOverview({
               to={`/analytics?${new URLSearchParams({ account: selectedId, start, end })}`}
               className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline"
             >
-              View full transaction analytics
+              {t("View full transaction analytics")}
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </Link>
           )}
@@ -334,13 +351,12 @@ export default function FinancialOverview({
       {!analytics && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Unavailable Features</CardTitle>
+            <CardTitle className="text-base">
+              {t("Unavailable Features")}
+            </CardTitle>
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground">
-            Credit limits, utilization, historical balance trends,
-            beneficiaries, payments, card management and investments have no
-            approved financial source in this view. No estimated snapshots or
-            mock values are displayed.
+            {t("Unavailable financial features")}
           </CardContent>
         </Card>
       )}
