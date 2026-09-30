@@ -30,7 +30,7 @@ Payment remains under `app/business-api/payment` and in the root infrastructure 
 - Conversation ownership is bound to the verified JWT subject.
 - The BFF signs verified `sub` and `customer_id` claims for the agent. The agent verifies that envelope and issues a fresh 60-second bearer for Account and Transaction MCP calls. This chain is validated locally; hosted transport behavior still requires proof.
 - Account and Transaction enforce customer-resource ownership in `services.py` through PostgreSQL product relationships and transaction filters. Preserve these checks when changing repositories.
-- Persisted users, customer names, and owned-account selection are implemented. Dynamic agent profile/locale injection and hosted identity transport validation remain pending. Do not add fixed tokens, `MOCK_SESSION_TOKEN`, fabricated claims, or a second login mechanism.
+- Persisted users, customer names, owned-account selection and signed profile/locale injection are implemented. Actual multilingual conversations and hosted identity transport validation remain pending. Do not add fixed tokens, `MOCK_SESSION_TOKEN`, fabricated claims, or a second login mechanism.
 - Never log JWTs, passwords, bearer tokens, or Azure credentials.
 
 ## Local Development
@@ -79,7 +79,7 @@ uv run --project app/business-api/data --env-file app/business-api/data/.env pyt
 - Keep `plan/` local-only and never stage or commit it.
 - Use Python 3.11+, modern type annotations, async I/O, and `uv`.
 - Keep MCP tools thin; put business logic and authorization in service modules.
-- Keep agent instructions and tool schemas in English. The JWT already carries `locale`, but final-response locale injection remains pending until the context provider uses the verified per-request claim.
+- Keep agent instructions and tool schemas in English. The profile provider uses signed per-request `locale` (`es`, `pt`, `en`, otherwise `en`) for response language. Do not infer it from messages or checkpoint state.
 - Preserve the separate root App Service and `app/agent` hosted-agent azd projects.
 
 ## Focused Checks
