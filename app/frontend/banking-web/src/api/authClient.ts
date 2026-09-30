@@ -24,7 +24,6 @@ interface LoginResponse {
 }
 
 export interface AccountSummary {
-    id: string;
     type: string;
     status: string | null;
     opened: string | null;

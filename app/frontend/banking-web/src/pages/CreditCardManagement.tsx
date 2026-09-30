@@ -62,25 +62,19 @@ const CreditCardManagement = () => {
       )}
       {!!cards.length && (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,360px),1fr))] gap-5 max-w-5xl">
-          {cards.map((card) => (
+          {cards.map((card, index) => (
             <article
-              key={card.id}
-              aria-labelledby={`card-${card.id}`}
+              key={index}
+              aria-labelledby={`card-${index}`}
               className="overflow-hidden rounded-lg border bg-card text-card-foreground shadow-sm"
             >
               <header className="flex items-start justify-between gap-4 border-b p-5">
                 <div className="min-w-0 space-y-2">
-                  <h2
-                    id={`card-${card.id}`}
-                    className="text-base font-semibold"
-                  >
+                  <h2 id={`card-${index}`} className="text-base font-semibold">
                     {card.type}
                   </h2>
                   <p className="font-mono text-lg tabular-nums">
                     {card.number ?? "Number unavailable"}
-                  </p>
-                  <p className="break-all text-xs text-muted-foreground">
-                    {card.id}
                   </p>
                 </div>
                 <span
