@@ -20,23 +20,24 @@ logger = logging.getLogger(__name__)
 class UserProfileProvider(ContextProvider):
     """Injects the current user's email and timestamp into every agent run.
 
-    User identity is resolved via ``UserProfileHelper`` which in production
-    would extract claims from an OIDC token.
+    User identity is resolved from the verified, signed BFF request envelope.
     """
 
     DEFAULT_SOURCE_ID = "user_profile_provider"
 
-    def __init__(self, source_id: str = DEFAULT_SOURCE_ID, **kwargs: Any):
+    def __init__(
+        self, internal_identity_secret: str, source_id: str = DEFAULT_SOURCE_ID
+    ) -> None:
         super().__init__(source_id)
+        self._internal_identity_secret = internal_identity_secret
 
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _get_logged_user_email() -> str:
+    def _get_logged_user_email(self) -> str:
         """Return the email of the currently logged-in user."""
-        return UserProfileHelper.get_user_email()
+        return UserProfileHelper.get_user_email(self._internal_identity_secret)
 
     @staticmethod
     def _get_current_timestamp() -> str:
@@ -67,7 +68,7 @@ class UserProfileProvider(ContextProvider):
 
         context.extend_instructions(
             self.source_id,
-            f"#Logged user information",
+            "#Logged user information",
         )
         context.extend_instructions(
             self.source_id,
