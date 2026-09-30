@@ -133,9 +133,16 @@ two approved users; PostgreSQL comparisons were performed separately. Transactio
 interaction, and the complete signed agent/MCP matrix remain open. Mobile responsive
 validation is deferred.
 
-The assistant is configured for Account and Transaction inquiries plus generic
-approval events, but verified profile injection is pending: the current provider
-still supplies a sample email and a local account lookup was denied. Hosted identity
-transport and deployed financial parity are not verified. See the
+The assistant uses the verified email from signed BFF identity for Account and
+Transaction inquiries, with generic approval-event support. User-supplied local
+browser evidence on 2026-09-30 shows an owned-account answer with a full bank number
+and masked card number, and a foreign-account denial rendered after `ACCESS_DENIED`.
+The reported blank chat response is resolved for these cases; Transaction chat,
+missing/empty results, multi-turn and approval continuation remain separate checks.
+
+Threads, messages, and the returned conversation identifier live in React state.
+Reloading clears them: the next message creates a new conversation even if the
+login JWT is still valid. Later messages in the same thread reuse the identifier.
+Hosted identity transport and deployed financial parity are not verified. See the
 [real-data gate](../../../DEMO_SCOPE_CHECKLIST.md#0-real-data-verification-gate-next)
 before starting support cases. Payment submission and attachment upload are not active features.

@@ -5,8 +5,6 @@ import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
 
-const maskNumber = (number: string) => `**** ${number.slice(-4)}`;
-
 export default function Account() {
   const { user } = useAuth();
   const [accounts, setAccounts] = useState<AccountSummary[]>([]);
@@ -25,7 +23,7 @@ export default function Account() {
       .then((result) => {
         if (!controller.signal.aborted) {
           setAccounts(result);
-          setSelectedId(result[0]?.id ?? "");
+          setSelectedId(result.find((item) => item.number)?.number ?? "");
         }
       })
       .catch((cause: unknown) => {
@@ -43,7 +41,7 @@ export default function Account() {
     return () => controller.abort();
   }, [user?.id, attempt]);
 
-  const account = accounts.find((item) => item.id === selectedId);
+  const account = accounts.find((item) => item.number === selectedId);
   const opened = account?.opened
     ? new Intl.DateTimeFormat(user?.locale || "en", {
         dateStyle: "long",
@@ -96,10 +94,14 @@ export default function Account() {
             onChange={(event) => setSelectedId(event.target.value)}
             className="h-10 w-full max-w-xl rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            {accounts.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.type} - {item.number ? maskNumber(item.number) : item.id}{" "}
-                ({item.currency})
+            {accounts.map((item, index) => (
+              <option
+                key={item.number ?? `unavailable-${index}`}
+                value={item.number ?? ""}
+                disabled={!item.number}
+              >
+                {item.type} - {item.number ?? "Number unavailable"} (
+                {item.currency})
               </option>
             ))}
           </select>

@@ -27,24 +27,28 @@ def session_factory() -> Callable[[], Session]:
                 Customer(customer_id="customer-foreign", email="foreign@example.com"),
                 Product(
                     product_id="account-owned",
+                    product_number="ACCOUNT-NUMBER",
                     customer_id="customer-owned",
                     product_type="Cuenta Corriente",
                     currency="USD",
                 ),
                 Product(
                     product_id="card-owned",
+                    product_number="4111111111111111",
                     customer_id="customer-owned",
                     product_type="Tarjeta Cr\u00e9dito",
                     currency="USD",
                 ),
                 Product(
                     product_id="account-foreign",
+                    product_number="FOREIGN-NUMBER",
                     customer_id="customer-foreign",
                     product_type="Cuenta Ahorro",
                     currency="USD",
                 ),
                 Product(
                     product_id="card-foreign",
+                    product_number="5555555555554444",
                     customer_id="customer-foreign",
                     product_type="Tarjeta D\u00e9bito",
                     currency="USD",
@@ -107,7 +111,7 @@ def test_last_transactions_are_owned_limited_and_ordered(
     session_factory: Callable[[], Session],
 ) -> None:
     transactions = TransactionService(session_factory).get_transactions(
-        "account-owned",
+        "ACCOUNT-NUMBER",
         "customer-owned",
     )
 
@@ -121,6 +125,8 @@ def test_last_transactions_are_owned_limited_and_ordered(
     assert all(transaction.id != "inconsistent-owner" for transaction in transactions)
     assert transactions[0].recipientName == "ACME Energy"
     assert transactions[0].amount == 105.25
+    assert transactions[0].product_number == "ACCOUNT-NUMBER"
+    assert "account-owned" not in transactions[0].model_dump_json()
 
 
 def test_recipient_and_type_filters_use_persisted_fields(
@@ -129,12 +135,12 @@ def test_recipient_and_type_filters_use_persisted_fields(
     service = TransactionService(session_factory)
 
     recipient_matches = service.get_transactions_by_recipient_name(
-        "account-owned",
+        "ACCOUNT-NUMBER",
         "acme",
         "customer-owned",
     )
     type_matches = service.get_transactions_by_type(
-        "account-owned",
+        "ACCOUNT-NUMBER",
         "customer-owned",
         payment_type="BankTransfer",
         transaction_type="payment",
@@ -148,29 +154,42 @@ def test_recipient_and_type_filters_use_persisted_fields(
     ]
 
 
+def test_duplicate_owned_numbers_are_denied(session_factory: Callable[[], Session]) -> None:
+    with session_factory() as session:
+        session.add(Product(
+            product_id="duplicate", customer_id="customer-owned",
+            product_type="Cuenta Ahorro", currency="USD", product_number="ACCOUNT-NUMBER",
+        ))
+        session.commit()
+
+    with pytest.raises(PermissionError, match="authenticated customer"):
+        TransactionService(session_factory).get_transactions("ACCOUNT-NUMBER", "customer-owned")
+
+
 def test_card_transactions_require_both_owned_products(
     session_factory: Callable[[], Session],
 ) -> None:
     service = TransactionService(session_factory)
 
     transactions = service.get_transactions_by_type(
-        "account-owned",
+        "ACCOUNT-NUMBER",
         "customer-owned",
-        card_id="card-owned",
+        card_id="4111111111111111",
     )
 
     assert [transaction.id for transaction in transactions] == ["card-tx-1"]
-    assert transactions[0].cardId == "card-owned"
+    assert transactions[0].product_number == "**** 1111"
+    assert "card-owned" not in transactions[0].model_dump_json()
 
     with pytest.raises(PermissionError, match="authenticated customer"):
         service.get_transactions_by_type(
-            "account-owned",
+            "ACCOUNT-NUMBER",
             "customer-owned",
-            card_id="card-foreign",
+            card_id="5555555555554444",
         )
 
 
-@pytest.mark.parametrize("product_id", ["account-foreign", "missing-product"])
+@pytest.mark.parametrize("product_id", ["FOREIGN-NUMBER", "account-owned", "account-foreign", "missing-product"])
 def test_foreign_and_missing_products_are_indistinguishable(
     session_factory: Callable[[], Session],
     product_id: str,

@@ -20,22 +20,26 @@ service-layer ownership checks.
 
 ## HTTP Contract
 
-| Method | Route                                 | Behavior                                                                                           |
-| ------ | ------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| POST   | `/auth/login`                         | Verify persisted email and Argon2 password hash; return bearer token and user profile.             |
-| GET    | `/auth/me`                            | Return verified identity and persisted customer name. Requires bearer JWT.                         |
-| GET    | `/auth/me/accounts`                   | Return owned savings and checking accounts. Requires bearer JWT.                                   |
-| GET    | `/auth/me/cards`                      | Return owned credit and debit cards with masked numbers. Requires bearer JWT.                      |
-| GET    | `/accounts/{account_id}/transactions` | Return an owned bank account's transactions with date filters and pagination. Requires bearer JWT. |
-| POST   | `/responses`                          | Proxy Responses events with verified identity and user-bound conversations. Requires bearer JWT.   |
+| Method | Route                                     | Behavior                                                                                                     |
+| ------ | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| POST   | `/auth/login`                             | Verify persisted email and Argon2 password hash; return bearer token and user profile.                       |
+| GET    | `/auth/me`                                | Return verified identity and persisted customer name. Requires bearer JWT.                                   |
+| GET    | `/auth/me/accounts`                       | Return owned savings and checking accounts. Requires bearer JWT.                                             |
+| GET    | `/auth/me/cards`                          | Return owned credit and debit cards with masked numbers. Requires bearer JWT.                                |
+| GET    | `/accounts/{product_number}/transactions` | Return an owned bank account's transactions by number with date filters and pagination. Requires bearer JWT. |
+| POST   | `/responses`                              | Proxy Responses events with verified identity and user-bound conversations. Requires bearer JWT.             |
 
 JWT identity includes `sub`, `customer_id`, `email`, and `locale`, with `iss`, `aud`,
 `iat`, and `exp` metadata. The display `name` is profile response data, not a JWT claim.
 Missing customer names return `null`.
 
-Account summaries contain `id`, `type`, nullable `status`, nullable `opened` (ISO date),
+Account summaries contain `type`, nullable `status`, nullable `opened` (ISO date),
 nullable `number`, `currency`, and nullable decimal-string `balance`. The balance is
 the stored current value, not a historical balance for a transaction window.
+Bank account numbers are returned in full. Product primary keys are never returned
+in account, card, or transaction product references. Account and Transaction MCP
+lookup parameters use `product_number`; card transaction tools additionally use
+`card_product_number`. Internal product keys remain database relationship fields.
 Queries verify the persisted user/customer association,
 filter `Cuenta Ahorro` and `Cuenta Corriente`, and order by product ID. The endpoint
 does not accept a customer identifier to select another customer's accounts. No accounts
@@ -52,7 +56,8 @@ and transaction endpoints remain restricted to savings and checking products.
 
 Card summaries contain the account-summary fields plus nullable `expires` (ISO date)
 and nullable decimal-string `credit_limit`. Numbers are masked server-side as
-`****` followed by the last four characters. Missing numbers, dates, balances, and
+`****` followed by the last four characters. Missing numbers or numbers with four
+or fewer characters remain `null` rather than being disclosed in full. Missing dates, balances, and
 limits remain `null`. Stored balance and limit are returned without calculating
 available credit or utilization. No matching cards returns an empty array; missing
 or invalid credentials return `401`, and database/configuration failures return `503`.
@@ -60,14 +65,15 @@ Payments, recharge, blocking, and limit changes are not implemented by this endp
 
 ### Transactions
 
-`GET /accounts/{account_id}/transactions` accepts optional ISO calendar dates
+`GET /accounts/{product_number}/transactions` resolves the owned account by its full
+product number, never by its database primary key, and accepts optional ISO calendar dates
 `start_date` and `end_date` (inclusive), `limit` from 1 to 100 (default 100), and
 nonnegative `offset` (default 0). Invalid parameters or a reversed date window
 return `422`. Foreign, missing, or non-bank products return the same `404` response;
 database/configuration failures return a safe `503`.
 
 The response contains `items`, `total`, `limit`, `offset`, `start_date`, and `end_date`.
-Each item includes `id`, `account_id`, `date`, decimal-string `amount`, `currency`,
+Each item includes transaction `id`, account `product_number`, `date`, decimal-string `amount`, `currency`,
 and nullable `type`, `category`, `channel`, `merchant`, and `status`. Results are
 ordered by transaction date and ID descending. An owned account with no matching
 transactions returns an empty `items` array and zero `total`.
@@ -132,8 +138,20 @@ transaction rows passed for two approved users. Simulated transaction failures a
 rejected sessions exercised UI recovery; natural JWT expiration remains unverified.
 
 This is not evidence of complete conversational parity. The agent profile provider
-still injects a sample email, and a local account inquiry was correctly denied by
-service ownership checks. Beneficiaries has no persisted source. Hosted identity
+uses the verified email from the signed BFF identity rather than a sample profile.
+Unit tests cover profile isolation, number-only lookups, masked card output, and
+ownership denials. User-supplied local browser evidence on 2026-09-30 confirms an
+owned-account answer and a foreign-account lookup with `ACCESS_DENIED` followed by
+a visible assistant denial. The full signed-chain missing/empty, Transaction,
+multi-turn, and approval-continuation matrix remains open.
+
+The frontend keeps conversation IDs only in React state. A reload sends the next
+message without `conversation`; the BFF creates a new opaque ID bound to verified
+`sub`. Subsequent messages reuse it, and another user's ID is rejected. The local
+agent persists workflow checkpoints through the SDK filesystem store, not this BFF
+or PostgreSQL. See the [backend state guide](../backend/README.md#conversation-state).
+
+Beneficiaries has no persisted source. Hosted identity
 transport and deployed parity still require separate validation.
 Registration, password reset, MFA, revocation, and
 production identity lifecycle controls are not implemented.

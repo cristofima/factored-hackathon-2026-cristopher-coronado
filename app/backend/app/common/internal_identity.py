@@ -19,15 +19,20 @@ class InternalPrincipal:
 
     sub: str
     customer_id: str
+    email: str | None = None
+
+
+def get_internal_principal(secret: str) -> InternalPrincipal:
+    """Resolve the signed principal from the current request."""
+    identity = get_request_context().user_id
+    if not identity:
+        raise RuntimeError("Authenticated request identity is required")
+    return _verify_envelope(identity, secret)
 
 
 def create_mcp_authorization(secret: str, lifetime_seconds: int = 60) -> str:
     """Create a short-lived MCP bearer token for the current request identity."""
-    identity = get_request_context().user_id
-    if not identity:
-        raise RuntimeError("Authenticated request identity is required")
-
-    principal = _verify_envelope(identity, secret)
+    principal = get_internal_principal(secret)
     payload = {
         "customer_id": principal.customer_id,
         "exp": int(time.time()) + lifetime_seconds,
@@ -63,11 +68,16 @@ def _verify_envelope(token: str, secret: str) -> InternalPrincipal:
         principal = InternalPrincipal(
             sub=payload["sub"],
             customer_id=payload["customer_id"],
+            email=payload.get("email"),
         )
-    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+    except (KeyError, TypeError, ValueError) as error:
         raise ValueError("Invalid internal identity payload") from error
     if not principal.sub or not principal.customer_id:
         raise ValueError("Internal identity claims must not be empty")
+    if principal.email is not None and (
+        not isinstance(principal.email, str) or not principal.email.strip()
+    ):
+        raise ValueError("Invalid internal identity email")
     return principal
 
 

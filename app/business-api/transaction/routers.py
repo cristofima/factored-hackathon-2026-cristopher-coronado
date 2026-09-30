@@ -11,28 +11,27 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("/{account_id}")
+@router.get("/{product_number}")
 def get_transactions(
-    account_id: str,
+    product_number: str,
     customer_id: Annotated[str, Depends(get_http_customer_id)],
     payment_type: Optional[str] = Query(None),
     transaction_type: Optional[str] = Query(None),
-    card_id: Optional[str] = Query(None),
+    card_product_number: Optional[str] = Query(None),
 ):
     """Get transactions for an account. Optionally filter by payment type.
     """
-    logger.info("Received request to get transactions for accountid[%s], payment_type=%s, transaction_type=%s, card_id=%s", account_id, payment_type, transaction_type, card_id)
     try:
         if payment_type or transaction_type:
             transactions = service.get_transactions_by_type(
-                account_id,
+                product_number,
                 customer_id,
                 payment_type,
                 transaction_type,
-                card_id,
+                card_product_number,
             )
         else:
-            transactions = service.get_transactions(account_id, customer_id)
+            transactions = service.get_transactions(product_number, customer_id)
         return transactions
     except PermissionError as error:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(error)) from error

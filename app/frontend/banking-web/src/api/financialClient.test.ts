@@ -3,7 +3,7 @@ import { getTransactions } from "./financialClient";
 
 vi.mock("./authToken", () => ({ getAuthToken: () => "test-only-token" }));
 
-const record = (id: string, account_id = "account") => ({ id, account_id, amount: "1.0000" });
+const record = (id: string, product_number = "account") => ({ id, product_number, amount: "1.0000" });
 const page = (items: ReturnType<typeof record>[], total: number) => new Response(JSON.stringify({ items, total }));
 
 afterEach(() => vi.unstubAllGlobals());

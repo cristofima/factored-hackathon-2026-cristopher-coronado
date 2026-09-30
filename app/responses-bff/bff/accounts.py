@@ -15,7 +15,7 @@ from bff.user_repository import UserRepository
 
 class TransactionSummary(BaseModel):
     id: str
-    account_id: str
+    product_number: str
     date: datetime
     amount: str
     currency: str
@@ -38,9 +38,9 @@ class TransactionPage(BaseModel):
 router = APIRouter(prefix="/accounts")
 
 
-@router.get("/{account_id}/transactions", response_model=TransactionPage)
+@router.get("/{product_number}/transactions", response_model=TransactionPage)
 def get_account_transactions(
-    account_id: str,
+    product_number: str,
     request: Request,
     user: Annotated[AuthenticatedUser, Depends(get_authenticated_user)],
     start_date: date | None = None,
@@ -54,7 +54,7 @@ def get_account_transactions(
     repository: UserRepository = request.app.state.user_repository
     try:
         result = repository.list_transactions(
-            user.sub, user.customer_id, account_id, start_date, end_date, limit, offset,
+            user.sub, user.customer_id, product_number, start_date, end_date, limit, offset,
         )
     except (RuntimeError, SQLAlchemyError):
         raise HTTPException(
@@ -66,7 +66,7 @@ def get_account_transactions(
     records, total = result
     return TransactionPage(
         items=[TransactionSummary(
-            id=record.transaction_id, account_id=record.product_id,
+            id=record.transaction_id, product_number=product_number,
             date=record.transaction_date, amount=format(record.amount, "f"),
             currency=record.currency, type=record.transaction_type,
             category=record.transaction_category, channel=record.channel,
