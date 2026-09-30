@@ -11,12 +11,11 @@ class Transaction(BaseModel):
     flowType: Optional[str] = None
     recipientName: Optional[str] = None
     recipientBankReference: Optional[str] = None
-    accountId: Optional[str] = None
+    product_number: Optional[str] = None
     #BankTransfer,DirectDebit,CreditCard
     paymentType: Optional[str] = None
     amount: Optional[float] = None
     timestamp: Optional[str] = None
-    cardId: Optional[str] = None
     category: Optional[str] = None
     #paid, pending, failed
     status: Optional[str] = None
