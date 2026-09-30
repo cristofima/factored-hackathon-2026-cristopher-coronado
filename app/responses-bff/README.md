@@ -41,14 +41,14 @@ in account, card, or transaction product references. Account and Transaction MCP
 lookup parameters use `product_number`; card transaction tools additionally use
 `card_product_number`. Internal product keys remain database relationship fields.
 Queries verify the persisted user/customer association,
-filter `Cuenta Ahorro` and `Cuenta Corriente`, and order by product ID. The endpoint
+filter `Savings Account` and `Checking Account`, and order by product ID. The endpoint
 does not accept a customer identifier to select another customer's accounts. No accounts
 returns an empty array; database/configuration failures return a safe `503` response.
 Missing or invalid bearer credentials return `401`.
 
 ### Cards
 
-`GET /auth/me/cards` returns products of type `Tarjeta Crédito` and `Tarjeta Débito`,
+`GET /auth/me/cards` returns products of type `Credit Card` and `Debit Card`,
 ordered by product ID. The query verifies both the authenticated `sub` and
 `customer_id` against the persisted user/customer association. It lists customer-owned
 cards without inferring a relationship to a particular bank account; bank-account
@@ -83,6 +83,21 @@ reading transactions. Clients must fetch every page before computing window tota
 Pagination is not a cross-request database snapshot; concurrent changes may require
 a refresh. Date bounds currently use naive datetimes against timezone-aware columns;
 timezone-independent boundary behavior remains an open validation condition.
+
+### Controlled Errors
+
+Application-raised failures use `{"detail":{"code":"SERVICE_UNAVAILABLE"}}`
+with an allow-listed code: `AUTH_REQUIRED`, `INVALID_CREDENTIALS`, `ACCESS_DENIED`,
+`ACCOUNT_UNAVAILABLE`, `SERVICE_UNAVAILABLE`, `INVALID_DATE_RANGE`, or `INVALID_REQUEST`.
+HTTP statuses and bearer challenges are preserved. Foreign and missing accounts remain
+indistinguishable. Framework validation responses can retain their standard shape;
+the frontend treats unknown codes, raw details and non-JSON responses as safe local
+fallbacks rather than displaying server text. Successful Responses streams are unchanged.
+
+The affected auth/accounts/Responses suite passed with 65 tests. A broader run had
+83 passes and one unrelated user-repository fixture failure because it still stored
+Spanish bank-product labels against English-only filters. This is not a fully green
+BFF-suite result or new browser/hosted evidence.
 
 ## Local Development
 
