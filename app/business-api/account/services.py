@@ -6,13 +6,17 @@ from decimal import Decimal
 
 from banking_shared.database import create_session
 from banking_shared.models import Customer, Product
+from banking_shared.product_types import (
+    ACCOUNT_PRODUCT_TYPES,
+    CARD_PRODUCT_TYPES,
+    card_type,
+    normalize_product_type,
+)
 from models import Account, Beneficiary, Card, PaymentMethod, PaymentMethodSummary
 from sqlmodel import Session, select
 
 logger = logging.getLogger(__name__)
 
-ACCOUNT_PRODUCT_TYPES = ("Cuenta Ahorro", "Cuenta Corriente")
-CARD_PRODUCT_TYPES = ("Tarjeta Cr\u00e9dito", "Tarjeta D\u00e9bito")
 SessionFactory = Callable[[], Session]
 
 
@@ -186,7 +190,7 @@ def _to_account(product: Product, customer: Customer, cards: list[Product]) -> A
 def _to_payment_method_summary(product: Product) -> PaymentMethodSummary:
     return PaymentMethodSummary(
         number=f"**** {product.product_number[-4:]}" if product.product_number and len(product.product_number) > 4 else None,
-        type=_card_type(product.product_type),
+        type=card_type(product.product_type),
         activationDate=_date_value(product.opening_date),
         expirationDate=_date_value(product.expiration_date),
     )
@@ -194,7 +198,7 @@ def _to_payment_method_summary(product: Product) -> PaymentMethodSummary:
 
 def _to_payment_method(product: Product) -> PaymentMethod:
     return PaymentMethod(
-        type=_card_type(product.product_type),
+        type=card_type(product.product_type),
         cardNumber=(
             f"**** {product.product_number[-4:]}"
             if product.product_number and len(product.product_number) > 4 else None
@@ -208,26 +212,18 @@ def _to_payment_method(product: Product) -> PaymentMethod:
 
 def _to_card(product: Product) -> Card:
     return Card(
-        type=_card_type(product.product_type),
+        type=card_type(product.product_type),
         number=(
             f"**** {product.product_number[-4:]}"
             if product.product_number and len(product.product_number) > 4 else None
         ),
-        name=product.product_type,
+        name=normalize_product_type(product.product_type),
         activationDate=_date_value(product.opening_date),
         expirationDate=_date_value(product.expiration_date),
         balance=_decimal_float(product.current_balance),
         limit=_decimal_float(product.credit_limit),
         status=product.product_status,
     )
-
-
-def _card_type(product_type: str) -> str:
-    if product_type == "Tarjeta Cr\u00e9dito":
-        return "credit"
-    if product_type == "Tarjeta D\u00e9bito":
-        return "debit"
-    return product_type
 
 
 def _date_value(value: object | None) -> str | None:
