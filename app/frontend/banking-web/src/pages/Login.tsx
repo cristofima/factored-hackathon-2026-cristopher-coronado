@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/context/AuthContext";
+import { ApiError } from "@/api/errors";
 
 const Login = () => {
   const { user, login } = useAuth();
@@ -31,7 +32,10 @@ const Login = () => {
       navigate(destination || "/", { replace: true });
     } catch (loginError) {
       setError(
-        loginError instanceof Error ? loginError.message : "Sign in failed",
+        loginError instanceof ApiError &&
+          loginError.code === "INVALID_CREDENTIALS"
+          ? "Invalid email or password"
+          : "Sign in is unavailable",
       );
     } finally {
       setSubmitting(false);

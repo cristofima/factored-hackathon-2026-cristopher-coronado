@@ -11,12 +11,14 @@ import {
 import { ChevronDown, Settings, LogOut, User, Building2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import { useTranslation } from "react-i18next";
 
 export default function Navigation() {
+  const { t } = useTranslation();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
-  const displayName = user?.name || user?.email || "Account";
+  const displayName = user?.name || user?.email || t("Account");
   const nameParts = user?.name?.trim().split(/\s+/);
   const lastInitial =
     nameParts && nameParts.length > 1 ? nameParts[nameParts.length - 1][0] : "";
@@ -42,10 +44,10 @@ export default function Navigation() {
           </div>
           <div>
             <h2 className="text-lg font-bold text-slate-900 leading-tight">
-              Home Banking Assistant
+              {t("Home Banking Assistant")}
             </h2>
             <p className="text-xs text-slate-500 leading-none">
-              Demo Application
+              {t("Demo Application")}
             </p>
           </div>
         </div>
@@ -60,7 +62,7 @@ export default function Navigation() {
             {displayName}
           </div>
           <div className="text-xs text-slate-500 truncate">
-            {user?.email ?? "loading…"}
+            {user?.email ?? t("Loading...")}
           </div>
         </div>
 
@@ -84,7 +86,7 @@ export default function Navigation() {
               <div>
                 <div className="font-medium break-words">{displayName}</div>
                 <div className="text-xs text-slate-400">
-                  Customer {user?.customerId}
+                  {t("Customer {{id}}", { id: user?.customerId })}
                 </div>
               </div>
             </DropdownMenuLabel>
@@ -94,14 +96,14 @@ export default function Navigation() {
               className="cursor-pointer"
             >
               <User className="mr-2 h-4 w-4" />
-              Profile
+              {t("Profile")}
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={handleSettings}
               className="cursor-pointer"
             >
               <Settings className="mr-2 h-4 w-4" />
-              Account Settings
+              {t("Account Settings")}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
@@ -109,7 +111,7 @@ export default function Navigation() {
               className="cursor-pointer text-red-600 hover:text-red-600 hover:bg-red-50"
             >
               <LogOut className="mr-2 h-4 w-4" />
-              Sign Out
+              {t("Sign Out")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

@@ -7,25 +7,27 @@ import {
 } from "@/components/chat";
 import type { StarterPrompt } from "@/components/chat/types";
 import { Sparkles } from "lucide-react"; // Example: import custom icon
-
-const BANKING_STARTER_PROMPTS: StarterPrompt[] = [
-  {
-    id: "card-trend",
-    title: "Review card spend",
-    description: "Summaries, trends, and anomalies",
-    icon: "💳",
-    content: "Summarize my Platinum Visa spending from the past 30 days",
-  },
-  {
-    id: "transactions-search",
-    title: "Investigate payments",
-    description: "Search through your payments based on various criteria.",
-    icon: "🛡️",
-    content: "when was last time I've paid contoso?",
-  },
-];
+import { useTranslation } from "react-i18next";
 
 export default function Support() {
+  const { t } = useTranslation();
+  const BANKING_STARTER_PROMPTS: StarterPrompt[] = [
+    {
+      id: "card-trend",
+      title: t("Review my accounts"),
+      description: t("Account details and recorded balances"),
+      icon: "💳",
+      content: t("Show my bank accounts and their recorded balances"),
+    },
+    {
+      id: "transactions-search",
+      title: t("Review transactions"),
+      description: t("Search your transaction history"),
+      icon: "🛡️",
+      content: t("Show my latest transactions"),
+    },
+  ];
+
   // Configure your chat server URL here
   const chatServerUrl = import.meta.env.VITE_RESPONSES_API_URL || "/responses";
 
@@ -41,9 +43,9 @@ export default function Support() {
     showIcon: true, // Show/hide left icon badge
     // icon: Bot,                            // Custom icon (import from lucide-react)
     showTitle: true, // Show/hide title label
-    titleLabel: "Banking copilot", // Custom title text
+    titleLabel: t("Banking copilot"), // Custom title text
     showActiveThread: true, // Show/hide active thread name
-    activeThreadFallback: "Untitled thread", // Text when no thread selected
+    activeThreadFallback: t("Untitled thread"), // Text when no thread selected
     showNewThreadButton: true, // Show/hide new thread button
     showHistoryButton: true, // Show/hide history toggle button
     // customContent: <div>Custom Header</div> // Completely replace header content
@@ -53,8 +55,8 @@ export default function Support() {
   // All properties are optional - omit to use defaults
   const welcomeHeaderConfig: WelcomeHeaderConfig = {
     icon: <Sparkles className="h-8 w-8 text-primary" />,
-    title: "Welcome to Banking Assistant",
-    subtitle: "Choose a prompt to get started",
+    title: t("Welcome to Banking Assistant"),
+    subtitle: t("How can I help with your accounts or transactions?"),
   };
 
   return (

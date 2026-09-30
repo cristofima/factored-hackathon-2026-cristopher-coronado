@@ -1,10 +1,8 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import {
   BarChart3,
-  Menu,
-  X,
-  Building2,
   TrendingUp,
   ChevronLeft,
   ChevronRight,
@@ -24,6 +22,7 @@ const navigation = [
 ];
 
 export default function Sidebar() {
+  const { t } = useTranslation();
   const [collapsed, setCollapsed] = useState(false);
 
   return (
@@ -36,6 +35,10 @@ export default function Sidebar() {
         <div className="mb-2 flex justify-end">
           <button
             onClick={() => setCollapsed(!collapsed)}
+            aria-label={t(
+              collapsed ? "Expand navigation" : "Collapse navigation",
+            )}
+            title={t(collapsed ? "Expand navigation" : "Collapse navigation")}
             className="p-1 rounded hover:bg-slate-100 transition-colors"
           >
             {collapsed ? (
@@ -50,6 +53,8 @@ export default function Sidebar() {
             <li key={item.name}>
               <NavLink
                 to={item.href}
+                aria-label={t(item.name)}
+                title={collapsed ? t(item.name) : undefined}
                 className={({ isActive }) =>
                   `flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
                     isActive
@@ -59,7 +64,7 @@ export default function Sidebar() {
                 }
               >
                 <item.icon className={`h-5 w-5 ${collapsed ? "" : "mr-3"}`} />
-                {!collapsed && <span>{item.name}</span>}
+                {!collapsed && <span>{t(item.name)}</span>}
               </NavLink>
             </li>
           ))}

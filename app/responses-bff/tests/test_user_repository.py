@@ -38,16 +38,16 @@ def _repository(
         session.commit()
         session.add_all([
             Product(product_id="account-2", customer_id="customer-1",
-                product_type="Cuenta Corriente", currency="USD"),
+                product_type="Checking Account", currency="USD"),
             Product(product_id="account-1", customer_id="customer-1",
-                product_type="Cuenta Ahorro", currency="USD"),
+                product_type="Savings Account", currency="USD"),
             Product(product_id="card-1", customer_id="customer-1",
-                product_type="Tarjeta Cr\u00e9dito", currency="USD"),
+                product_type="Credit Card", currency="USD"),
             Customer(customer_id="customer-2", email="other@example.com"),
         ])
         session.commit()
         session.add(Product(product_id="foreign-account", customer_id="customer-2",
-                    product_type="Cuenta Ahorro", currency="USD"))
+                    product_type="Savings Account", currency="USD"))
         session.commit()
 
     @contextmanager

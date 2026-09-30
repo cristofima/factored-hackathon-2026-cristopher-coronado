@@ -1,4 +1,5 @@
 import { getAuthToken } from "@/api/authToken";
+import { ApiError, readApiError } from "@/api/errors";
 
 export interface FinancialTransaction {
     id: string;
@@ -24,7 +25,7 @@ export async function getTransactions(
     accountId: string, start: string, end: string, signal: AbortSignal,
 ): Promise<FinancialTransaction[]> {
     const token = getAuthToken();
-    if (!token) throw new Error("Sign in to view transactions");
+    if (!token) throw new ApiError("AUTH_REQUIRED");
     const records: FinancialTransaction[] = [];
     const ids = new Set<string>();
     let expectedTotal: number | undefined;
@@ -34,24 +35,23 @@ export async function getTransactions(
             headers: { Authorization: `Bearer ${token}` }, signal,
         });
         if (!response.ok) {
-            throw new Error(response.status === 401 ? "Your session has expired. Sign in again."
-                : response.status === 404 ? "Account is unavailable" : "Transactions are temporarily unavailable");
+            throw await readApiError(response);
         }
         const page: TransactionPage = await response.json();
         if (expectedTotal !== undefined && expectedTotal !== page.total) {
-            throw new Error("Transactions changed during loading. Retry to refresh the complete window.");
+            throw new ApiError("SERVICE_UNAVAILABLE");
         }
         expectedTotal = page.total;
         for (const record of page.items) {
             if (record.product_number !== accountId || ids.has(record.id)) {
-                throw new Error("Transaction pagination is inconsistent. Retry.");
+                throw new ApiError("SERVICE_UNAVAILABLE");
             }
             ids.add(record.id);
         }
         records.push(...page.items);
         if (records.length === expectedTotal) return records;
         if (!page.items.length || records.length > expectedTotal) {
-            throw new Error("The complete transaction window could not be loaded. Retry.");
+            throw new ApiError("SERVICE_UNAVAILABLE");
         }
     }
 }
