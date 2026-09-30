@@ -4,7 +4,7 @@
 > Provisioning and hosted identity transport have not been verified end to end for the
 > hackathon environment. Review the Terraform plan and existing resource ownership before
 > running these commands. The root project targets App Service through Terraform; the
-> hosted agent uses a separate azd project at `app/backend/azure.yaml`.
+> hosted agent uses a separate azd project at `app/agent/azure.yaml`.
 
 ## **🚀 Quick Start**
 
@@ -27,11 +27,11 @@ Once you have the project available locally, run the following commands if you d
 For the hosted-agent stack, run from repository root:
 
 ```shell
-azd up --cwd app/backend
+azd up --cwd app/agent
 ```
 
 - Root `azd up` provisions the Terraform App Service stack and deploys its services.
-- Backend `azd up --cwd app/backend` deploys the hosted workflow to an existing Foundry
+- Agent `azd up --cwd app/agent` deploys the hosted workflow to an existing Foundry
   project. Its manifest declares `gpt-4.1-mini`, but does not create that model deployment.
 
 3. After the application has been successfully deployed you will see a web app URL printed to the console. Click that URL to interact with the application in your browser.
@@ -66,7 +66,7 @@ This will allow the scripts to run for the current session without permanently c
 
 ## Redeploying Infra or App Code Changes
 
-If you've only changed the backend/frontend code in the `app` folder, then you don't need to re-provision the Azure resources. You can just run:
+If you've only changed the App Service backend services (business APIs or Responses BFF) or frontend code in the `app` folder, without changing infrastructure requirements, you don't need to re-provision the Azure resources. Deploy the root App Service stack with:
 
 ```shell
 azd deploy
@@ -75,7 +75,7 @@ azd deploy
 For hosted-agent code changes, use:
 
 ```shell
-azd deploy --cwd app/backend
+azd deploy --cwd app/agent
 ```
 
 If you changed the root infrastructure files (`infra` or the root `azure.yaml`), review
@@ -90,9 +90,9 @@ the Terraform state and plan first.
 
 ## Model Configuration
 
-Set `MODEL_DEPLOYMENT_NAME` in the backend azd environment to the name of an existing
+Set `MODEL_DEPLOYMENT_NAME` in the agent azd environment to the name of an existing
 deployment in the configured Foundry project. The checked-in manifest declares
-`gpt-4.1-mini`; neither the root Terraform stack nor the backend manifest provisions it.
+`gpt-4.1-mini`; neither the root Terraform stack nor the agent manifest provisions it.
 Changing the declaration does not create, resize, or validate model capacity.
 
 ## Running Agents locally
@@ -100,5 +100,5 @@ Changing the declaration does not create, resize, or validate model capacity.
 The supported local topology runs independently of App Service deployment. Use the root
 VS Code launch `DEV - Full Stack Ordered`; for component details, see:
 
-- the [backend README](../app/backend/README.md) to run the agents backend and the frontend
+- the [agent README](../app/agent/README.md) to run the agents and the frontend
 - the [business API README](../app/business-api/README.md) to run the simulated banking MCP servers.

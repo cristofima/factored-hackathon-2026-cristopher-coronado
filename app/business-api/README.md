@@ -162,7 +162,7 @@ service-name/
 The Banking Assistant Copilot connects to these services via MCP URLs configured in its environment:
 
 ```env
-# MCP Server URLs (from app/backend/.env.dev)
+# MCP Server URLs (from app/agent/.env.dev)
 ACCOUNT_MCP_URL=http://localhost:8070
 TRANSACTION_MCP_URL=http://localhost:8071
 ```
