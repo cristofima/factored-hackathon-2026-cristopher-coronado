@@ -1,7 +1,7 @@
 # Responses BFF
 
 FastAPI browser trust boundary for the banking assistant. It authenticates PostgreSQL
-users, returns persisted customer profiles and bank accounts, and proxies Responses
+users, returns persisted customer profiles, bank accounts, and credit/debit cards, and proxies Responses
 streams to the local agent or Foundry. The browser never receives Azure credentials.
 
 ## Request Flow
@@ -14,29 +14,69 @@ flowchart LR
     Agent -->|Short-lived bearer| MCP[Account and Transaction MCP]
 ```
 
-Profile and account-page reads use PostgreSQL directly from the BFF. Conversational
+Profile, account, card, Dashboard, and Analytics reads use PostgreSQL directly from the BFF. Conversational
 inquiries use the agent and MCP services; the BFF read endpoint does not replace their
 service-layer ownership checks.
 
 ## HTTP Contract
 
-| Method | Route               | Behavior                                                                                         |
-| ------ | ------------------- | ------------------------------------------------------------------------------------------------ |
-| POST   | `/auth/login`       | Verify persisted email and Argon2 password hash; return bearer token and user profile.           |
-| GET    | `/auth/me`          | Return verified identity and persisted customer name. Requires bearer JWT.                       |
-| GET    | `/auth/me/accounts` | Return owned savings and checking accounts. Requires bearer JWT.                                 |
-| POST   | `/responses`        | Proxy Responses events with verified identity and user-bound conversations. Requires bearer JWT. |
+| Method | Route                                 | Behavior                                                                                           |
+| ------ | ------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| POST   | `/auth/login`                         | Verify persisted email and Argon2 password hash; return bearer token and user profile.             |
+| GET    | `/auth/me`                            | Return verified identity and persisted customer name. Requires bearer JWT.                         |
+| GET    | `/auth/me/accounts`                   | Return owned savings and checking accounts. Requires bearer JWT.                                   |
+| GET    | `/auth/me/cards`                      | Return owned credit and debit cards with masked numbers. Requires bearer JWT.                      |
+| GET    | `/accounts/{account_id}/transactions` | Return an owned bank account's transactions with date filters and pagination. Requires bearer JWT. |
+| POST   | `/responses`                          | Proxy Responses events with verified identity and user-bound conversations. Requires bearer JWT.   |
 
 JWT identity includes `sub`, `customer_id`, `email`, and `locale`, with `iss`, `aud`,
 `iat`, and `exp` metadata. The display `name` is profile response data, not a JWT claim.
 Missing customer names return `null`.
 
 Account summaries contain `id`, `type`, nullable `status`, nullable `opened` (ISO date),
-nullable `number`, and `currency`. Queries verify the persisted user/customer association,
+nullable `number`, `currency`, and nullable decimal-string `balance`. The balance is
+the stored current value, not a historical balance for a transaction window.
+Queries verify the persisted user/customer association,
 filter `Cuenta Ahorro` and `Cuenta Corriente`, and order by product ID. The endpoint
 does not accept a customer identifier to select another customer's accounts. No accounts
 returns an empty array; database/configuration failures return a safe `503` response.
 Missing or invalid bearer credentials return `401`.
+
+### Cards
+
+`GET /auth/me/cards` returns products of type `Tarjeta Crédito` and `Tarjeta Débito`,
+ordered by product ID. The query verifies both the authenticated `sub` and
+`customer_id` against the persisted user/customer association. It lists customer-owned
+cards without inferring a relationship to a particular bank account; bank-account
+and transaction endpoints remain restricted to savings and checking products.
+
+Card summaries contain the account-summary fields plus nullable `expires` (ISO date)
+and nullable decimal-string `credit_limit`. Numbers are masked server-side as
+`****` followed by the last four characters. Missing numbers, dates, balances, and
+limits remain `null`. Stored balance and limit are returned without calculating
+available credit or utilization. No matching cards returns an empty array; missing
+or invalid credentials return `401`, and database/configuration failures return `503`.
+Payments, recharge, blocking, and limit changes are not implemented by this endpoint.
+
+### Transactions
+
+`GET /accounts/{account_id}/transactions` accepts optional ISO calendar dates
+`start_date` and `end_date` (inclusive), `limit` from 1 to 100 (default 100), and
+nonnegative `offset` (default 0). Invalid parameters or a reversed date window
+return `422`. Foreign, missing, or non-bank products return the same `404` response;
+database/configuration failures return a safe `503`.
+
+The response contains `items`, `total`, `limit`, `offset`, `start_date`, and `end_date`.
+Each item includes `id`, `account_id`, `date`, decimal-string `amount`, `currency`,
+and nullable `type`, `category`, `channel`, `merchant`, and `status`. Results are
+ordered by transaction date and ID descending. An owned account with no matching
+transactions returns an empty `items` array and zero `total`.
+
+Ownership is checked against the persisted user/customer/product association before
+reading transactions. Clients must fetch every page before computing window totals.
+Pagination is not a cross-request database snapshot; concurrent changes may require
+a refresh. Date bounds currently use naive datetimes against timezone-aware columns;
+timezone-independent boundary behavior remains an open validation condition.
 
 ## Local Development
 
@@ -76,13 +116,26 @@ The shared models and session factory live in [banking-shared](../business-api/s
 ## Validation and Limits
 
 ```powershell
-uv run --project app/responses-bff pytest app/responses-bff/tests -q
+cd app/responses-bff
+uv run python -m pytest tests -q
 ```
 
 Tests cover persisted repository queries, authentication, profile/account responses,
-ownership filtering, and Responses proxy behavior. Local login, customer-name display,
-and account selection have been validated in the frontend. Hosted identity transport
-still requires separate validation. Registration, password reset, MFA, revocation, and
+transaction date filters and pagination, ownership filtering, and Responses proxy
+behavior. Card contract tests cover credit/debit filtering, masked numbers, decimal
+precision, null fields, cross-user isolation, invalid credentials, and unavailable
+database responses. The focused account/card suite passed with 36 tests, and the
+user confirmed that credit and debit cards appear in the local frontend. This does
+not establish a complete two-user card browser/error matrix or deployed parity.
+Local PostgreSQL comparisons and desktop browser login, balances, and
+transaction rows passed for two approved users. Simulated transaction failures and
+rejected sessions exercised UI recovery; natural JWT expiration remains unverified.
+
+This is not evidence of complete conversational parity. The agent profile provider
+still injects a sample email, and a local account inquiry was correctly denied by
+service ownership checks. Beneficiaries has no persisted source. Hosted identity
+transport and deployed parity still require separate validation.
+Registration, password reset, MFA, revocation, and
 production identity lifecycle controls are not implemented.
 
 For zip packaging and dependency export, follow the

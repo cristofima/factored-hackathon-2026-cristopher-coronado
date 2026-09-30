@@ -30,6 +30,7 @@ export interface AccountSummary {
     opened: string | null;
     number: string | null;
     currency: string;
+    balance: string | null;
 }
 
 export const getAccounts = async (signal?: AbortSignal): Promise<AccountSummary[]> => {
@@ -45,6 +46,25 @@ export const getAccounts = async (signal?: AbortSignal): Promise<AccountSummary[
         throw new Error(response.status === 401
             ? "Your session has expired. Sign in again."
             : "Accounts are temporarily unavailable");
+    }
+    return response.json();
+};
+
+export interface CardSummary extends AccountSummary {
+    expires: string | null;
+    credit_limit: string | null;
+}
+
+export const getCards = async (signal?: AbortSignal): Promise<CardSummary[]> => {
+    const token = getAuthToken();
+    if (!token) throw new Error("Sign in to view your cards");
+    const response = await fetch(`${AUTH_API_URL}/auth/me/cards`, {
+        headers: { Authorization: `Bearer ${token}` }, signal,
+    });
+    if (!response.ok) {
+        throw new Error(response.status === 401
+            ? "Your session has expired. Sign in again."
+            : "Cards are temporarily unavailable");
     }
     return response.json();
 };
