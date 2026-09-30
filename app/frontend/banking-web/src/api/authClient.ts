@@ -1,4 +1,5 @@
 import { AUTH_TOKEN_KEY, getAuthToken } from "@/api/authToken";
+import { ApiError, readApiError } from "@/api/errors";
 
 const AUTH_API_URL = import.meta.env.VITE_RESPONSES_BFF_URL || "";
 
@@ -35,16 +36,14 @@ export interface AccountSummary {
 export const getAccounts = async (signal?: AbortSignal): Promise<AccountSummary[]> => {
     const token = getAuthToken();
     if (!token) {
-        throw new Error("Sign in to view your accounts");
+        throw new ApiError("AUTH_REQUIRED");
     }
     const response = await fetch(`${AUTH_API_URL}/auth/me/accounts`, {
         headers: { Authorization: `Bearer ${token}` },
         signal,
     });
     if (!response.ok) {
-        throw new Error(response.status === 401
-            ? "Your session has expired. Sign in again."
-            : "Accounts are temporarily unavailable");
+        throw await readApiError(response);
     }
     return response.json();
 };
@@ -56,14 +55,12 @@ export interface CardSummary extends AccountSummary {
 
 export const getCards = async (signal?: AbortSignal): Promise<CardSummary[]> => {
     const token = getAuthToken();
-    if (!token) throw new Error("Sign in to view your cards");
+    if (!token) throw new ApiError("AUTH_REQUIRED");
     const response = await fetch(`${AUTH_API_URL}/auth/me/cards`, {
         headers: { Authorization: `Bearer ${token}` }, signal,
     });
     if (!response.ok) {
-        throw new Error(response.status === 401
-            ? "Your session has expired. Sign in again."
-            : "Cards are temporarily unavailable");
+        throw await readApiError(response);
     }
     return response.json();
 };
@@ -84,7 +81,7 @@ export const login = async (email: string, password: string): Promise<Authentica
     });
 
     if (!response.ok) {
-        throw new Error(response.status === 401 ? "Invalid email or password" : "Sign in is unavailable");
+        throw await readApiError(response);
     }
 
     const result = (await response.json()) as LoginResponse;
