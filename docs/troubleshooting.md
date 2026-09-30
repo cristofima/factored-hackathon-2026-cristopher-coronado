@@ -5,7 +5,7 @@ When deploying Azure resources, you may come across different error codes that s
 Use these as quick reference guides to unblock your deployments.
 
 > [!NOTE]
-> This repository has two azd project roots. In command examples below, run `azd` from repository root for the App Service stack (`./azure.yaml`), and use `--cwd app/backend` for hosted-agent operations (`./app/backend/azure.yaml`).
+> This repository has two azd project roots. In command examples below, run `azd` from repository root for the App Service stack (`./azure.yaml`), and use `--cwd app/agent` for hosted-agent operations (`./app/agent/azure.yaml`).
 
 ## ⚡ Most Frequently Encountered Errors
 

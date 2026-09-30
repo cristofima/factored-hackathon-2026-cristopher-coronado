@@ -1,6 +1,6 @@
 # Agent Customization
 
-The active workflow contains a triage agent plus Account and Transaction specialists. It is built in [`app/backend/app/agents/azure_chat/hosted_workflow.py`](app/backend/app/agents/azure_chat/hosted_workflow.py) and served through Foundry Responses by [`app/backend/app/main_responses_host.py`](app/backend/app/main_responses_host.py).
+The active workflow contains a triage agent plus Account and Transaction specialists. It is built in [`app/agent/app/agents/azure_chat/hosted_workflow.py`](app/agent/app/agents/azure_chat/hosted_workflow.py) and served through Foundry Responses by [`app/agent/app/main_responses_host.py`](app/agent/app/main_responses_host.py).
 
 ## Supported Changes
 
@@ -13,16 +13,16 @@ Adding another specialist, reconnecting Payment, or restoring ChatKit changes th
 
 ## Agent Changes
 
-1. Update the owning agent or workflow module under `app/backend/app/agents/azure_chat`.
+1. Update the owning agent or workflow module under `app/agent/app/agents/azure_chat`.
 2. Keep agent instructions and MCP tool names and descriptions in English.
 3. Preserve `FoundryChatClient`, `HandoffBuilder`, and the Responses host boundary.
 4. Keep MCP calls async and avoid opening connections during module import or workflow construction.
-5. Add focused coverage to `app/backend/tests/test_hosted_workflow.py` when behavior changes.
+5. Add focused coverage to `app/agent/tests/test_hosted_workflow.py` when behavior changes.
 
 Run:
 
 ```powershell
-cd app/backend
+cd app/agent
 uv run pytest tests/test_hosted_workflow.py tests/test_settings.py -q
 ```
 

@@ -149,7 +149,7 @@ The frontend keeps conversation IDs only in React state. A reload sends the next
 message without `conversation`; the BFF creates a new opaque ID bound to verified
 `sub`. Subsequent messages reuse it, and another user's ID is rejected. The local
 agent persists workflow checkpoints through the SDK filesystem store, not this BFF
-or PostgreSQL. See the [backend state guide](../backend/README.md#conversation-state).
+or PostgreSQL. See the [agent state guide](../agent/README.md#conversation-state).
 
 Beneficiaries has no persisted source. Hosted identity
 transport and deployed parity still require separate validation.

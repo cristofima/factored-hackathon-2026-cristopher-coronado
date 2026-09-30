@@ -20,11 +20,11 @@ The BFF is the browser trust boundary. It validates the application JWT, signs v
 | --------------- | ------------------------------------------------------------------- | ---------------------------------------------------- |
 | Banking web     | [`app/frontend/banking-web`](../app/frontend/banking-web/README.md) | React UI and Responses SSE consumption               |
 | Responses BFF   | [`app/responses-bff`](../app/responses-bff/README.md)               | Persisted login/profile/accounts and Responses proxy |
-| Hosted agent    | [`app/backend`](../app/backend/README.md)                           | Account/Transaction handoff workflow                 |
+| Hosted agent    | [`app/agent`](../app/agent/README.md)                               | Account/Transaction handoff workflow                 |
 | Account API     | [`app/business-api/account`](../app/business-api/account)           | Account MCP tools                                    |
 | Transaction API | [`app/business-api/transaction`](../app/business-api/transaction)   | Transaction MCP tools                                |
 
-The root Terraform stack provisions the web, BFF, Account, Transaction, and Payment App Services. Payment remains an infrastructure/business API artifact but is not connected to the active agent workflow. The hosted Foundry agent uses the independent [`app/backend/azure.yaml`](../app/backend/azure.yaml) project root.
+The root Terraform stack provisions the web, BFF, Account, Transaction, and Payment App Services. Payment remains an infrastructure/business API artifact but is not connected to the active agent workflow. The hosted Foundry agent uses the independent [`app/agent/azure.yaml`](../app/agent/azure.yaml) project root.
 
 ## Local Topology
 
@@ -56,7 +56,3 @@ The BFF joins persisted user/customer ownership and filters savings/checking pro
 It returns a limited summary rather than a full database model. The frontend selects
 one account at a time and displays stored fields only. This read path does not call the
 agent or bypass the ownership checks used by conversational MCP inquiries.
-
-## Historical Protocol Documents
-
-The ChatKit protocol documents in this directory describe the removed implementation and are retained only as historical design references. They are not runtime or deployment instructions.
