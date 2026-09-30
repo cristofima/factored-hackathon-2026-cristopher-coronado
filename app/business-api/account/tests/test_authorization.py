@@ -7,6 +7,7 @@ from decimal import Decimal
 
 import pytest
 from banking_shared.models import Customer, Product, SQLModel
+from banking_shared.product_types import PRODUCT_TYPE_LABELS
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from fastmcp import Client
@@ -45,7 +46,7 @@ def session_factory() -> Callable[[], Session]:
                 Product(
                     product_id="account-owned",
                     customer_id="customer-owned",
-                    product_type="Cuenta Corriente",
+                    product_type="Checking Account",
                     product_number="ACCOUNT-SOURCE-NUMBER",
                     currency="USD",
                     current_balance=Decimal("1250.5000"),
@@ -55,7 +56,7 @@ def session_factory() -> Callable[[], Session]:
                 Product(
                     product_id="card-owned",
                     customer_id="customer-owned",
-                    product_type="Tarjeta Cr\u00e9dito",
+                    product_type="Credit Card",
                     product_number="4111111111111111",
                     currency="USD",
                     current_balance=Decimal("210.2500"),
@@ -65,13 +66,13 @@ def session_factory() -> Callable[[], Session]:
                 Product(
                     product_id="account-foreign",
                     customer_id="customer-foreign",
-                    product_type="Cuenta Ahorro",
+                    product_type="Savings Account",
                     currency="USD",
                 ),
                 Product(
                     product_id="card-foreign",
                     customer_id="customer-foreign",
-                    product_type="Tarjeta D\u00e9bito",
+                    product_type="Debit Card",
                     currency="USD",
                 ),
             ]
@@ -104,6 +105,9 @@ def test_owned_account_resources_are_mapped_from_storage(
     assert "account-owned" not in account.model_dump_json()
     assert "card-owned" not in account.model_dump_json()
     assert cards[0].number == "**** 1111"
+    assert cards[0].type == "credit"
+    assert cards[0].name == "Credit Card"
+    assert account.paymentMethods[0].type == "credit"
     assert "4111111111111111" not in cards[0].model_dump_json()
     assert cards[0].circuit is None
     assert len(user_accounts) == 1
@@ -111,6 +115,50 @@ def test_owned_account_resources_are_mapped_from_storage(
         "ACCOUNT-SOURCE-NUMBER",
         "customer-owned",
     ) == []
+
+
+def test_foreign_product_numbers_are_denied(session_factory: Callable[[], Session]) -> None:
+    with session_factory() as session:
+        for product_id in ("account-foreign", "card-foreign"):
+            product = session.get(Product, product_id)
+            assert product is not None
+            product.product_number = f"NUMBER-{product_id}"
+            session.add(product)
+        session.commit()
+
+    with pytest.raises(PermissionError, match="authenticated customer"):
+        AccountService(session_factory).get_account_details(
+            "NUMBER-account-foreign", "customer-owned",
+        )
+    with pytest.raises(PermissionError, match="authenticated customer"):
+        CardService(session_factory).get_card_details("NUMBER-card-foreign", "customer-owned")
+    debit = CardService(session_factory).get_card_details(
+        "NUMBER-card-foreign", "customer-foreign",
+    )
+    assert debit is not None
+    assert debit.type == "debit"
+    assert debit.name == "Debit Card"
+
+
+@pytest.mark.parametrize(("canonical", "legacy"), PRODUCT_TYPE_LABELS.items())
+def test_payment_method_type_is_normalized(
+    session_factory: Callable[[], Session], canonical: str, legacy: str,
+) -> None:
+    for label in (canonical, legacy):
+        with session_factory() as session:
+            product = session.get(Product, "card-owned")
+            assert product is not None
+            product.product_type = label
+            session.add(product)
+            session.commit()
+
+        method = AccountService(session_factory).get_payment_method_details(
+            "4111111111111111", "customer-owned",
+        )
+        assert method is not None
+        assert method.type == {"Credit Card": "credit", "Debit Card": "debit"}.get(
+            canonical, canonical,
+        )
 
 
 @pytest.mark.parametrize(
@@ -165,7 +213,7 @@ def test_duplicate_owned_numbers_are_denied(session_factory: Callable[[], Sessio
     with session_factory() as session:
         session.add(Product(
             product_id="duplicate", customer_id="customer-owned",
-            product_type="Cuenta Ahorro", currency="USD",
+            product_type="Savings Account", currency="USD",
             product_number="ACCOUNT-SOURCE-NUMBER",
         ))
         session.commit()
