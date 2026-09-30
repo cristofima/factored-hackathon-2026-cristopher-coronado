@@ -25,15 +25,14 @@ def _to_runtime_http_error(err: RuntimeError) -> HTTPException:
     return HTTPException(status_code=code, detail=message)
 
 
-@router.get("/accounts/{account_id}/cards", response_model=List[Card])
+@router.get("/accounts/{product_number}/cards", response_model=List[Card])
 def list_credit_cards(
-    account_id: str,
+    product_number: str,
     customer_id: Annotated[str, Depends(get_http_customer_id)],
 ):
     """Return all credit cards for a given account."""
-    logger.info("List credit cards for account_id=%s", account_id)
     try:
-        return card_service_singleton.get_credit_cards(account_id, customer_id)
+        return card_service_singleton.get_credit_cards(product_number, customer_id)
     except PermissionError as error:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(error)) from error
     except ValueError as ve:
@@ -44,15 +43,14 @@ def list_credit_cards(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error")
 
 
-@router.get("/cards/{card_id}", response_model=Card)
+@router.get("/cards/{product_number}", response_model=Card)
 def get_card_details(
-    card_id: str,
+    product_number: str,
     customer_id: Annotated[str, Depends(get_http_customer_id)],
 ):
     """Return the card details for a single identifier."""
-    logger.info("Get card details for card_id=%s", card_id)
     try:
-        card = card_service_singleton.get_card_details(card_id, customer_id)
+        card = card_service_singleton.get_card_details(product_number, customer_id)
         if card is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Card not found")
         return card

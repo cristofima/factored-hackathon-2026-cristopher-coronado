@@ -20,11 +20,10 @@ def get_accounts_by_user_name(
 
 @mcp.tool(name="getAccountDetails", description="Get account details and available payment methods")
 def get_account_details(
-    accountId: Annotated[str, "Unique identifier for the user account"],
+    product_number: Annotated[str, "Full account product number supplied by the user; never a product id"],
     headers: dict[str, str] = CurrentHeaders(),
 ):
-    logger.info("Request to getAccountDetails with accountId: %s", accountId)
-    return account_service.get_account_details(accountId, get_customer_id(headers))
+    return account_service.get_account_details(product_number, get_customer_id(headers))
 
 
 
@@ -36,26 +35,23 @@ def get_account_details(
 
 @mcp.tool(name="getRegisteredBeneficiary", description="Get list of registered beneficiaries for a specific account")
 def get_registered_beneficiary(
-    accountId: Annotated[str, "Unique identifier for the user account"],
+    product_number: Annotated[str, "Account product number; never a product id"],
     headers: dict[str, str] = CurrentHeaders(),
 ):
-    logger.info("Request to getRegisteredBeneficiary with accountId: %s", accountId)
-    return account_service.get_registered_beneficiary(accountId, get_customer_id(headers))
+    return account_service.get_registered_beneficiary(product_number, get_customer_id(headers))
 
 
 @mcp.tool(name="getCreditCards", description="Get the list of credit cards bound to an account")
 def get_credit_cards(
-    accountId: Annotated[str, "Unique identifier for the user account"],
+    product_number: Annotated[str, "Account product number; never a product id"],
     headers: dict[str, str] = CurrentHeaders(),
 ):
-    logger.info("Request to getCreditCards with accountId: %s", accountId)
-    return card_service_singleton.get_credit_cards(accountId, get_customer_id(headers))
+    return card_service_singleton.get_credit_cards(product_number, get_customer_id(headers))
 
 
 @mcp.tool(name="getCardDetails", description="Get the details of a single credit card")
 def get_card_details(
-    cardId: Annotated[str, "Unique identifier for the card"],
+    product_number: Annotated[str, "Card product number; never a product id"],
     headers: dict[str, str] = CurrentHeaders(),
 ):
-    logger.info("Request to getCardDetails with cardId: %s", cardId)
-    return card_service_singleton.get_card_details(cardId, get_customer_id(headers))
+    return card_service_singleton.get_card_details(product_number, get_customer_id(headers))
