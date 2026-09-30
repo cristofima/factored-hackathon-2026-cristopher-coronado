@@ -83,8 +83,8 @@ class TransactionService:
         customer_id: str,
     ) -> None:
         logger.info("notify_transaction called with account_id=%s", account_id)
-        if transaction.accountId not in (None, account_id):
-            raise ValueError("Transaction accountId does not match AccountId")
+        if transaction.product_number not in (None, account_id):
+            raise ValueError("Transaction product_number does not match the requested number")
         with self._session_factory() as session:
             _get_owned_product(session, account_id, customer_id)
         raise RuntimeError("Transaction creation is unavailable for persisted records")
@@ -107,15 +107,15 @@ def _get_owned_product(
     _require_identifier(product_id, "AccountId")
     statement = (
         select(Product)
-        .where(Product.product_id == product_id)
+        .where(Product.product_number == product_id)
         .where(Product.customer_id == customer_id)
     )
     if product_types is not None:
         statement = statement.where(Product.product_type.in_(product_types))
-    product = session.exec(statement).first()
-    if product is None:
+    products = session.exec(statement.limit(2)).all()
+    if len(products) != 1:
         raise PermissionError("Account does not belong to the authenticated customer")
-    return product
+    return products[0]
 
 
 def _transaction_statement(
@@ -145,16 +145,20 @@ def _execute_transactions(
 
 
 def _to_transaction(record: TransactionRecord, product: Product) -> Transaction:
-    is_card = product.product_type in CARD_PRODUCT_TYPES
+    product_number = product.product_number
+    if product.product_type in CARD_PRODUCT_TYPES:
+        product_number = (
+            f"**** {product_number[-4:]}"
+            if product_number and len(product_number) > 4 else None
+        )
     return Transaction(
         id=record.transaction_id,
         type=record.transaction_type,
         recipientName=record.merchant_name,
-        accountId=record.product_id,
+        product_number=product_number,
         paymentType=record.channel,
         amount=float(record.amount),
         timestamp=record.transaction_date.isoformat(),
-        cardId=record.product_id if is_card else None,
         category=record.transaction_category,
         status=record.transaction_status,
     )

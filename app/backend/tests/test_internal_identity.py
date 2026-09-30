@@ -10,19 +10,26 @@ import hmac
 import json
 import time
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from app.common.internal_identity import create_mcp_authorization
+from app.helpers.user_profile_helper import UserProfileHelper
+from app.helpers.user_profile_provider import UserProfileProvider
 
 
 SECRET = "test-secret-key-with-at-least-32-bytes"
 
 
-def _identity(sub: str = "user-a", customer_id: str = "customer-a") -> str:
+def _identity(
+    sub: str = "user-a", customer_id: str = "customer-a", email: str | None = None
+) -> str:
+    claims = {"customer_id": customer_id, "sub": sub}
+    if email is not None:
+        claims["email"] = email
     payload = json.dumps(
-        {"customer_id": customer_id, "sub": sub},
+        claims,
         separators=(",", ":"),
         sort_keys=True,
     ).encode()
@@ -86,3 +93,74 @@ async def test_concurrent_requests_do_not_leak_identity() -> None:
 
     assert (first["sub"], first["customer_id"]) == ("user-a", "customer-a")
     assert (second["sub"], second["customer_id"]) == ("user-b", "customer-b")
+
+
+async def test_profile_provider_injects_verified_request_email() -> None:
+    context = MagicMock()
+    provider = UserProfileProvider(SECRET)
+    with patch("app.common.internal_identity.get_request_context") as get_context:
+        get_context.return_value.user_id = _identity(email="real-user@example.com")
+
+        await provider.before_run(agent=None, session=None, context=context, state={})
+        authorization = create_mcp_authorization(SECRET)
+
+    context.extend_instructions.assert_any_call(
+        provider.source_id, "Email: real-user@example.com"
+    )
+    assert "bob.user@contoso.com" not in str(context.extend_instructions.call_args_list)
+    assert "email" not in _bearer_payload(authorization)
+
+
+@pytest.mark.parametrize(
+    ("identity", "error_type", "message"),
+    [
+        (None, RuntimeError, "Authenticated request identity is required"),
+        (_identity(), ValueError, "Authenticated request email is required"),
+        (_identity(email="   "), ValueError, "Invalid internal identity email"),
+        (
+            _identity(email="real-user@example.com") + "tampered",
+            ValueError,
+            "Invalid internal identity signature",
+        ),
+    ],
+)
+async def test_profile_provider_rejects_unverified_or_missing_email(
+    identity: str | None, error_type: type[Exception], message: str
+) -> None:
+    context = MagicMock()
+    with patch("app.common.internal_identity.get_request_context") as get_context:
+        get_context.return_value.user_id = identity
+
+        with pytest.raises(error_type, match=message):
+            await UserProfileProvider(SECRET).before_run(
+                agent=None, session=None, context=context, state={}
+            )
+
+    context.extend_instructions.assert_not_called()
+
+
+async def test_concurrent_profiles_use_each_requests_verified_email() -> None:
+    current_identity: ContextVar[str | None] = ContextVar("profile_identity", default=None)
+    provider = UserProfileProvider(SECRET)
+
+    async def profile_for(email: str) -> MagicMock:
+        token = current_identity.set(_identity(sub=email, customer_id=email, email=email))
+        context = MagicMock()
+        try:
+            await asyncio.sleep(0)
+            await provider.before_run(agent=None, session=None, context=context, state={})
+            assert UserProfileHelper.get_user_id(SECRET) == email
+            return context
+        finally:
+            current_identity.reset(token)
+
+    with patch(
+        "app.common.internal_identity.get_request_context",
+        side_effect=lambda: SimpleNamespace(user_id=current_identity.get()),
+    ):
+        first, second = await asyncio.gather(
+            profile_for("user-a@example.com"), profile_for("user-b@example.com")
+        )
+
+    first.extend_instructions.assert_any_call(provider.source_id, "Email: user-a@example.com")
+    second.extend_instructions.assert_any_call(provider.source_id, "Email: user-b@example.com")

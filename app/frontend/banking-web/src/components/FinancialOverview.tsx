@@ -64,8 +64,8 @@ export default function FinancialOverview({
 
   useEffect(() => {
     setSelectedId(
-      accounts.find((item) => item.id === requestedId)?.id ??
-        accounts[0]?.id ??
+      accounts.find((item) => item.number === requestedId)?.number ??
+        accounts.find((item) => item.number)?.number ??
         "",
     );
   }, [accounts, requestedId]);
@@ -100,7 +100,7 @@ export default function FinancialOverview({
     return () => controller.abort();
   }, [selectedId, start, end, user?.id, attempt]);
 
-  const account = accounts.find((item) => item.id === selectedId);
+  const account = accounts.find((item) => item.number === selectedId);
   const summary = summarizeTransactions(records);
   const changeWindow = (update: () => void) => {
     setRecords([]);
@@ -153,10 +153,13 @@ export default function FinancialOverview({
               }
               className="block h-10 w-full rounded-md border bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              {accounts.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.type} -{" "}
-                  {item.number ? `**** ${item.number.slice(-4)}` : item.id} (
+              {accounts.map((item, index) => (
+                <option
+                  key={item.number ?? `unavailable-${index}`}
+                  value={item.number ?? ""}
+                  disabled={!item.number}
+                >
+                  {item.type} - {item.number ?? "Number unavailable"} (
                   {item.currency})
                 </option>
               ))}

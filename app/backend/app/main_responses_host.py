@@ -8,6 +8,8 @@ from agent_framework_foundry_hosting import ResponsesHostServer
 from app.agents.azure_chat.hosted_workflow import build_hosted_workflow
 from app.config.azure_credential import get_azure_credential
 from app.config.settings import settings
+from app.helpers.isolated_responses_host import IsolatedResponsesHostServer
+from agent_framework import WorkflowAgent
 
 
 def _required_setting(value: str | None, name: str) -> str:
@@ -30,18 +32,19 @@ def create_server() -> ResponsesHostServer:
         ),
         credential=credential,
     )
-    workflow = build_hosted_workflow(
-        chat_client,
-        _required_setting(settings.ACCOUNT_MCP_URL, "ACCOUNT_MCP_URL"),
-        _required_setting(settings.TRANSACTION_MCP_URL, "TRANSACTION_MCP_URL"),
-        _required_setting(settings.INTERNAL_IDENTITY_SECRET, "INTERNAL_IDENTITY_SECRET"),
-    )
-    return ResponsesHostServer(
-        workflow.as_agent(
+    account_url = _required_setting(settings.ACCOUNT_MCP_URL, "ACCOUNT_MCP_URL")
+    transaction_url = _required_setting(settings.TRANSACTION_MCP_URL, "TRANSACTION_MCP_URL")
+    identity_secret = _required_setting(settings.INTERNAL_IDENTITY_SECRET, "INTERNAL_IDENTITY_SECRET")
+
+    def create_agent() -> WorkflowAgent:
+        return build_hosted_workflow(
+            chat_client, account_url, transaction_url, identity_secret,
+        ).as_agent(
             name="home_banking_agent",
             description="Answers authenticated account and transaction questions.",
         )
-    )
+
+    return IsolatedResponsesHostServer(create_agent)
 
 
 async def main() -> None:

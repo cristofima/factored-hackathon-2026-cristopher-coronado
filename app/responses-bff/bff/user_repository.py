@@ -46,15 +46,17 @@ class SqlModelUserRepository:
         start_date: date | None, end_date: date | None, limit: int, offset: int,
     ) -> tuple[list[TransactionRecord], int] | None:
         with self._session_factory() as session:
-            account = session.exec(
+            accounts = session.exec(
                 select(Product)
                 .join(User, User.customer_id == Product.customer_id)
                 .where(User.id == user_id, Product.customer_id == customer_id)
-                .where(Product.product_id == account_id)
+                .where(Product.product_number == account_id)
                 .where(Product.product_type.in_(("Cuenta Ahorro", "Cuenta Corriente")))
-            ).one_or_none()
-            if account is None:
+                .limit(2)
+            ).all()
+            if len(accounts) != 1:
                 return None
+            account = accounts[0]
             query = select(TransactionRecord).where(
                 TransactionRecord.product_id == account.product_id,
                 TransactionRecord.customer_id == customer_id,

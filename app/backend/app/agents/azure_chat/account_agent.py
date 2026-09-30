@@ -3,6 +3,7 @@ import logging
 from agent_framework import Agent, BaseChatClient, MCPStreamableHTTPTool
 
 from app.common.internal_identity import mcp_header_provider
+from app.helpers.tool_error_middleware import OwnershipErrorMiddleware
 from app.helpers.user_profile_provider import UserProfileProvider
 
 
@@ -13,6 +14,15 @@ class AccountAgent :
     you are a personal financial advisor who help the user to retrieve information about their bank accounts.
     Always use markdown to format your response.
     Always use the logged user details to retrieve account info.
+    Resource lookup tools accept product_number, never a database product id.
+    Use the full product number supplied by the user for lookup. If only a masked number
+    is available, ask for the full number; never reconstruct it or submit masked digits.
+    In account lists and details, identify accounts using the tool's accountNumber exactly as returned.
+    It is the full bank account number, not the internal id. Label the column "Account number".
+    Never substitute ordinal labels such as "Account 1" or present id as an account number.
+    If accountNumber is missing, state that the account number is unavailable; do not invent one.
+    Bank account numbers may be shown in full. Credit and debit card numbers must remain masked.
+    Never reconstruct or disclose masked card digits, including card numbers supplied by the user.
     If a tool reports that a requested account does not belong to the authenticated customer, stop.
     State that the account is unavailable without calling another tool, listing other accounts, or
     disclosing any account identifiers, balances, or details.
@@ -49,6 +59,7 @@ class AccountAgent :
                 name=AccountAgent.name,
                 require_per_service_call_history_persistence=True,
                 tools=[account_mcp_server],
-                context_providers=[UserProfileProvider()]
+                middleware=[OwnershipErrorMiddleware()],
+                context_providers=[UserProfileProvider(self.internal_identity_secret)]
             )
         

@@ -73,7 +73,32 @@ Hosted deployment is owned by [`azure.yaml`](azure.yaml) and uses managed identi
 ## Validation
 
 ```powershell
-uv run pytest tests/test_hosted_workflow.py tests/test_settings.py -q
+uv run pytest tests/test_hosted_workflow.py tests/test_internal_identity.py tests/test_settings.py -q
 ```
 
-The focused tests verify startup without eager MCP connections, the Foundry model configuration, and termination after an ordinary completed assistant response. The browser path has also been exercised locally through the BFF with a legitimate application JWT. Mock session tokens are intentionally unsupported; hosted delegated-identity transport remains pending validation.
+The focused suite passed with 23 tests covering handoff completion, safe ownership
+denials, signed identity, settings, and concurrent workflow-request isolation. SDK
+deprecation warnings and a telemetry-exporter connection failure remain separate from
+the passing test assertions.
+
+On 2026-09-30, the user confirmed local browser success through the BFF: an owned
+account returned details and masked cards; a foreign account reached
+`getAccountDetails(product_number=...)`, returned `ACCESS_DENIED`, and produced a
+visible assistant denial before `response.completed`. No foreign financial data was
+returned. Missing/empty account cases, multi-turn checkpoint restoration, approval
+continuation, and hosted identity transport remain unverified end to end.
+
+## Conversation State
+
+[The isolated host](app/helpers/isolated_responses_host.py) builds a fresh workflow
+for each request. The hosting runtime restores the matching conversation checkpoint
+inside that request before delivering new input; different requests do not share
+mutable executor state. This uses an internal extension point of the installed
+hosting SDK and must be revalidated when upgrading it.
+
+The default checkpoint provider uses `FoundryStateStore`. Outside Foundry hosting,
+the installed SDK writes JSON files under `~/.agentserver/state_stores`, or under
+`AGENTSERVER_STATE_ROOT/state_stores` when configured. Execution state is in RAM,
+but checkpoints can survive process restarts. They are not stored in PostgreSQL.
+Treat these files as sensitive conversation data; a browser reload neither deletes
+them nor resumes them automatically.

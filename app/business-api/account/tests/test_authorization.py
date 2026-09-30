@@ -1,14 +1,21 @@
 """Ownership and storage mapping checks for Account services."""
 
+import asyncio
 from collections.abc import Callable
 from datetime import date
 from decimal import Decimal
 
 import pytest
 from banking_shared.models import Customer, Product, SQLModel
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from fastmcp import Client
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, create_engine
 
+import mcp_tools
+import routers
+from internal_identity import get_http_customer_id
 from services import AccountService, CardService, UserService
 
 
@@ -80,23 +87,28 @@ def test_owned_account_resources_are_mapped_from_storage(
     card_service = CardService(session_factory)
     user_service = UserService(session_factory)
 
-    account = account_service.get_account_details("account-owned", "customer-owned")
-    cards = card_service.get_credit_cards("account-owned", "customer-owned")
+    account = account_service.get_account_details("ACCOUNT-SOURCE-NUMBER", "customer-owned")
+    cards = card_service.get_credit_cards("ACCOUNT-SOURCE-NUMBER", "customer-owned")
     user_accounts = user_service.get_accounts_by_user_name(
         "owner@example.com",
         "customer-owned",
     )
 
     assert account is not None
+    assert account.accountNumber == "ACCOUNT-SOURCE-NUMBER"
+    assert user_accounts[0].accountNumber == "ACCOUNT-SOURCE-NUMBER"
     assert account.accountHolderFullName == "Ada Lovelace"
     assert account.balance == "1250.5000"
-    assert [method.id for method in account.paymentMethods or []] == ["card-owned"]
-    assert [card.id for card in cards] == ["card-owned"]
-    assert cards[0].number is None
+    assert [method.number for method in account.paymentMethods or []] == ["**** 1111"]
+    assert len(cards) == 1
+    assert "account-owned" not in account.model_dump_json()
+    assert "card-owned" not in account.model_dump_json()
+    assert cards[0].number == "**** 1111"
+    assert "4111111111111111" not in cards[0].model_dump_json()
     assert cards[0].circuit is None
-    assert [owned_account.id for owned_account in user_accounts] == ["account-owned"]
+    assert len(user_accounts) == 1
     assert account_service.get_registered_beneficiary(
-        "account-owned",
+        "ACCOUNT-SOURCE-NUMBER",
         "customer-owned",
     ) == []
 
@@ -105,6 +117,7 @@ def test_owned_account_resources_are_mapped_from_storage(
     ("resource_id", "service_method"),
     [
         ("account-foreign", "account"),
+        ("account-owned", "account"),
         ("card-foreign", "card"),
         ("missing-product", "account"),
     ],
@@ -129,9 +142,109 @@ def test_foreign_and_missing_resources_are_indistinguishable(
         operation()
 
 
+@pytest.mark.parametrize("number", [None, "", "   ", "1234", " 1234 ", "1234567890"])
+def test_account_number_is_full_or_unavailable(
+    session_factory: Callable[[], Session], number: str | None
+) -> None:
+    with session_factory() as session:
+        product = session.get(Product, "account-owned")
+        assert product is not None
+        product.product_number = number
+        session.add(product)
+        session.commit()
+
+    account = UserService(session_factory).get_accounts_by_user_name(
+        "owner@example.com", "customer-owned"
+    )[0]
+
+    assert account is not None
+    assert account.accountNumber == ((number.strip() or None) if number else None)
+
+
+def test_duplicate_owned_numbers_are_denied(session_factory: Callable[[], Session]) -> None:
+    with session_factory() as session:
+        session.add(Product(
+            product_id="duplicate", customer_id="customer-owned",
+            product_type="Cuenta Ahorro", currency="USD",
+            product_number="ACCOUNT-SOURCE-NUMBER",
+        ))
+        session.commit()
+
+    with pytest.raises(PermissionError, match="authenticated customer"):
+        AccountService(session_factory).get_account_details(
+            "ACCOUNT-SOURCE-NUMBER", "customer-owned",
+        )
+
+
+def test_mcp_number_lookup_returns_full_account_without_primary_keys(
+    session_factory: Callable[[], Session], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(mcp_tools, "account_service", AccountService(session_factory))
+    monkeypatch.setattr(mcp_tools, "get_customer_id", lambda headers: "customer-owned")
+
+    async def call_account_tool() -> None:
+        async with Client(mcp_tools.mcp) as client:
+            result = await client.call_tool(
+                "getAccountDetails", {"product_number": "ACCOUNT-SOURCE-NUMBER"},
+            )
+        assert not result.is_error
+        text = " ".join(content.text for content in result.content)
+        assert "ACCOUNT-SOURCE-NUMBER" in text
+        assert "account-owned" not in text
+        assert "card-owned" not in text
+        assert "4111111111111111" not in text
+
+    asyncio.run(call_account_tool())
+
+
 def test_foreign_user_name_is_denied(session_factory: Callable[[], Session]) -> None:
     with pytest.raises(PermissionError, match="authenticated customer"):
         UserService(session_factory).get_accounts_by_user_name(
             "foreign@example.com",
             "customer-owned",
         )
+
+
+@pytest.mark.parametrize("resource_id", ["account-foreign", "missing-product"])
+def test_mcp_account_denial_preserves_error_without_resource_data(
+    session_factory: Callable[[], Session],
+    monkeypatch: pytest.MonkeyPatch,
+    resource_id: str,
+) -> None:
+    monkeypatch.setattr(mcp_tools, "account_service", AccountService(session_factory))
+    monkeypatch.setattr(mcp_tools, "get_customer_id", lambda headers: "customer-owned")
+
+    async def call_account_tool() -> None:
+        async with Client(mcp_tools.mcp) as client:
+            result = await client.call_tool(
+                "getAccountDetails", {"product_number": resource_id}, raise_on_error=False,
+            )
+        assert result.is_error is True
+        assert result.structured_content is None
+        assert len(result.content) == 1
+        assert result.content[0].text == (
+            "Error calling tool 'getAccountDetails': "
+            "Account does not belong to the authenticated customer"
+        )
+
+    asyncio.run(call_account_tool())
+
+
+@pytest.mark.parametrize("resource_id", ["account-foreign", "missing-product"])
+def test_rest_account_cards_denial_returns_403(
+    session_factory: Callable[[], Session],
+    monkeypatch: pytest.MonkeyPatch,
+    resource_id: str,
+) -> None:
+    monkeypatch.setattr(routers, "card_service_singleton", CardService(session_factory))
+    app = FastAPI()
+    app.include_router(routers.router, prefix="/api")
+    app.dependency_overrides[get_http_customer_id] = lambda: "customer-owned"
+
+    with TestClient(app) as client:
+        response = client.get(f"/api/accounts/{resource_id}/cards")
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "detail": "Account does not belong to the authenticated customer",
+    }
