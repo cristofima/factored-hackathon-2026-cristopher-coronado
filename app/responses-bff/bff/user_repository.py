@@ -8,6 +8,7 @@ from typing import Protocol
 
 from banking_shared.database import create_session
 from banking_shared.models import Customer, Product, TransactionRecord, User
+from banking_shared.product_types import ACCOUNT_PRODUCT_TYPES, CARD_PRODUCT_TYPES
 from sqlalchemy import func
 from sqlmodel import Session, select
 
@@ -51,7 +52,7 @@ class SqlModelUserRepository:
                 .join(User, User.customer_id == Product.customer_id)
                 .where(User.id == user_id, Product.customer_id == customer_id)
                 .where(Product.product_number == account_id)
-                .where(Product.product_type.in_(("Cuenta Ahorro", "Cuenta Corriente")))
+                .where(Product.product_type.in_(ACCOUNT_PRODUCT_TYPES))
                 .limit(2)
             ).all()
             if len(accounts) != 1:
@@ -84,7 +85,7 @@ class SqlModelUserRepository:
                 select(Product)
                 .join(User, User.customer_id == Product.customer_id)
                 .where(User.id == user_id, Product.customer_id == customer_id)
-                .where(Product.product_type.in_(("Cuenta Ahorro", "Cuenta Corriente")))
+                .where(Product.product_type.in_(ACCOUNT_PRODUCT_TYPES))
                 .order_by(Product.product_id)
             ).all())
 
@@ -94,7 +95,7 @@ class SqlModelUserRepository:
                 select(Product)
                 .join(User, User.customer_id == Product.customer_id)
                 .where(User.id == user_id, Product.customer_id == customer_id)
-                .where(Product.product_type.in_(("Tarjeta Cr\u00e9dito", "Tarjeta D\u00e9bito")))
+                .where(Product.product_type.in_(CARD_PRODUCT_TYPES))
                 .order_by(Product.product_id)
             ).all())
 
