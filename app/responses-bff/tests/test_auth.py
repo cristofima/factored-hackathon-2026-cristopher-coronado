@@ -214,6 +214,7 @@ async def test_accounts_returns_persisted_fields_for_verified_identity() -> None
     assert response.json() == [{
         "id": "account-1", "type": "Cuenta Ahorro", "status": "Activa",
         "opened": "2026-01-15", "number": "12345678", "currency": "USD",
+        "balance": None,
     }]
     assert unavailable.status_code == 503
     assert unavailable.json()["detail"] == "Accounts are temporarily unavailable"

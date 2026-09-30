@@ -42,6 +42,7 @@ class AccountSummary(BaseModel):
     opened: date | None
     number: str | None
     currency: str
+    balance: str | None
 
 
 class LoginResponse(BaseModel):
@@ -49,6 +50,11 @@ class LoginResponse(BaseModel):
     token_type: Literal["bearer"] = "bearer"
     expires_in: int
     user: UserProfile
+
+
+class CardSummary(AccountSummary):
+    expires: date | None
+    credit_limit: str | None
 
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -138,6 +144,34 @@ def get_current_user_accounts(
         opened=product.opening_date,
         number=product.product_number,
         currency=product.currency,
+        balance=format(product.current_balance, "f") if product.current_balance is not None else None,
+    ) for product in products]
+
+
+@router.get("/me/cards", response_model=list[CardSummary])
+def get_current_user_cards(
+    request: Request,
+    user: Annotated[AuthenticatedUser, Depends(get_authenticated_user)],
+) -> list[CardSummary]:
+    """List persisted credit and debit cards owned by the verified identity."""
+    repository: UserRepository = request.app.state.user_repository
+    try:
+        products = repository.list_cards(user.sub, user.customer_id)
+    except (RuntimeError, SQLAlchemyError):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Cards are temporarily unavailable",
+        ) from None
+    return [CardSummary(
+        id=product.product_id,
+        type=product.product_type,
+        status=product.product_status,
+        opened=product.opening_date,
+        expires=product.expiration_date,
+        number=f"**** {product.product_number[-4:]}" if product.product_number else None,
+        currency=product.currency,
+        balance=format(product.current_balance, "f") if product.current_balance is not None else None,
+        credit_limit=format(product.credit_limit, "f") if product.credit_limit is not None else None,
     ) for product in products]
 
 

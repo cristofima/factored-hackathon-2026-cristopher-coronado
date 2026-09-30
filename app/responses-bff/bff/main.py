@@ -9,6 +9,7 @@ import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from bff.accounts import router as accounts_router
 from bff.auth import router as auth_router
 from bff.credentials import create_azure_credential
 from bff.responses import AsyncCredential, router as responses_router
@@ -48,6 +49,7 @@ def create_app(
 
     app = FastAPI(title=app_settings.app_name, lifespan=lifespan)
     app.include_router(auth_router, tags=["auth"])
+    app.include_router(accounts_router, tags=["accounts"])
     app.include_router(responses_router, tags=["responses"])
     app.add_middleware(
         CORSMiddleware,
