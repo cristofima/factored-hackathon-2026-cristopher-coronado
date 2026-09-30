@@ -4,8 +4,13 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { ClientWidgetProps } from "../WidgetRegistry";
-import { useSendWidgetAction, formatAsPython, createPythonCodeBlock } from "../widgetUtils";
+import {
+  useSendWidgetAction,
+  formatAsPython,
+  createPythonCodeBlock,
+} from "../widgetUtils";
 import ReactMarkdown from "react-markdown";
+import { useTranslation } from "react-i18next";
 
 /**
  * Arguments expected by the ToolApprovalRequest widget
@@ -24,24 +29,21 @@ interface ToolApprovalArgs {
  * This component displays a tool call approval UI with approve/reject buttons
  */
 export function ToolApprovalRequest({ args, itemId }: ClientWidgetProps) {
-  const {
-    tool_name,
-    tool_args,
-    call_id,
-    request_id,
-    title = "Approval Required",
-    description = "This action requires your approval before proceeding.",
-  } = args as ToolApprovalArgs;
+  const { t } = useTranslation();
+  const { tool_name, tool_args, call_id, request_id, title, description } =
+    args as ToolApprovalArgs;
 
   // State to track which button is loading (null = none, 'approve' or 'reject')
-  const [loadingButton, setLoadingButton] = useState<'approve' | 'reject' | null>(null);
+  const [loadingButton, setLoadingButton] = useState<
+    "approve" | "reject" | null
+  >(null);
   const [isDisabled, setIsDisabled] = useState(false);
 
   // Get action sender from hook with callbacks
   const sendWidgetAction = useSendWidgetAction({
     onThreadStarted: () => {
       // Loading state is already set when button is clicked
-      console.log('Widget action thread started');
+      console.log("Widget action thread started");
     },
     onThreadEnded: () => {
       // Disable buttons to prevent double submit
@@ -50,10 +52,10 @@ export function ToolApprovalRequest({ args, itemId }: ClientWidgetProps) {
     },
     onError: (error) => {
       // Re-enable buttons on error so user can retry
-      console.error('Widget action error:', error);
+      console.error("Widget action error:", error);
       setIsDisabled(false);
       setLoadingButton(null);
-    }
+    },
   });
 
   // Format tool arguments as Python code
@@ -61,7 +63,7 @@ export function ToolApprovalRequest({ args, itemId }: ClientWidgetProps) {
   const codeBlock = createPythonCodeBlock(argsStr);
 
   const handleApprove = () => {
-    setLoadingButton('approve');
+    setLoadingButton("approve");
     sendWidgetAction(itemId, {
       type: "approval",
       payload: {
@@ -75,7 +77,7 @@ export function ToolApprovalRequest({ args, itemId }: ClientWidgetProps) {
   };
 
   const handleReject = () => {
-    setLoadingButton('reject');
+    setLoadingButton("reject");
     sendWidgetAction(itemId, {
       type: "approval",
       payload: {
@@ -96,21 +98,27 @@ export function ToolApprovalRequest({ args, itemId }: ClientWidgetProps) {
           <Info className="h-12 w-12 text-white" />
         </div>
         <div className="flex flex-col items-center gap-1">
-          <h3 className="text-xl font-semibold">{title}</h3>
-          <p className="text-sm text-muted-foreground">{description}</p>
+          <h3 className="text-xl font-semibold">
+            {!title || title === "Approval Required"
+              ? t("Approval required")
+              : title}
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            {!description ||
+            description ===
+              "This action requires your approval before proceeding."
+              ? t("This action requires your approval before proceeding.")
+              : description}
+          </p>
           <div className="mt-1 prose prose-sm dark:prose-invert">
-            <ReactMarkdown>
-              {`**${tool_name}**`}
-            </ReactMarkdown>
+            <ReactMarkdown>{`**${tool_name}**`}</ReactMarkdown>
           </div>
         </div>
       </div>
 
       {/* Tool arguments */}
       <div className="px-4 prose prose-sm dark:prose-invert max-w-none">
-        <ReactMarkdown>
-          {codeBlock}
-        </ReactMarkdown>
+        <ReactMarkdown>{codeBlock}</ReactMarkdown>
       </div>
 
       {/* Divider */}
@@ -120,22 +128,22 @@ export function ToolApprovalRequest({ args, itemId }: ClientWidgetProps) {
 
       {/* Action buttons */}
       <div className="flex gap-2 p-4 pt-0">
-        <Button 
-          onClick={handleApprove} 
-          className="flex-1" 
+        <Button
+          onClick={handleApprove}
+          className="flex-1"
           disabled={isDisabled || loadingButton !== null}
-          loading={loadingButton === 'approve'}
+          loading={loadingButton === "approve"}
         >
-          Approve
+          {t("Approve")}
         </Button>
-        <Button 
-          onClick={handleReject} 
-          variant="outline" 
-          className="flex-1" 
+        <Button
+          onClick={handleReject}
+          variant="outline"
+          className="flex-1"
           disabled={isDisabled || loadingButton !== null}
-          loading={loadingButton === 'reject'}
+          loading={loadingButton === "reject"}
         >
-          No
+          {t("Reject")}
         </Button>
       </div>
     </Card>

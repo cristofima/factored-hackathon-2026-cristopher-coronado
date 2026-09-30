@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { getAuthToken } from "@/api/authToken";
+import { readApiError, type ApiErrorCode } from "@/api/errors";
 import type { RetryConfig } from "./types";
 
 export interface StreamEvent {
@@ -43,30 +44,13 @@ export interface UseThreadStreamOptions {
 const DEFAULT_RETRYABLE_STATUS_CODES = [408, 429, 500, 502, 503, 504];
 
 // Convert HTTP error to ErrorEvent format
-function createHttpErrorEvent(status: number, statusText: string, retryableStatusCodes: number[]): StreamEvent {
+function createHttpErrorEvent(status: number, code: ApiErrorCode, retryableStatusCodes: number[]): StreamEvent {
   const isRetryable = retryableStatusCodes.includes(status);
-
-  let message: string;
-  if (status === 429) {
-    message = "Too many requests. Please wait a moment and try again.";
-  } else if (status === 408) {
-    message = "Request timeout. Please try again.";
-  } else if (status >= 500) {
-    message = "Server error occurred. Please try again.";
-  } else if (status === 401) {
-    message = "Authentication required. Please log in again.";
-  } else if (status === 403) {
-    message = "Access denied. You don't have permission to perform this action.";
-  } else if (status === 404) {
-    message = "Resource not found. The requested resource could not be found.";
-  } else {
-    message = `HTTP error ${status}: ${statusText || 'Unknown error'}`;
-  }
 
   return {
     type: "error",
-    code: "http_error",
-    message,
+    code,
+    message: code,
     allow_retry: isRetryable,
     http_status: status,
   };
@@ -119,7 +103,8 @@ export function useThreadStream({ url, request, onEvent, onConversation, onError
         if (!response.ok) {
           // Convert HTTP error to error event instead of throwing
           const retryableStatusCodes = retryConfigRef.current?.retryableStatusCodes ?? DEFAULT_RETRYABLE_STATUS_CODES;
-          const errorEvent = createHttpErrorEvent(response.status, response.statusText, retryableStatusCodes);
+          const error = await readApiError(response);
+          const errorEvent = createHttpErrorEvent(response.status, error.code, retryableStatusCodes);
 
           // Emit the error event so it's handled like SSE errors
           onEventRef.current(errorEvent);

@@ -4,6 +4,7 @@ import { ArrowUp, Loader2, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useChat } from "./ResponsesChatProvider";
+import { useTranslation } from "react-i18next";
 
 type ButtonSize = "sm" | "md" | "lg";
 
@@ -18,10 +19,8 @@ const BUTTON_DIMENSIONS = {
   lg: { button: "h-12 w-12", icon: "h-5 w-5" },
 } as const;
 
-export function Composer({
-  placeholder = "Type your message...",
-  buttonSize = "lg",
-}: ComposerProps) {
+export function Composer({ placeholder, buttonSize = "lg" }: ComposerProps) {
+  const { t } = useTranslation();
   const { sendMessage, cancelStreaming, isStreaming } = useChat();
   const [value, setValue] = useState("");
   const dimensions = BUTTON_DIMENSIONS[buttonSize];
@@ -45,7 +44,7 @@ export function Composer({
               handleSend();
             }
           }}
-          placeholder={placeholder}
+          placeholder={placeholder ?? t("Type your message...")}
           className="min-h-[64px] max-h-40 flex-1 resize-none border-none bg-transparent px-0 py-2 text-sm shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
         />
         {isStreaming && (
@@ -56,7 +55,7 @@ export function Composer({
             className={`${dimensions.button} rounded-full bg-destructive text-destructive-foreground shadow-sm`}
           >
             <Square className={dimensions.icon} />
-            <span className="sr-only">Stop streaming</span>
+            <span className="sr-only">{t("Stop streaming")}</span>
           </Button>
         )}
         <Button
@@ -71,7 +70,7 @@ export function Composer({
           ) : (
             <ArrowUp className={dimensions.icon} />
           )}
-          <span className="sr-only">Send message</span>
+          <span className="sr-only">{t("Send message")}</span>
         </Button>
       </div>
     </div>
