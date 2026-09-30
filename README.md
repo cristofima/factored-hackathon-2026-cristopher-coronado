@@ -172,6 +172,12 @@ Account, Transaction, and the BFF consume the canonical SQLModel package from `a
 
 Foundry Responses maintains conversation history when requests link turns with a signed user-bound `conversation` value. The BFF rejects conversation identifiers that belong to a different authenticated user. It verifies PostgreSQL-backed Argon2 identities and issues short-lived HS256 JWTs.
 
+The local Responses host creates an independent workflow per request and restores the
+matching conversation checkpoint when present. The installed hosting SDK persists
+local checkpoints as JSON under `~/.agentserver/state_stores`, unless
+`AGENTSERVER_STATE_ROOT` overrides the root. Browser threads exist only in React state:
+a reload clears the thread, and its first message creates a new user-bound conversation.
+
 For more info about deployment click [here](./docs/deployment-guide.md)
 
 🛠️ **Need Help?** Check our [Troubleshooting Guide](./docs/troubleshooting.md) for solutions to common deployment issues.
@@ -217,6 +223,7 @@ Current limitations to keep explicit:
 - The frontend displays persisted customer names and owned accounts, including explicit multi-account selection. Account codes absent from the schema are omitted; Agreements and Privacy & Security Policy remain inherited placeholders.
 - Dashboard and Analytics consume authenticated BFF balances and fully paginated transactions. Credit/debit cards use a customer-scoped, read-only BFF catalog with server-masked numbers; card operations remain unavailable. See the [frontend guide](app/frontend/banking-web/README.md) for presentation and validation limits.
 - Account and Transaction use persisted product ownership and transaction rows. Selected local two-user PostgreSQL and browser financial comparisons passed, but the complete signed agent-chain, browser-state, and deployed validation matrices remain open.
+- On 2026-09-30, user-supplied local browser evidence confirmed an owned-account answer with full bank number and masked card output, and a foreign-account lookup returning `ACCESS_DENIED` followed by a visible assistant response. This closes the reported blank-response failure, not the full authorization or hosted matrix. See the [verification checklist](DEMO_SCOPE_CHECKLIST.md#0-real-data-verification-gate-next).
 - MCP and internal API authorization must be enforced in service code (`customer_id` ownership checks), not inferred from prompts.
 - The frontend must not call Foundry or agent endpoints directly; browser traffic must go through the Responses BFF.
 - The BFF validates application identity and proxies upstream requests, but this does not replace per-resource authorization in business services.
