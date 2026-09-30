@@ -27,7 +27,7 @@ Requirements:
 Install dependencies and run the local Responses host:
 
 ```powershell
-cd app/backend
+cd app/agent
 uv sync --extra dev
 $env:PROFILE="dev"
 uv run python -m app.main_responses_host
@@ -37,11 +37,11 @@ The agent listens on port `8088`. Browser traffic should go through the BFF on p
 
 ## Configuration
 
-This directory is a separate `azd` project root because it has its own `azure.yaml` at `app/backend/azure.yaml`. The repository root `azure.yaml` (App Service stack) and this backend `azure.yaml` (hosted agent stack) do not share `azd` environment state automatically.
+This directory is a separate `azd` project root because it has its own `azure.yaml` at `app/agent/azure.yaml`. The repository root `azure.yaml` (App Service stack) and this agent `azure.yaml` (hosted agent stack) do not share `azd` environment state automatically.
 
-When you run commands with `--cwd app/backend` (or directly from this folder), `azd` may prompt for:
+When you run commands with `--cwd app/agent` (or directly from this folder), `azd` may prompt for:
 
-- A backend environment name
+- An agent environment name
 - Azure subscription
 - Azure region/location
 
@@ -58,7 +58,7 @@ TRANSACTION_MCP_URL=http://localhost:8071/mcp
 INTERNAL_IDENTITY_SECRET=<shared-secret-at-least-32-characters>
 ```
 
-For hosted provisioning with `azd`, make sure the backend environment includes at least:
+For hosted provisioning with `azd`, make sure the agent environment includes at least:
 
 - `FOUNDRY_PROJECT_ENDPOINT`
 - `AZURE_AI_PROJECT_ID`

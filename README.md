@@ -135,7 +135,7 @@ Clone this repository and select an azd environment. Before provisioning the roo
 This repository intentionally uses two separate Azure Developer CLI project roots:
 
 - Root project (`./azure.yaml`): Terraform provisions the shared Linux plan, five App Services, monitoring, Blob storage, and a dedicated Foundry account and project; root `azd deploy` deploys only the App Service workloads.
-- Backend project (`./app/backend/azure.yaml`): the `microsoft.foundry` provider deploys the hosted agent to the existing Foundry project. Set its `FOUNDRY_PROJECT_ENDPOINT` from the root environment output before deploying; the two azd environments are separate.
+- Agent project (`./app/agent/azure.yaml`): the `microsoft.foundry` provider deploys the hosted agent to the existing Foundry project. Set its `FOUNDRY_PROJECT_ENDPOINT` from the root environment output before deploying; the two azd environments are separate.
 
 Naming note for the App Service stack: the frontend app uses `app-banking-web-<env>` (for example, `app-banking-web-development`) so the web workload name is explicit and distinct from backend services.
 
@@ -147,14 +147,14 @@ azd provision
 azd deploy
 
 # Configure and deploy the separate hosted-agent project after local agent validation
-# azd env set FOUNDRY_PROJECT_ENDPOINT <root FOUNDRY_PROJECT_ENDPOINT> --cwd app/backend
-azd up --cwd app/backend
+# azd env set FOUNDRY_PROJECT_ENDPOINT <root FOUNDRY_PROJECT_ENDPOINT> --cwd app/agent
+azd up --cwd app/agent
 ```
 
 For iterative agent updates only:
 
 ```shell
-azd deploy --cwd app/backend
+azd deploy --cwd app/agent
 ```
 
 ### Python dependency artifact for App Service zip deploy
