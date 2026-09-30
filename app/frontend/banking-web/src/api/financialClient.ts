@@ -2,7 +2,7 @@ import { getAuthToken } from "@/api/authToken";
 
 export interface FinancialTransaction {
     id: string;
-    account_id: string;
+    product_number: string;
     date: string;
     amount: string;
     currency: string;
@@ -43,7 +43,7 @@ export async function getTransactions(
         }
         expectedTotal = page.total;
         for (const record of page.items) {
-            if (record.account_id !== accountId || ids.has(record.id)) {
+            if (record.product_number !== accountId || ids.has(record.id)) {
                 throw new Error("Transaction pagination is inconsistent. Retry.");
             }
             ids.add(record.id);

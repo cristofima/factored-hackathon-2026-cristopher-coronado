@@ -4,7 +4,7 @@ import { decimalString, decimalUnits, summarizeTransactions } from "./financial"
 
 function transaction(overrides: Partial<FinancialTransaction> = {}): FinancialTransaction {
     return {
-        id: "record", account_id: "account", date: "2026-06-01", amount: "1.0000",
+        id: "record", product_number: "account", date: "2026-06-01", amount: "1.0000",
         currency: "USD", type: "Deposit", status: "Approved", category: null,
         channel: null, merchant: null, ...overrides
     };
