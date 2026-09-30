@@ -49,7 +49,7 @@ def _conversation_signature(user_id: str, conversation_id: str, settings: Settin
     if not settings.jwt_secret_key:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="JWT validation is not configured",
+            detail={"code": "SERVICE_UNAVAILABLE"},
         )
     return hmac.new(
         settings.jwt_secret_key.encode(),
@@ -61,7 +61,7 @@ def _conversation_signature(user_id: str, conversation_id: str, settings: Settin
 def _forbidden_conversation() -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
-        detail="Conversation does not belong to the authenticated user",
+        detail={"code": "ACCESS_DENIED"},
     )
 
 
@@ -75,7 +75,7 @@ async def _upstream_headers(
     if not settings.internal_identity_secret:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Internal identity signing is not configured",
+            detail={"code": "SERVICE_UNAVAILABLE"},
         )
     internal_identity = create_internal_identity(user, settings.internal_identity_secret)
     if settings.responses_upstream_mode == "foundry":
@@ -106,14 +106,14 @@ async def create_response(
     if payload.get("previous_response_id"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Use the user-bound conversation field for continuation",
+            detail={"code": "INVALID_REQUEST"},
         )
 
     requested_conversation = payload.get("conversation")
     if requested_conversation is not None and not isinstance(requested_conversation, str):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Conversation must be an opaque string returned by this API",
+            detail={"code": "INVALID_REQUEST"},
         )
 
     settings: Settings = request.app.state.settings

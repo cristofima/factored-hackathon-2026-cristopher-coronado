@@ -56,24 +56,24 @@ def repository() -> Iterator[SqlModelUserRepository]:
                  password_hash="unused", locale="pt"),
             Product(product_id="account-1", customer_id="customer-1",
                     product_number="NUMBER-1",
-                    product_type="Cuenta Ahorro", currency="USD",
+                    product_type="Savings Account", currency="USD",
                     current_balance=Decimal("12345678.9012")),
             Product(product_id="empty", customer_id="customer-1",
                     product_number="NUMBER-EMPTY",
-                    product_type="Cuenta Corriente", currency="USD"),
+                    product_type="Checking Account", currency="USD"),
             Product(product_id="card", customer_id="customer-1",
                     product_type="Tarjeta", currency="USD"),
             Product(product_id="foreign", customer_id="customer-2",
                     product_number="NUMBER-FOREIGN",
-                    product_type="Cuenta Ahorro", currency="EUR"),
+                    product_type="Savings Account", currency="EUR"),
                 Product(product_id="credit", customer_id="customer-1",
-                    product_type="Tarjeta Cr\u00e9dito", currency="USD",
+                    product_type="Credit Card", currency="USD",
                     product_number="1234567890123456", current_balance=Decimal("12.3456"),
                     credit_limit=Decimal("1000.0000"), expiration_date=date(2028, 1, 1)),
                 Product(product_id="debit", customer_id="customer-1",
-                    product_type="Tarjeta D\u00e9bito", currency="EUR"),
+                    product_type="Debit Card", currency="EUR"),
                 Product(product_id="foreign-card", customer_id="customer-2",
-                    product_type="Tarjeta Cr\u00e9dito", currency="EUR"),
+                    product_type="Credit Card", currency="EUR"),
         ])
         session.commit()
         timestamps = [
@@ -121,16 +121,38 @@ def test_account_balance_preserves_decimal_and_null(client: TestClient) -> None:
         ("NUMBER-1", "12345678.9012"), ("NUMBER-EMPTY", None),
     ]
     assert all("id" not in item for item in response.json())
+    assert [item["type"] for item in response.json()] == ["Savings Account", "Checking Account"]
+
+
+@pytest.mark.parametrize(("user_id", "customer_id"), [
+    ("user-1", "customer-2"), ("user-2", "customer-1"), ("missing", "customer-1"),
+])
+def test_account_list_rejects_mismatched_persisted_identity(
+    client: TestClient, user_id: str, customer_id: str,
+) -> None:
+    response = client.get("/auth/me/accounts", headers=_headers(user_id, customer_id))
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_second_user_account_list_is_scoped(client: TestClient) -> None:
+    response = client.get("/auth/me/accounts", headers=_headers("user-2", "customer-2"))
+
+    assert response.status_code == 200
+    assert [(item["number"], item["type"]) for item in response.json()] == [
+        ("NUMBER-FOREIGN", "Savings Account"),
+    ]
 
 
 def test_cards_preserve_fields_mask_number_and_filter_products(client: TestClient) -> None:
     response = client.get("/auth/me/cards?customer_id=customer-2", headers=_headers())
     assert response.status_code == 200
     assert response.json() == [
-        {"type": "Tarjeta Cr\u00e9dito", "currency": "USD",
+        {"type": "Credit Card", "currency": "USD",
          "status": None, "opened": None, "number": "**** 3456", "balance": "12.3456",
          "expires": "2028-01-01", "credit_limit": "1000.0000"},
-        {"type": "Tarjeta D\u00e9bito", "currency": "EUR",
+        {"type": "Debit Card", "currency": "EUR",
          "status": None, "opened": None, "number": None, "balance": None,
          "expires": None, "credit_limit": None},
     ]
@@ -175,7 +197,7 @@ def test_cards_empty_and_database_failure() -> None:
     )) as client:
         response = client.get("/auth/me/cards", headers=_headers())
     assert response.status_code == 503
-    assert response.json() == {"detail": "Cards are temporarily unavailable"}
+    assert response.json() == {"detail": {"code": "SERVICE_UNAVAILABLE"}}
 
 
 def test_transactions_date_boundaries_order_precision_and_nulls(client: TestClient) -> None:
@@ -236,7 +258,7 @@ def test_transactions_requires_both_identity_claims_and_bank_account(
     )
 
     assert response.status_code == 404
-    assert response.json() == {"detail": "Account not found"}
+    assert response.json() == {"detail": {"code": "ACCOUNT_UNAVAILABLE"}}
 
 
 def test_empty_owned_account_returns_success(client: TestClient) -> None:
@@ -255,14 +277,14 @@ def test_duplicate_account_numbers_are_denied(
     with repository._session_factory() as session:
         session.add(Product(
             product_id="duplicate", customer_id="customer-1", product_number="NUMBER-1",
-            product_type="Cuenta Ahorro", currency="USD",
+            product_type="Savings Account", currency="USD",
         ))
         session.commit()
 
     response = client.get("/accounts/NUMBER-1/transactions", headers=_headers())
 
     assert response.status_code == 404
-    assert response.json() == {"detail": "Account not found"}
+    assert response.json() == {"detail": {"code": "ACCOUNT_UNAVAILABLE"}}
 
 
 @pytest.mark.parametrize("number", ["", "1234", "1234567890123456"])
@@ -279,7 +301,7 @@ def test_debit_card_number_is_masked_or_unavailable(
     response = client.get("/auth/me/cards", headers=_headers())
 
     assert response.status_code == 200
-    debit = next(item for item in response.json() if item["type"] == "Tarjeta D\u00e9bito")
+    debit = next(item for item in response.json() if item["type"] == "Debit Card")
     assert debit["number"] == ("**** 3456" if len(number) > 4 else None)
     assert "id" not in debit
 
@@ -293,6 +315,8 @@ def test_transactions_rejects_invalid_queries(client: TestClient, query: str) ->
     response = client.get(f"/accounts/account-1/transactions?{query}", headers=_headers())
 
     assert response.status_code == 422
+    if query == "start_date=2026-06-02&end_date=2026-06-01":
+        assert response.json() == {"detail": {"code": "INVALID_DATE_RANGE"}}
 
 
 @pytest.mark.parametrize("headers", [{}, {"Authorization": "Bearer invalid"}])
@@ -300,6 +324,7 @@ def test_transactions_requires_valid_jwt(client: TestClient, headers: dict[str, 
     response = client.get("/accounts/account-1/transactions", headers=headers)
 
     assert response.status_code == 401
+    assert response.json() == {"detail": {"code": "AUTH_REQUIRED"}}
     assert response.headers["www-authenticate"] == "Bearer"
 
 
@@ -313,4 +338,4 @@ def test_transactions_database_failure_returns_503(error: Exception) -> None:
         response = client.get("/accounts/account-1/transactions", headers=_headers())
 
     assert response.status_code == 503
-    assert response.json() == {"detail": "Transactions are temporarily unavailable"}
+    assert response.json() == {"detail": {"code": "SERVICE_UNAVAILABLE"}}

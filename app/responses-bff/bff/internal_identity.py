@@ -13,7 +13,12 @@ from bff.auth import AuthenticatedUser
 def create_internal_identity(user: AuthenticatedUser, secret: str) -> str:
     """Create a stable, signed identity without forwarding the browser JWT."""
     payload = json.dumps(
-        {"customer_id": user.customer_id, "sub": user.sub, "email": user.email},
+        {
+            "customer_id": user.customer_id,
+            "sub": user.sub,
+            "email": user.email,
+            "locale": user.locale,
+        },
         separators=(",", ":"),
         sort_keys=True,
     ).encode()

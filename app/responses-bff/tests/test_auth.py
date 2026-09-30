@@ -105,6 +105,8 @@ async def test_login_rejects_invalid_credentials_without_token() -> None:
             )
 
     assert response.status_code == 401
+    assert response.json() == {"detail": {"code": "INVALID_CREDENTIALS"}}
+    assert response.headers["www-authenticate"] == "Bearer"
     assert "access_token" not in response.text
 
 
@@ -175,7 +177,7 @@ async def test_login_is_unavailable_when_database_lookup_fails() -> None:
             )
 
     assert response.status_code == 503
-    assert response.json()["detail"] == "Authentication is temporarily unavailable"
+    assert response.json()["detail"] == {"code": "SERVICE_UNAVAILABLE"}
 
 
 async def test_me_is_unavailable_when_profile_lookup_fails() -> None:
@@ -194,7 +196,7 @@ async def test_me_is_unavailable_when_profile_lookup_fails() -> None:
             )
 
     assert response.status_code == 503
-    assert response.json()["detail"] == "User profile is temporarily unavailable"
+    assert response.json()["detail"] == {"code": "SERVICE_UNAVAILABLE"}
 
 
 async def test_accounts_returns_persisted_fields_for_verified_identity() -> None:
@@ -212,12 +214,12 @@ async def test_accounts_returns_persisted_fields_for_verified_identity() -> None
 
     assert response.status_code == 200
     assert response.json() == [{
-        "type": "Cuenta Ahorro", "status": "Activa",
+        "type": "Savings Account", "status": "Activa",
         "opened": "2026-01-15", "number": "12345678", "currency": "USD",
         "balance": None,
     }]
     assert unavailable.status_code == 503
-    assert unavailable.json()["detail"] == "Accounts are temporarily unavailable"
+    assert unavailable.json()["detail"] == {"code": "SERVICE_UNAVAILABLE"}
 
 
 async def test_accounts_requires_bearer_identity() -> None:
