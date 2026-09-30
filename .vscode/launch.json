@@ -47,7 +47,7 @@
         "ENABLE_SENSITIVE_DATA": "true"
       },
       "jinja": true,
-      "cwd": "${workspaceFolder}/app/backend",
+      "cwd": "${workspaceFolder}/app/agent",
       "justMyCode": false
     },
     {
