@@ -6,6 +6,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Annotated, Literal
 
 import jwt
+from banking_shared.product_types import normalize_product_type
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import InvalidTokenError
@@ -72,7 +73,7 @@ def login(payload: LoginRequest, request: Request) -> LoginResponse:
     if not settings.jwt_secret_key:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Authentication is not configured",
+            detail={"code": "SERVICE_UNAVAILABLE"},
         )
 
     normalized_email = payload.email.strip().lower()
@@ -82,12 +83,12 @@ def login(payload: LoginRequest, request: Request) -> LoginResponse:
     except (RuntimeError, SQLAlchemyError):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Authentication is temporarily unavailable",
+            detail={"code": "SERVICE_UNAVAILABLE"},
         ) from None
 
     comparison_hash = configured_user.password_hash if configured_user else dummy_password_hash
     if not password_hash.verify(payload.password, comparison_hash) or configured_user is None:
-        raise _unauthorized("Invalid email or password")
+        raise _unauthorized("INVALID_CREDENTIALS")
 
     user = AuthenticatedUser(
         sub=configured_user.id,
@@ -134,10 +135,10 @@ def get_current_user_accounts(
     except (RuntimeError, SQLAlchemyError):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Accounts are temporarily unavailable",
+            detail={"code": "SERVICE_UNAVAILABLE"},
         ) from None
     return [AccountSummary(
-        type=product.product_type,
+        type=normalize_product_type(product.product_type),
         status=product.product_status,
         opened=product.opening_date,
         number=product.product_number,
@@ -158,10 +159,10 @@ def get_current_user_cards(
     except (RuntimeError, SQLAlchemyError):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Cards are temporarily unavailable",
+            detail={"code": "SERVICE_UNAVAILABLE"},
         ) from None
     return [CardSummary(
-        type=product.product_type,
+        type=normalize_product_type(product.product_type),
         status=product.product_status,
         opened=product.opening_date,
         expires=product.expiration_date,
@@ -182,7 +183,7 @@ def _get_profile(user: AuthenticatedUser, request: Request) -> UserProfile:
     except (RuntimeError, SQLAlchemyError):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="User profile is temporarily unavailable",
+            detail={"code": "SERVICE_UNAVAILABLE"},
         ) from None
     return UserProfile(**user.model_dump(), name=name)
 
@@ -193,13 +194,13 @@ def get_authenticated_user(
 ) -> AuthenticatedUser:
     """Validate the caller's JWT and return its required identity claims."""
     if credentials is None or credentials.scheme.lower() != "bearer":
-        raise _unauthorized("Bearer token is required")
+        raise _unauthorized("AUTH_REQUIRED")
 
     settings: Settings = request.app.state.settings
     if not settings.jwt_secret_key:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="JWT validation is not configured",
+            detail={"code": "SERVICE_UNAVAILABLE"},
         )
 
     try:
@@ -213,12 +214,12 @@ def get_authenticated_user(
         )
         return AuthenticatedUser.model_validate(claims)
     except (InvalidTokenError, ValidationError):
-        raise _unauthorized("Invalid or expired bearer token") from None
+        raise _unauthorized("AUTH_REQUIRED") from None
 
 
-def _unauthorized(detail: str) -> HTTPException:
+def _unauthorized(code: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail=detail,
+        detail={"code": code},
         headers={"WWW-Authenticate": "Bearer"},
     )

@@ -50,7 +50,7 @@ def get_account_transactions(
 ) -> TransactionPage:
     """Read an owned bank account's transactions with inclusive calendar dates."""
     if start_date is not None and end_date is not None and start_date > end_date:
-        raise HTTPException(status_code=422, detail="start_date must not exceed end_date")
+        raise HTTPException(status_code=422, detail={"code": "INVALID_DATE_RANGE"})
     repository: UserRepository = request.app.state.user_repository
     try:
         result = repository.list_transactions(
@@ -59,10 +59,10 @@ def get_account_transactions(
     except (RuntimeError, SQLAlchemyError):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Transactions are temporarily unavailable",
+            detail={"code": "SERVICE_UNAVAILABLE"},
         ) from None
     if result is None:
-        raise HTTPException(status_code=404, detail="Account not found")
+        raise HTTPException(status_code=404, detail={"code": "ACCOUNT_UNAVAILABLE"})
     records, total = result
     return TransactionPage(
         items=[TransactionSummary(
