@@ -24,6 +24,7 @@ from app.helpers.no_history_provider import NoHistoryProvider
 from app.helpers.handoff_middleware import HandoffNarrationMiddleware
 from app.helpers.tool_error_middleware import OwnershipErrorMiddleware
 from app.helpers.isolated_responses_host import IsolatedResponsesHostServer
+from app.helpers.user_profile_provider import UserProfileProvider
 
 
 @pytest.mark.parametrize("denied", [False, True])
@@ -328,3 +329,16 @@ def test_build_hosted_workflow_without_mcp_connections() -> None:
 
     assert workflow.name == "banking_assistant_handoff"
     assert server is not None
+
+
+def test_all_workflow_participants_receive_verified_profile_context() -> None:
+    with patch("app.agents.azure_chat.hosted_workflow.HandoffBuilder") as builder:
+        build_hosted_workflow(MagicMock(), "http://127.0.0.1:1/mcp",
+                              "http://127.0.0.1:2/mcp", "test-secret")
+    participants = builder.call_args.kwargs["participants"]
+    assert {agent.name for agent in participants} == {
+        "triage_agent", "AccountAgent", "TransactionHistoryAgent",
+    }
+    for agent in participants:
+        assert sum(isinstance(provider, UserProfileProvider)
+                   for provider in agent.context_providers) == 1

@@ -20,6 +20,12 @@ class InternalPrincipal:
     sub: str
     customer_id: str
     email: str | None = None
+    locale: str = "en"
+
+
+def resolve_response_locale(value: object) -> str:
+    """Allow only supported stored locales; never inject arbitrary claim text."""
+    return value if isinstance(value, str) and value in {"es", "pt", "en"} else "en"
 
 
 def get_internal_principal(secret: str) -> InternalPrincipal:
@@ -69,6 +75,7 @@ def _verify_envelope(token: str, secret: str) -> InternalPrincipal:
             sub=payload["sub"],
             customer_id=payload["customer_id"],
             email=payload.get("email"),
+            locale=resolve_response_locale(payload.get("locale")),
         )
     except (KeyError, TypeError, ValueError) as error:
         raise ValueError("Invalid internal identity payload") from error
