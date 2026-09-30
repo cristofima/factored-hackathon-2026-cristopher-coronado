@@ -13,7 +13,7 @@ Zip deploy on App Service removes the Azure Container Registry dependency for th
 
 ## Hosted agent placement
 
-The Account/Transaction orchestrator runs through a Foundry Responses host. Its azd manifest lives at [app/backend/azure.yaml](../app/backend/azure.yaml), and commands should be run with `--cwd app/backend` from repository root. Local browser validation uses the local agent on port `8088` through the Responses BFF; hosted deployment is a separate operation.
+The Account/Transaction orchestrator runs through a Foundry Responses host. Its azd manifest lives at [app/agent/azure.yaml](../app/agent/azure.yaml), and commands should be run with `--cwd app/agent` from repository root. Local browser validation uses the local agent on port `8088` through the Responses BFF; hosted deployment is a separate operation.
 
 ## MCP API deployment
 

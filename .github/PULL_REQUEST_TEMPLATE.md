@@ -6,7 +6,7 @@
 
 <!-- Describe relevant changes grouped by scope. Keep only scopes that apply. -->
 
-- ## **Backend**:
+- ## **Agent**:
 - ## **Responses BFF**:
 - ## **Frontend**:
 - ## **Business API**:
@@ -58,7 +58,7 @@
 
 ```bash
 # Example:
-# uv run pytest app/backend/tests/test_hosted_workflow.py -q
+# uv run pytest app/agent/tests/test_hosted_workflow.py -q
 ```
 
 ### Manual Validation
