@@ -10,37 +10,34 @@ mcp = FastMCP("Transaction MCP Server")
 
 @mcp.tool(name="getTransactionsByRecipientName", description="Get transactions by recipient name")
 def get_transactions_by_recipient_name(
-    accountId: str,
+    product_number: str,
     recipientName: str,
     headers: dict[str, str] = CurrentHeaders(),
 ):
-    logger.info("getTransactionsByRecipientName called with accountId=%s, recipientName=%s", accountId, recipientName)
     return service.get_transactions_by_recipient_name(
-        accountId,
+        product_number,
         recipientName,
         get_customer_id(headers),
     )
 
 @mcp.tool(name="getCardTransactions", description="Get credit and debit card transactions")
 def get_card_transactions(
-    accountId: str,
-    cardId: str,
+    product_number: str,
+    card_product_number: str,
     headers: dict[str, str] = CurrentHeaders(),
 ):
-    logger.info("getCardTransactions called with accountId=%s, cardId=%s", accountId, cardId)
     return service.get_transactions_by_type(
-        account_id=accountId,
+        account_id=product_number,
         customer_id=get_customer_id(headers),
-        card_id=cardId,
+        card_id=card_product_number,
     )
 
 
 @mcp.tool(name="getLastTransactions", description="Get the last transactions for an account")
 def get_last_transactions(
-    accountId: str,
+    product_number: str,
     headers: dict[str, str] = CurrentHeaders(),
 ):
-    logger.info("getLastTransactions called with accountId=%s", accountId)
-    return service.get_transactions(accountId, get_customer_id(headers))
+    return service.get_transactions(product_number, get_customer_id(headers))
 
 
