@@ -1,5 +1,5 @@
 [project]
-name = "banking-assistant-copilot-backend"
+name = "banking-assistant-agent"
 version = "0.1.0"
 description = "A banking assistant workflow hosted through the Foundry Responses protocol"
 readme = "README.md"

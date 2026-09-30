@@ -75,7 +75,7 @@
       "type": "shell",
       "command": "uv run --env-file ../../.env.dev python -m app.main_responses_host",
       "options": {
-        "cwd": "${workspaceFolder}/app/backend",
+        "cwd": "${workspaceFolder}/app/agent",
         "env": {
           "PROFILE": "dev",
           "ENABLE_SENSITIVE_DATA": "true"

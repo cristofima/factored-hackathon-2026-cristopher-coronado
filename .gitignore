@@ -171,7 +171,7 @@ node_modules
 static/
 
 # Generated manifests
-app/backend/manifests/azd-env-configmap.yml
+app/agent/manifests/azd-env-configmap.yml
 deploy/aks/easyauth/config-output.md
 deploy/aks/easyauth/easyauth-ingress.yaml
 
