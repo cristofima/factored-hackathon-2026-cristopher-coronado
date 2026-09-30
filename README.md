@@ -215,7 +215,8 @@ Current limitations to keep explicit:
 
 - End-user login uses PostgreSQL-backed Argon2 identities and short-lived JWTs; it is not a production identity lifecycle.
 - The frontend displays persisted customer names and owned accounts, including explicit multi-account selection. Account codes absent from the schema are omitted; Agreements and Privacy & Security Policy remain inherited placeholders.
-- Account and Transaction use persisted product ownership and transaction rows. Their read-only PostgreSQL integration tests cover authorized, foreign-customer, and missing-resource access, but the full browser validation matrix still requires an approved local test login.
+- Dashboard and Analytics consume authenticated BFF balances and fully paginated transactions. Credit/debit cards use a customer-scoped, read-only BFF catalog with server-masked numbers; card operations remain unavailable. See the [frontend guide](app/frontend/banking-web/README.md) for presentation and validation limits.
+- Account and Transaction use persisted product ownership and transaction rows. Selected local two-user PostgreSQL and browser financial comparisons passed, but the complete signed agent-chain, browser-state, and deployed validation matrices remain open.
 - MCP and internal API authorization must be enforced in service code (`customer_id` ownership checks), not inferred from prompts.
 - The frontend must not call Foundry or agent endpoints directly; browser traffic must go through the Responses BFF.
 - The BFF validates application identity and proxies upstream requests, but this does not replace per-resource authorization in business services.
