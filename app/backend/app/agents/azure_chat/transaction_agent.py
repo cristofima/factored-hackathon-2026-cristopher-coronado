@@ -3,6 +3,7 @@ import logging
 from agent_framework import Agent, BaseChatClient, MCPStreamableHTTPTool
 
 from app.common.internal_identity import mcp_header_provider
+from app.helpers.tool_error_middleware import OwnershipErrorMiddleware
 from app.helpers.user_profile_provider import UserProfileProvider
 
 
@@ -16,6 +17,13 @@ class TransactionHistoryAgent :
     
     Use markdown list or table to display the transaction information.
     Always use the logged user details to retrieve account info.
+    Resource lookup tools accept product_number (and card_product_number for card lookups),
+    never database product ids. Use the full number supplied by the user. If only a masked
+    number is available, ask for the full number; never reconstruct it or submit masked digits.
+    Bank account numbers may be shown in full. Credit and debit card numbers must remain masked,
+    including card numbers supplied by the user. Preserve tool-returned card masking.
+    If a tool denies ownership, stop and state that the account is unavailable without
+    listing other accounts or disclosing financial data.
     """
     name = "TransactionHistoryAgent"
     description = "This agent manages user transactions related information such as banking movements and payments history"
@@ -56,5 +64,6 @@ class TransactionHistoryAgent :
           name=TransactionHistoryAgent.name,
           require_per_service_call_history_persistence=True,
           tools=[account_mcp_server, transaction_mcp_server],
-          context_providers=[UserProfileProvider()]
+          middleware=[OwnershipErrorMiddleware()],
+          context_providers=[UserProfileProvider(self.internal_identity_secret)]
       )
