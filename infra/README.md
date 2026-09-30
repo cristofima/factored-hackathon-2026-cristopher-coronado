@@ -1,6 +1,6 @@
 # Terraform provisioning
 
-The root `azure.yaml` runs `azd provision` against this directory and `azd deploy` for five Linux App Services: account, payment, transaction, the Responses BFF, and the web frontend. The hosted backend agent has its own `app/backend/azure.yaml` and is not an App Service or a Terraform resource in this stack. Terraform uses an existing resource group and provisions one shared Linux plan, five web sites, Log Analytics, Application Insights, Blob storage, and a dedicated Foundry account and project. The separate Foundry azd project deploys the hosted agent; it consumes the project endpoint provisioned here. PostgreSQL is planned but not yet provisioned by this stack.
+The root `azure.yaml` runs `azd provision` against this directory and `azd deploy` for five Linux App Services: account, payment, transaction, the Responses BFF, and the web frontend. The hosted backend agent has its own `app/backend/azure.yaml` and is not an App Service or a Terraform resource in this stack. Terraform uses an existing resource group and provisions one shared Linux plan, five web sites, Log Analytics, Application Insights, Blob storage, PostgreSQL, and a dedicated Foundry account and project. The separate Foundry azd project deploys the hosted agent; it consumes the project endpoint provisioned here.
 
 This stack intentionally omits Cosmos DB and Document Intelligence. Foundry Responses maintains conversation state when requests link turns with a `conversation` ID or `previous_response_id`; the BFF binds those conversations to the authenticated user. Before production use, verify the hosted agent and BFF identities have only the required Foundry permissions. Do not import role assignments targeting the removed backend App Service identity for a different principal. Blob storage is still provisioned for existing business-service compatibility and remains publicly reachable unless a private endpoint or VNet path is designed separately.
 
@@ -16,7 +16,13 @@ Before enabling `azd provision` against an existing Bicep deployment, inspect th
 
 The app names, derived web URLs, and infrastructure settings are emitted as Terraform outputs for azd. Do not derive a web URL from the site name when unique hostnames are enabled; consume the `defaultHostName` output. The root environment also receives `AZURE_OPENAI_ENDPOINT`, `FOUNDRY_PROJECT_ENDPOINT`, `AZURE_RESPONSES_BFF_NAME`, and `RESPONSES_BFF_URI`. The web frontend receives the BFF `/responses` URL at build time. `azd deploy --cwd app/backend` is the separate hosted-agent deploy path; plain root `azd deploy` targets only the five App Services.
 
-Terraform deliberately omits `JWT_SECRET_KEY` and `AUTH_USERS`. Before deploying the BFF, configure the GitHub Environment secrets `RESPONSES_BFF_JWT_SECRET` and `RESPONSES_BFF_AUTH_USERS`, then use `.github/workflows/deploy-responses-bff.yaml`, or set both App Service settings through an equivalent secret-management path. The BFF identity receives `Foundry Agent Consumer` and a custom project-scoped role containing `Microsoft.CognitiveServices/accounts/agents/UserIdentityImpersonation/action`. Do not send Azure credentials or the delegated identity header from the browser.
+Terraform deliberately omits `JWT_SECRET_KEY` and configures the BFF with the shared
+PostgreSQL `DATABASE_URL`. Before deploying the BFF, configure the GitHub Environment
+secret `RESPONSES_BFF_JWT_SECRET`, then use `.github/workflows/cd-responses-bff.yaml`, or
+set the App Service secret through an equivalent secret-management path. The BFF identity
+receives `Foundry Agent Consumer` and a custom project-scoped role containing
+`Microsoft.CognitiveServices/accounts/agents/UserIdentityImpersonation/action`. Do not send
+Azure credentials or the delegated identity header from the browser.
 
 By convention in this repository, the frontend App Service name is `app-banking-web-<env>` (for example, `app-banking-web-development`). Keep this explicit naming when adding environments so the web workload is distinguishable from account/payment/transaction services.
 

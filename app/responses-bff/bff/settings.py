@@ -4,18 +4,8 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
-
-class ConfiguredUser(BaseModel):
-    """A login identity supplied through protected application configuration."""
-
-    id: str
-    customer_id: str
-    email: str
-    password_hash: str
-    locale: str
 
 
 class Settings(BaseSettings):
@@ -31,7 +21,6 @@ class Settings(BaseSettings):
     jwt_issuer: str = "home-banking-api"
     jwt_audience: str = "home-banking-web"
     jwt_access_token_minutes: int = Field(default=15, ge=1, le=60)
-    auth_users: list[ConfiguredUser] = Field(default_factory=list)
     azure_client_id: str | None = None
     allowed_origins: list[str] = ["http://localhost:5170"]
 

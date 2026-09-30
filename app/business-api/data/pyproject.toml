@@ -5,9 +5,14 @@ description = "Schema migrations and bounded data loading for the banking assist
 requires-python = ">=3.11"
 dependencies = [
     "alembic>=1.14,<2",
+    "banking-shared",
     "psycopg[binary]>=3.2,<4",
+    "pwdlib[argon2]>=0.2,<1",
     "sqlmodel>=0.0.24,<1",
 ]
+
+[tool.uv.sources]
+banking-shared = { path = "../shared", editable = true }
 
 [dependency-groups]
 dev = ["pytest>=8,<9"]

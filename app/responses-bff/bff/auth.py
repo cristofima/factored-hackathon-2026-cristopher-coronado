@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Annotated, Literal
 
 import jwt
@@ -11,8 +11,10 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import InvalidTokenError
 from pydantic import BaseModel, Field, ValidationError
 from pwdlib import PasswordHash
+from sqlalchemy.exc import SQLAlchemyError
 
 from bff.settings import Settings
+from bff.user_repository import UserRepository
 
 
 class AuthenticatedUser(BaseModel):
@@ -29,34 +31,56 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=256)
 
 
+class UserProfile(AuthenticatedUser):
+    name: str | None = None
+
+
+class AccountSummary(BaseModel):
+    id: str
+    type: str
+    status: str | None
+    opened: date | None
+    number: str | None
+    currency: str
+
+
 class LoginResponse(BaseModel):
     access_token: str
     token_type: Literal["bearer"] = "bearer"
     expires_in: int
-    user: AuthenticatedUser
+    user: UserProfile
 
 
 bearer_scheme = HTTPBearer(auto_error=False)
 password_hash = PasswordHash.recommended()
+dummy_password_hash = (
+    "$argon2id$v=19$m=65536,t=3,p=4$A5X21KRQt4Rd804DVrNBCw$"
+    "rKAM3NM6uy3byFjnM8kK2SFM4UGSs1BY/S4f7BrYmMk"
+)
 router = APIRouter(prefix="/auth")
 
 
 @router.post("/login", response_model=LoginResponse)
 def login(payload: LoginRequest, request: Request) -> LoginResponse:
-    """Verify configured credentials and issue a short-lived stateless JWT."""
+    """Verify persisted credentials and issue a short-lived stateless JWT."""
     settings: Settings = request.app.state.settings
-    if not settings.jwt_secret_key or not settings.auth_users:
+    if not settings.jwt_secret_key:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Authentication is not configured",
         )
 
     normalized_email = payload.email.strip().lower()
-    configured_user = next(
-        (user for user in settings.auth_users if user.email.strip().lower() == normalized_email),
-        None,
-    )
-    comparison_hash = configured_user.password_hash if configured_user else settings.auth_users[0].password_hash
+    user_repository: UserRepository = request.app.state.user_repository
+    try:
+        configured_user = user_repository.find_by_email(normalized_email)
+    except (RuntimeError, SQLAlchemyError):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication is temporarily unavailable",
+        ) from None
+
+    comparison_hash = configured_user.password_hash if configured_user else dummy_password_hash
     if not password_hash.verify(payload.password, comparison_hash) or configured_user is None:
         raise _unauthorized("Invalid email or password")
 
@@ -79,15 +103,54 @@ def login(payload: LoginRequest, request: Request) -> LoginResponse:
         settings.jwt_secret_key,
         algorithm="HS256",
     )
-    return LoginResponse(access_token=token, expires_in=expires_in, user=user)
+    return LoginResponse(
+        access_token=token, expires_in=expires_in, user=_get_profile(user, request)
+    )
 
 
-@router.get("/me", response_model=AuthenticatedUser)
+@router.get("/me", response_model=UserProfile)
 def get_current_user(
+    request: Request,
     user: Annotated[AuthenticatedUser, Depends(get_authenticated_user)],
-) -> AuthenticatedUser:
-    """Return claims only after the bearer token passes full validation."""
-    return user
+) -> UserProfile:
+    """Return the persisted profile for the verified bearer identity."""
+    return _get_profile(user, request)
+
+
+@router.get("/me/accounts", response_model=list[AccountSummary])
+def get_current_user_accounts(
+    request: Request,
+    user: Annotated[AuthenticatedUser, Depends(get_authenticated_user)],
+) -> list[AccountSummary]:
+    """List only bank accounts owned by the verified identity."""
+    repository: UserRepository = request.app.state.user_repository
+    try:
+        products = repository.list_accounts(user.sub, user.customer_id)
+    except (RuntimeError, SQLAlchemyError):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Accounts are temporarily unavailable",
+        ) from None
+    return [AccountSummary(
+        id=product.product_id,
+        type=product.product_type,
+        status=product.product_status,
+        opened=product.opening_date,
+        number=product.product_number,
+        currency=product.currency,
+    ) for product in products]
+
+
+def _get_profile(user: AuthenticatedUser, request: Request) -> UserProfile:
+    repository: UserRepository = request.app.state.user_repository
+    try:
+        name = repository.find_customer_name(user.sub, user.customer_id)
+    except (RuntimeError, SQLAlchemyError):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="User profile is temporarily unavailable",
+        ) from None
+    return UserProfile(**user.model_dump(), name=name)
 
 
 def get_authenticated_user(
