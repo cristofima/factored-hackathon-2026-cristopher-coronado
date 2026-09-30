@@ -46,11 +46,11 @@ export default function AIAgent() {
 
   const BANKING_STARTER_PROMPTS: StarterPrompt[] = [
     {
-      id: "card-trend",
-      title: "Review card spend",
-      description: "Summaries, trends, and anomalies",
+      id: "account-review",
+      title: "Review my accounts",
+      description: "Account details and recorded balances",
       icon: "💳",
-      content: "Summarize my Platinum Visa spending from the past 30 days",
+      content: "Show my bank accounts and their recorded balances",
     },
     {
       id: "transactions-search",
