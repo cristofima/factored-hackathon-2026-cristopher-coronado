@@ -190,11 +190,16 @@ Launch the services individually or press `F5` with `DEV - Full Stack Ordered` t
 
 ## Local inquiry verification
 
-On 2026-09-26, browser conversations through the BFF verified both sides of the dummy-data authorization path: a foreign account was denied, and an authorized follow-up returned account data without leaking the prior conversation. A transaction inquiry also reached `TransactionHistoryAgent` and completed Account and Transaction MCP calls. These checks confirm local protocol and ownership behavior over sample mappings, not production access control or payment execution.
+On 2026-09-30, user-supplied local browser evidence through the BFF confirmed an
+owned-account answer and a foreign-account denial against the persisted-data path.
+The foreign request called `getAccountDetails` with `product_number`; its tool
+result was `ACCESS_DENIED`, followed by a visible assistant denial and a completed
+Responses stream without foreign financial data. This is a tool-level denial,
+not an HTTP 403 for the successful SSE transport.
 
-Do not spend additional effort expanding dummy-data scenarios. Repeat the ownership,
-conversation-isolation, and transaction checks against PostgreSQL-backed hackathon data
-when it is available.
+Public lookup parameters use product numbers rather than internal product keys.
+Bank numbers are displayed in full; card numbers are masked. Full Transaction chat,
+missing/empty, multi-turn, and deployed authorization matrices remain pending.
 
 Account and Transaction use loaded hackathon dataset rows, not live bank integrations.
 The [data module guide](data/README.md) covers ingestion and demo identity seeding.
