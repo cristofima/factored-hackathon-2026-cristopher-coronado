@@ -36,7 +36,6 @@ class UserProfile(AuthenticatedUser):
 
 
 class AccountSummary(BaseModel):
-    id: str
     type: str
     status: str | None
     opened: date | None
@@ -138,7 +137,6 @@ def get_current_user_accounts(
             detail="Accounts are temporarily unavailable",
         ) from None
     return [AccountSummary(
-        id=product.product_id,
         type=product.product_type,
         status=product.product_status,
         opened=product.opening_date,
@@ -163,12 +161,14 @@ def get_current_user_cards(
             detail="Cards are temporarily unavailable",
         ) from None
     return [CardSummary(
-        id=product.product_id,
         type=product.product_type,
         status=product.product_status,
         opened=product.opening_date,
         expires=product.expiration_date,
-        number=f"**** {product.product_number[-4:]}" if product.product_number else None,
+        number=(
+            f"**** {product.product_number[-4:]}"
+            if product.product_number and len(product.product_number) > 4 else None
+        ),
         currency=product.currency,
         balance=format(product.current_balance, "f") if product.current_balance is not None else None,
         credit_limit=format(product.credit_limit, "f") if product.credit_limit is not None else None,

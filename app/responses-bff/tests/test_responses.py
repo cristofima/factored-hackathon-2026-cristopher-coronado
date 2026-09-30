@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
+import json
 from datetime import datetime, timedelta, timezone
 import re
 from types import SimpleNamespace
@@ -19,6 +23,25 @@ from bff.settings import Settings
 
 
 TEST_SECRET = "test-secret-key-with-at-least-32-bytes"
+
+
+def test_internal_identity_signs_verified_email_without_browser_credentials() -> None:
+    user = _authenticated_user("user-a")
+
+    identity = create_internal_identity(user, TEST_SECRET)
+
+    version, encoded, signature = identity.split(".")
+    payload = json.loads(base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4)))
+    assert version == "v1"
+    assert payload == {
+        "sub": user.sub,
+        "customer_id": user.customer_id,
+        "email": user.email,
+    }
+    assert hmac.compare_digest(
+        signature,
+        hmac.new(TEST_SECRET.encode(), encoded.encode(), hashlib.sha256).hexdigest(),
+    )
 
 
 class FakeCredential:

@@ -55,13 +55,16 @@ def repository() -> Iterator[SqlModelUserRepository]:
             User(id="user-2", customer_id="customer-2", email="other@example.com",
                  password_hash="unused", locale="pt"),
             Product(product_id="account-1", customer_id="customer-1",
+                    product_number="NUMBER-1",
                     product_type="Cuenta Ahorro", currency="USD",
                     current_balance=Decimal("12345678.9012")),
             Product(product_id="empty", customer_id="customer-1",
+                    product_number="NUMBER-EMPTY",
                     product_type="Cuenta Corriente", currency="USD"),
             Product(product_id="card", customer_id="customer-1",
                     product_type="Tarjeta", currency="USD"),
             Product(product_id="foreign", customer_id="customer-2",
+                    product_number="NUMBER-FOREIGN",
                     product_type="Cuenta Ahorro", currency="EUR"),
                 Product(product_id="credit", customer_id="customer-1",
                     product_type="Tarjeta Cr\u00e9dito", currency="USD",
@@ -114,24 +117,26 @@ def test_account_balance_preserves_decimal_and_null(client: TestClient) -> None:
     response = client.get("/auth/me/accounts", headers=_headers())
 
     assert response.status_code == 200
-    assert [(item["id"], item["balance"]) for item in response.json()] == [
-        ("account-1", "12345678.9012"), ("empty", None),
+    assert [(item["number"], item["balance"]) for item in response.json()] == [
+        ("NUMBER-1", "12345678.9012"), ("NUMBER-EMPTY", None),
     ]
+    assert all("id" not in item for item in response.json())
 
 
 def test_cards_preserve_fields_mask_number_and_filter_products(client: TestClient) -> None:
     response = client.get("/auth/me/cards?customer_id=customer-2", headers=_headers())
     assert response.status_code == 200
     assert response.json() == [
-        {"id": "credit", "type": "Tarjeta Cr\u00e9dito", "currency": "USD",
+        {"type": "Tarjeta Cr\u00e9dito", "currency": "USD",
          "status": None, "opened": None, "number": "**** 3456", "balance": "12.3456",
          "expires": "2028-01-01", "credit_limit": "1000.0000"},
-        {"id": "debit", "type": "Tarjeta D\u00e9bito", "currency": "EUR",
+        {"type": "Tarjeta D\u00e9bito", "currency": "EUR",
          "status": None, "opened": None, "number": None, "balance": None,
          "expires": None, "credit_limit": None},
     ]
     other = client.get("/auth/me/cards", headers=_headers("user-2", "customer-2"))
-    assert [item["id"] for item in other.json()] == ["foreign-card"]
+    assert len(other.json()) == 1
+    assert all("id" not in item for item in other.json())
 
 
 @pytest.mark.parametrize(("user_id", "customer_id"), [
@@ -175,7 +180,7 @@ def test_cards_empty_and_database_failure() -> None:
 
 def test_transactions_date_boundaries_order_precision_and_nulls(client: TestClient) -> None:
     response = client.get(
-        "/accounts/account-1/transactions?start_date=2026-06-01&end_date=2026-06-01",
+        "/accounts/NUMBER-1/transactions?start_date=2026-06-01&end_date=2026-06-01",
         headers=_headers(),
     )
 
@@ -183,7 +188,7 @@ def test_transactions_date_boundaries_order_precision_and_nulls(client: TestClie
     body = response.json()
     assert body == {
         "items": [{
-            "id": transaction_id, "account_id": "account-1", "date": timestamp,
+            "id": transaction_id, "product_number": "NUMBER-1", "date": timestamp,
             "amount": "-123456.7891", "currency": "USD", "type": None,
             "category": None, "channel": None, "merchant": None, "status": None,
         } for transaction_id, timestamp in [
@@ -207,7 +212,7 @@ def test_transactions_date_boundaries_order_precision_and_nulls(client: TestClie
 def test_transactions_pagination_and_optional_dates(
     client: TestClient, query: str, expected_ids: list[str], total: int,
 ) -> None:
-    response = client.get(f"/accounts/account-1/transactions{query}", headers=_headers())
+    response = client.get(f"/accounts/NUMBER-1/transactions{query}", headers=_headers())
 
     assert response.status_code == 200
     body = response.json()
@@ -218,6 +223,7 @@ def test_transactions_pagination_and_optional_dates(
 
 
 @pytest.mark.parametrize(("account_id", "user_id", "customer_id"), [
+    ("NUMBER-FOREIGN", "user-1", "customer-1"), ("account-1", "user-1", "customer-1"),
     ("foreign", "user-1", "customer-1"), ("missing", "user-1", "customer-1"),
     ("card", "user-1", "customer-1"), ("account-1", "user-2", "customer-1"),
     ("foreign", "user-1", "customer-2"), ("account-1", "missing", "customer-1"),
@@ -234,13 +240,48 @@ def test_transactions_requires_both_identity_claims_and_bank_account(
 
 
 def test_empty_owned_account_returns_success(client: TestClient) -> None:
-    response = client.get("/accounts/empty/transactions", headers=_headers())
+    response = client.get("/accounts/NUMBER-EMPTY/transactions", headers=_headers())
 
     assert response.status_code == 200
     assert response.json() == {
         "items": [], "total": 0, "limit": 100, "offset": 0,
         "start_date": None, "end_date": None,
     }
+
+
+def test_duplicate_account_numbers_are_denied(
+    client: TestClient, repository: SqlModelUserRepository,
+) -> None:
+    with repository._session_factory() as session:
+        session.add(Product(
+            product_id="duplicate", customer_id="customer-1", product_number="NUMBER-1",
+            product_type="Cuenta Ahorro", currency="USD",
+        ))
+        session.commit()
+
+    response = client.get("/accounts/NUMBER-1/transactions", headers=_headers())
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Account not found"}
+
+
+@pytest.mark.parametrize("number", ["", "1234", "1234567890123456"])
+def test_debit_card_number_is_masked_or_unavailable(
+    client: TestClient, repository: SqlModelUserRepository, number: str,
+) -> None:
+    with repository._session_factory() as session:
+        card = session.get(Product, "debit")
+        assert card is not None
+        card.product_number = number
+        session.add(card)
+        session.commit()
+
+    response = client.get("/auth/me/cards", headers=_headers())
+
+    assert response.status_code == 200
+    debit = next(item for item in response.json() if item["type"] == "Tarjeta D\u00e9bito")
+    assert debit["number"] == ("**** 3456" if len(number) > 4 else None)
+    assert "id" not in debit
 
 
 @pytest.mark.parametrize("query", [
