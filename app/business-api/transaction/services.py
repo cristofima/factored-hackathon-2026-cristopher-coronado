@@ -5,13 +5,13 @@ from collections.abc import Callable
 
 from banking_shared.database import create_session
 from banking_shared.models import Product, TransactionRecord
+from banking_shared.product_types import CARD_PRODUCT_TYPES
 from models import Transaction
 from sqlmodel import Session, select
 from sqlmodel.sql.expression import SelectOfScalar
 
 logger = logging.getLogger(__name__)
 
-CARD_PRODUCT_TYPES = ("Tarjeta Cr\u00e9dito", "Tarjeta D\u00e9bito")
 SessionFactory = Callable[[], Session]
 
 
