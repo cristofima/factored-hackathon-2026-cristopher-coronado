@@ -17,24 +17,29 @@ The loader uses `C:\Factored\data` only as a local source supplied through
 
 ## Tool Mapping
 
-| Tool field                | Source                                              | Rule                                                               |
-| ------------------------- | --------------------------------------------------- | ------------------------------------------------------------------ |
-| Account `id`              | `products.product_id`                               | Products of type `Cuenta Ahorro` or `Cuenta Corriente`             |
-| Account owner             | `products.customer_id`                              | Mandatory authorization key                                        |
-| Account holder            | `customers.first_name`, `customers.last_name`       | Join through `customer_id`                                         |
-| Account `currency`        | `products.currency`                                 | Preserve source currency                                           |
-| Account `balance`         | `products.current_balance`                          | Preserve decimal precision; serialize at the response boundary     |
-| Account activation        | `products.opening_date`                             | ISO 8601 date                                                      |
-| Card `id`                 | `products.product_id`                               | Products of type `Tarjeta Crédito` or `Tarjeta Débito`             |
-| Card owner                | `products.customer_id`                              | Mandatory authorization key                                        |
-| Card type                 | `products.product_type`                             | Map to `credit` or `debit`                                         |
-| Card balance and limit    | `current_balance`, `credit_limit`                   | No synthetic values                                                |
-| Card dates and status     | `opening_date`, `expiration_date`, `product_status` | ISO 8601 dates and source status                                   |
-| Transaction `accountId`   | `transactions.product_id`                           | Product ownership must also match `transactions.customer_id`       |
-| Transaction type/category | `transaction_type`, `transaction_category`          | Preserve source vocabulary at rest; adapt only in response mapping |
-| Transaction recipient     | `merchant_name`                                     | Nullable; no fabricated recipient                                  |
-| Transaction timestamp     | `transaction_date`                                  | Store timezone-aware timestamp                                     |
-| Transaction status        | `transaction_status`                                | Preserve source status                                             |
+| Tool field                 | Source                                              | Rule                                                                                 |
+| -------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Account `id`               | `products.product_id`                               | Products of type `Cuenta Ahorro` or `Cuenta Corriente`                               |
+| Account owner              | `products.customer_id`                              | Mandatory authorization key                                                          |
+| Account holder             | `customers.first_name`, `customers.last_name`       | Join through `customer_id`                                                           |
+| Account `currency`         | `products.currency`                                 | Preserve source currency                                                             |
+| Account `balance`          | `products.current_balance`                          | Preserve decimal precision; serialize at the response boundary                       |
+| Account activation         | `products.opening_date`                             | ISO 8601 date                                                                        |
+| Card `id`                  | `products.product_id`                               | Products of type `Tarjeta Crédito` or `Tarjeta Débito`                               |
+| Card owner                 | `products.customer_id`                              | Mandatory authorization key                                                          |
+| Card type                  | `products.product_type`                             | Map to `credit` or `debit`                                                           |
+| Card balance and limit     | `current_balance`, `credit_limit`                   | No synthetic values                                                                  |
+| Card dates and status      | `opening_date`, `expiration_date`, `product_status` | ISO 8601 dates and source status                                                     |
+| Transaction `accountId`    | `transactions.product_id`                           | Product ownership must also match `transactions.customer_id`                         |
+| Transaction type/category  | `transaction_type`, `transaction_category`          | Preserve source vocabulary at rest; adapt only in response mapping                   |
+| Transaction recipient      | `merchant_name`                                     | Nullable; no fabricated recipient                                                    |
+| Transaction timestamp      | `transaction_date`                                  | Store timezone-aware timestamp                                                       |
+| Transaction status         | `transaction_status`                                | Preserve source status                                                               |
+| Transaction USD amount     | `amount_usd`                                        | Nullable; preserves source FX conversion, no recomputation                           |
+| Transaction geo            | `transaction_country`, `transaction_city`           | Nullable; preserved verbatim, used for dispute-intake triage                         |
+| Transaction auth result    | `response_code`                                     | Nullable; preserved verbatim from authorization network                              |
+| Fraud label (offline only) | `is_fraud`                                          | Reserved for offline threshold evaluation; never surfaced to the agent as a hint     |
+| Fraud score                | `fraud_score`                                       | Precomputed by the source system's fraud engine; drives deterministic dispute triage |
 
 ## Known Gaps
 
@@ -56,3 +61,7 @@ The loader uses `C:\Factored\data` only as a local source supplied through
   deposits are credits; payments, purchases, transfers, and withdrawals are debits;
   adjustments are excluded; all non-approved statuses have zero balance effect. Snapshot
   rows persist the policy and the accumulated unsigned adjustment amount as uncertainty.
+- `amount_usd`, `transaction_country`, `transaction_city`, `response_code`, `is_fraud`,
+  and `fraud_score` (migration `20261001_0003`) are mapped for the already-selected
+  cohort and loaded date windows only; re-run the loader against those customers/dates
+  to backfill existing rows, this is a column-mapping widening, not a new load scope.
