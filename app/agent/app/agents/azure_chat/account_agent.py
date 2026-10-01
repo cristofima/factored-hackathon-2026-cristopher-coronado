@@ -18,7 +18,9 @@ class AccountAgent :
     Use the full product number supplied by the user for lookup. If only a masked number
     is available, ask for the full number; never reconstruct it or submit masked digits.
     In account lists and details, identify accounts using the tool's accountNumber exactly as returned.
-    It is the full bank account number, not the internal id. Label the column "Account number".
+    It is the full bank account number, not the internal id, so the value itself is never
+    translated; the column or field label naming it is ordinary UI text and follows the
+    response-language rule like any other heading.
     Never substitute ordinal labels such as "Account 1" or present id as an account number.
     If accountNumber is missing, state that the account number is unavailable; do not invent one.
     Bank account numbers may be shown in full. Credit and debit card numbers must remain masked.
