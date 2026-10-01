@@ -78,10 +78,11 @@ live multilingual conversations were not validated in this change.
 
 ## Account Page
 
-The Account page calls `/auth/me/accounts` with the application JWT. The BFF selects only
-savings and checking products owned by the verified user/customer association. One account
-is displayed directly; multiple accounts expose a selector with the type and masked number
-(product ID fallback). Loading, retryable errors, and no-account states are explicit.
+The Account page calls `GET /accounts` on the Account API directly with the application
+JWT (not through the BFF). Account scopes the result to savings and checking products
+owned by the verified user/customer association. One account is displayed directly;
+multiple accounts expose a selector with the type and masked number (product ID
+fallback). Loading, retryable errors, and no-account states are explicit.
 
 The holder comes from the authenticated profile. Type, status, opening date, currency,
 and account number come from PostgreSQL; absent values are not fabricated. The Account
@@ -96,14 +97,15 @@ do not cause the agreements and policy panels to change columns.
 ## Credit and Debit Cards
 
 The [card page](src/pages/CreditCardManagement.tsx) at `/credit-cards` reads
-`/auth/me/cards` through the authenticated BFF. It displays the verified customer's
+`GET /cards` on the Account API directly, authenticated with the same application JWT.
+It displays the verified customer's
 credit and debit products, not cards inferred from the selected bank account.
 Each card has a separate read-only panel with its stored type, masked number, product
 ID, and status, followed by a prominent balance, a separate credit limit, and opening
 and expiration dates. Amounts include their currency and thousands separators without
-converting decimal strings to floating-point numbers. Card numbers are masked by the BFF before reaching
-the browser. Nullable fields display `Not available`; decimal strings are preserved
-without estimating debt, available credit, or utilization.
+converting decimal strings to floating-point numbers. Card numbers are masked by the
+Account API before reaching the browser. Nullable fields display `Not available`; decimal
+strings are preserved without estimating debt, available credit, or utilization.
 
 The card grid retains empty column tracks: one card has the same width as each
 card in a two-card desktop layout rather than expanding across the entire row.
@@ -117,8 +119,9 @@ unavailable, with no simulated operations or financial fallback.
 ## Dashboard and Analytics
 
 Both screens use [FinancialOverview](src/components/FinancialOverview.tsx) with
-authenticated BFF reads. Account selection uses `/auth/me/accounts`; transactions
-use `/accounts/{account_id}/transactions`. The default date window covers today
+direct, JWT-authenticated Account and Transaction reads. Account selection uses
+`GET /accounts`; transactions use `GET /{product_number}/history` on the Transaction
+API directly. The default date window covers today
 and the preceding 29 calendar days. The Analytics link carries the selected account
 and inclusive date window; an account URL parameter must match an owned account.
 
@@ -165,15 +168,16 @@ build and focused financial lint. Global lint still reports unrelated existing
 errors in WidgetRenderer, two UI components, and Tailwind configuration.
 
 The card page compiled successfully, and the user confirmed local credit/debit card
-display. The BFF account/card contract suite passed with 36 tests, including masking
-and ownership cases. Card-specific browser recovery and complete two-user parity
+display. The Account API's JWT-authenticated contract suite passed, including masking
+and ownership cases (see the [business-api guide](../../business-api/README.md)). Card-specific browser recovery and complete two-user parity
 have not yet been recorded. The user supplied desktop screenshots of the card panels
 and Dashboard. Subsequent card-grid, Account, and Dashboard presentation changes
 passed build and focused lint; the 19 frontend tests passed again. The latest layout
 has not been independently inspected in an authenticated browser session. Account
 retains inherited placeholder-link accessibility diagnostics; global lint is not clean.
 
-Desktop browser balances and transaction rows matched authenticated BFF reads for
+Desktop browser balances and transaction rows matched direct, JWT-authenticated Account
+and Transaction reads for
 two approved users; PostgreSQL comparisons were performed separately. Transaction
 `503` and `401` UI states were simulated. Natural session expiration, normal pointer
 interaction, and the complete signed agent/MCP matrix remain open. Mobile responsive

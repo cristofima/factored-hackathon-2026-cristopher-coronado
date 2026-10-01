@@ -61,7 +61,7 @@ Users can converse with the assistant to inquire about account balances and revi
 
 The submission MVP extends this flow into support operations: users can open a support case from conversation context, track status progression, complete at least one meaningful approval step, and receive a contextual product recommendation only after case resolution.
 
-The Account and Transaction APIs read banking data from PostgreSQL through a shared SQLModel package and enforce ownership in their service layer. The Payment service and invoice samples remain as inherited artifacts but are not connected to the agent. The [Responses BFF](./app/responses-bff/README.md) authenticates persisted users with Argon2, returns customer names, and supplies customer-owned accounts to the Account page.
+The Account and Transaction APIs read banking data from PostgreSQL through a shared SQLModel package and enforce ownership in their service layer. The Payment service and invoice samples remain as inherited artifacts but are not connected to the agent. The [Responses BFF](./app/responses-bff/README.md) authenticates persisted users with Argon2, returns customer names, and fronts the Responses agent; the frontend calls Account and Transaction directly, with the same application JWT, for account, card, and transaction reads.
 
 ### Key Features
 
@@ -197,7 +197,7 @@ Do not run `azd down` against an existing shared resource group as a rollback st
 
 ### Local development (VS Code)
 
-Start the Account MCP service (8070), Transaction MCP service (8071), local Responses agent (8088), Responses BFF (8080), and Vite frontend (5170). The BFF uses `RESPONSES_UPSTREAM_MODE=local`, so browser requests never call Foundry directly during local validation.
+Start the Account MCP service (8070), Transaction MCP service (8071), local Responses agent (8088), Responses BFF (8080), and Vite frontend (5170). The BFF uses `RESPONSES_UPSTREAM_MODE=local`, so browser requests never call Foundry directly during local validation. Account and Transaction verify the browser's application JWT directly for their REST endpoints; set a shared `JWT_SECRET_KEY` alongside `DATABASE_URL` in the ignored root `.env.dev` so all three services agree on it.
 
 In VS Code, press `F5` with `DEV - Full Stack Ordered` to start all five services and open the frontend at `http://localhost:5170/`. The frontend task waits for Vite to report that URL; port `5170` must be available for this launch configuration. Set `DATABASE_URL` in the ignored root `.env.dev` so Account, Transaction, and the BFF use the seeded PostgreSQL database.
 
@@ -221,12 +221,12 @@ Current limitations to keep explicit:
 
 - End-user login uses PostgreSQL-backed Argon2 identities and short-lived JWTs; it is not a production identity lifecycle.
 - The frontend displays persisted customer names and owned accounts, including explicit multi-account selection. Account codes absent from the schema are omitted; Agreements and Privacy & Security Policy remain inherited placeholders.
-- Dashboard and Analytics consume authenticated BFF balances and fully paginated transactions. Credit/debit cards use a customer-scoped, read-only BFF catalog with server-masked numbers; card operations remain unavailable. See the [frontend guide](app/frontend/banking-web/README.md) for presentation and validation limits.
+- Dashboard and Analytics consume Account and Transaction directly over JWT-authenticated REST, with fully paginated transactions. Credit/debit cards use a customer-scoped, read-only catalog with server-masked numbers; card operations remain unavailable. See the [frontend guide](app/frontend/banking-web/README.md) for presentation and validation limits.
 - Account and Transaction use persisted product ownership and transaction rows. Selected local two-user PostgreSQL and browser financial comparisons passed, but the complete signed agent-chain, browser-state, and deployed validation matrices remain open.
 - Signed stored-locale context and profile-bound frontend i18n support exact `es`, `pt`, and `en`, with English fallback. Static JSON catalogs translate UI and transaction labels; controlled BFF failures use localized UI messages, while login stays English. Product queries use canonical English labels and ingestion normalizes Spanish source values. Automated coverage does not establish authenticated browser localization, multilingual agent conversations, or hosted parity. See the [localization guide](app/frontend/banking-web/README.md#localization).
 - On 2026-09-30, user-supplied local browser evidence confirmed an owned-account answer with full bank number and masked card output, and a foreign-account lookup returning `ACCESS_DENIED` followed by a visible assistant response. This closes the reported blank-response failure, not the full authorization or hosted matrix. See the [verification checklist](DEMO_SCOPE_CHECKLIST.md#0-real-data-verification-gate-next).
 - MCP and internal API authorization must be enforced in service code (`customer_id` ownership checks), not inferred from prompts.
-- The frontend must not call Foundry or agent endpoints directly; browser traffic must go through the Responses BFF.
+- The frontend must not call Foundry or agent endpoints directly; browser traffic for the chat path must go through the Responses BFF. Account and Transaction reads are the one scoped exception: the frontend calls those two services directly, authenticated with the same application JWT the BFF issues.
 - The BFF validates application identity and proxies upstream requests, but this does not replace per-resource authorization in business services.
 - The previous ChatKit-style direct browser-to-agent pattern is no longer the target architecture.
 - HITL approval widgets are generic protocol support; approval policy still requires business-specific hardening and audit coverage.
