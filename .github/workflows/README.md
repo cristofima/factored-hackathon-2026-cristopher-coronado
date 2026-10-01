@@ -5,11 +5,12 @@ This directory contains the GitHub Actions workflows for CI and CD. Infrastructu
 Reusable building blocks live in [../actions](../actions):
 
 - [../actions/ci-python/action.yml](../actions/ci-python/action.yml): shared Python CI implementation used by all `ci-*` workflows.
+- [../actions/ci-node/action.yml](../actions/ci-node/action.yml): shared Node/React CI implementation used by frontend `ci-*` workflows.
 - [../actions/cd-azure/action.yml](../actions/cd-azure/action.yml): shared Azure login and `azd` environment setup used by all `cd-*` workflows.
 
 ## Naming convention
 
-- `ci-*.yml`: validation workflows for each Python service.
+- `ci-*.yml`: validation workflows for each service (Python and frontend).
 - `cd-*.yaml`: deployment workflows for each deployable service.
 
 ## Deployment model
@@ -26,6 +27,8 @@ Reusable building blocks live in [../actions](../actions):
 - CI branches: `main`, `develop`, `feature/*`, `refactor/*`.
 - PR targets: `main`, `develop`.
 - Common checks per project: dependency sync with `uv`, compile check, test discovery, pytest when tests exist, and artifact upload (`junit.xml`, optional `coverage.xml`).
+- Frontend checks: `npm ci`, `lint`, tests with Vitest coverage summary/artifact, and production `vite build` via shared `ci-node`.
+- Frontend Node runtime: shared `ci-node` defaults to Node `22`.
 
 ## Workflow inventory
 
@@ -37,11 +40,12 @@ Reusable building blocks live in [../actions](../actions):
 | `ci-responses-bff.yml`  | Validate Responses BFF build/tests      | `app/responses-bff/**`                 | n/a              | Shared action (`ci-python`)                              |
 | `ci-hosted-agent.yml`   | Validate hosted-agent build/tests       | `app/agent/**`                         | n/a              | Shared action (`ci-python`)                              |
 | `ci-data.yml`           | Validate data module build/tests        | `app/business-api/data/**`             | n/a              | Shared action (`ci-python`)                              |
+| `ci-frontend.yml`       | Validate frontend lint/tests/build      | `app/frontend/banking-web/**`          | n/a              | Shared action (`ci-node`)                                |
 | `cd-account.yaml`       | Deploy Account API App Service          | `app/business-api/account/**`          | repository root  | `azd deploy account --no-prompt`                         |
 | `cd-transaction.yaml`   | Deploy Transaction API App Service      | `app/business-api/transaction/**`      | repository root  | `azd deploy transaction --no-prompt`                     |
 | `cd-payment.yaml`       | Deploy Payment API App Service          | `app/business-api/payment/**`          | repository root  | `azd deploy payment --no-prompt`                         |
 | `cd-responses-bff.yaml` | Deploy JWT-protected Responses BFF      | `app/responses-bff/**`                 | repository root  | `azd deploy responses-bff --no-prompt`                   |
-| `cd-web.yaml`           | Deploy frontend Web App Service         | `app/frontend/banking-web/**`          | repository root  | `azd deploy web --no-prompt`                             |
+| `cd-frontend.yaml`      | Deploy frontend Web App Service         | `app/frontend/banking-web/**`          | repository root  | `azd deploy web --no-prompt`                             |
 | `cd-hosted-agent.yaml`  | Deploy Foundry hosted agent             | `app/agent/**` and `workflow_dispatch` | `app/agent`      | `azd -C app/agent deploy home-banking-agent --no-prompt` |
 
 ## Why two azd project roots exist

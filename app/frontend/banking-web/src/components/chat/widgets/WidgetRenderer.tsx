@@ -7,7 +7,13 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Markdown } from "@/components/chat/Markdown";
@@ -74,7 +80,9 @@ interface WidgetContextValue {
   itemId: string;
 }
 
-const WidgetContext = React.createContext<WidgetContextValue | undefined>(undefined);
+const WidgetContext = React.createContext<WidgetContextValue | undefined>(
+  undefined,
+);
 
 function useWidgetContext() {
   const context = React.useContext(WidgetContext);
@@ -103,7 +111,7 @@ function getIconComponent(name: string, className?: string) {
     calendar: <Calendar className={className} />,
     loader: <Loader2 className={cn(className, "animate-spin")} />,
   };
-  
+
   return icons[name] || <span className={className}>{name}</span>;
 }
 
@@ -118,10 +126,11 @@ function TextComponent({ widget }: { widget: TextWidget }) {
   const italicClass = widget.italic ? "italic" : "";
   const lineThroughClass = widget.lineThrough ? "line-through" : "";
   const truncateClass = widget.truncate ? "truncate" : "";
-  
+
   const style: React.CSSProperties = { ...colorResult.style };
   if (widget.width !== undefined) {
-    style.width = typeof widget.width === "number" ? `${widget.width}px` : widget.width;
+    style.width =
+      typeof widget.width === "number" ? `${widget.width}px` : widget.width;
   }
   if (widget.maxLines) {
     style.display = "-webkit-box";
@@ -129,7 +138,7 @@ function TextComponent({ widget }: { widget: TextWidget }) {
     style.WebkitBoxOrient = "vertical";
     style.overflow = "hidden";
   }
-  
+
   return (
     <p
       className={cn(
@@ -144,7 +153,9 @@ function TextComponent({ widget }: { widget: TextWidget }) {
       style={style}
     >
       {widget.value}
-      {widget.streaming && <span className="ml-1 inline-block h-4 w-[2px] animate-pulse bg-primary" />}
+      {widget.streaming && (
+        <span className="ml-1 inline-block h-4 w-[2px] animate-pulse bg-primary" />
+      )}
     </p>
   );
 }
@@ -155,7 +166,7 @@ function TitleComponent({ widget }: { widget: TitleWidget }) {
   const weightClass = widget.weight ? `font-${widget.weight}` : "font-semibold";
   const alignClass = widget.textAlign ? `text-${widget.textAlign}` : "";
   const truncateClass = widget.truncate ? "truncate" : "";
-  
+
   const style: React.CSSProperties = { ...colorResult.style };
   if (widget.maxLines) {
     style.display = "-webkit-box";
@@ -163,10 +174,16 @@ function TitleComponent({ widget }: { widget: TitleWidget }) {
     style.WebkitBoxOrient = "vertical";
     style.overflow = "hidden";
   }
-  
+
   return (
     <h2
-      className={cn(sizeClass, weightClass, alignClass, truncateClass, colorResult.className)}
+      className={cn(
+        sizeClass,
+        weightClass,
+        alignClass,
+        truncateClass,
+        colorResult.className,
+      )}
       style={style}
     >
       {widget.value}
@@ -180,7 +197,7 @@ function CaptionComponent({ widget }: { widget: CaptionWidget }) {
   const weightClass = widget.weight ? `font-${widget.weight}` : "";
   const alignClass = widget.textAlign ? `text-${widget.textAlign}` : "";
   const truncateClass = widget.truncate ? "truncate" : "";
-  
+
   const style: React.CSSProperties = { ...colorResult.style };
   if (widget.maxLines) {
     style.display = "-webkit-box";
@@ -188,7 +205,7 @@ function CaptionComponent({ widget }: { widget: CaptionWidget }) {
     style.WebkitBoxOrient = "vertical";
     style.overflow = "hidden";
   }
-  
+
   return (
     <p
       className={cn(
@@ -217,11 +234,11 @@ function BoxComponent({ widget }: { widget: BoxWidget }) {
   const { className, style: layoutStyle } = buildLayoutClasses(widget);
   const borderStyle = borderToStyle(widget.border);
   const style = { ...layoutStyle, ...borderStyle };
-  
+
   if (widget.aspectRatio) {
     style.aspectRatio = String(widget.aspectRatio);
   }
-  
+
   return (
     <div className={className} style={style}>
       {widget.children?.map((child, index) => (
@@ -239,11 +256,11 @@ function RowComponent({ widget }: { widget: RowWidget }) {
   });
   const borderStyle = borderToStyle(widget.border);
   const style = { ...layoutStyle, ...borderStyle };
-  
+
   if (widget.aspectRatio) {
     style.aspectRatio = String(widget.aspectRatio);
   }
-  
+
   return (
     <div className={className} style={style}>
       {widget.children?.map((child, index) => (
@@ -260,11 +277,11 @@ function ColComponent({ widget }: { widget: ColWidget }) {
   });
   const borderStyle = borderToStyle(widget.border);
   const style = { ...layoutStyle, ...borderStyle };
-  
+
   if (widget.aspectRatio) {
     style.aspectRatio = String(widget.aspectRatio);
   }
-  
+
   return (
     <div className={className} style={style}>
       {widget.children?.map((child, index) => (
@@ -282,12 +299,12 @@ function FormComponent({ widget }: { widget: FormWidget }) {
   });
   const borderStyle = borderToStyle(widget.border);
   const style = { ...layoutStyle, ...borderStyle };
-  
+
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     const data = Object.fromEntries(formData.entries());
-    
+
     onAction(
       {
         ...widget.onSubmitAction,
@@ -296,7 +313,7 @@ function FormComponent({ widget }: { widget: FormWidget }) {
       itemId,
     );
   };
-  
+
   return (
     <form className={className} style={style} onSubmit={handleSubmit}>
       {widget.children?.map((child, index) => (
@@ -314,20 +331,25 @@ function ButtonComponent({ widget }: { widget: ButtonWidget }) {
   const sizeClass = getSizeClass(widget.size, "control");
   const pillClass = widget.pill ? "rounded-full" : "";
   const blockClass = widget.block ? "w-full" : "";
-  
+
   // Map widget variant to shadcn Button variant
-  const variantMap: Record<string, "default" | "destructive" | "outline" | "secondary" | "ghost" | "link"> = {
+  const variantMap: Record<
+    string,
+    "default" | "destructive" | "outline" | "secondary" | "ghost" | "link"
+  > = {
     solid: "default",
     soft: "secondary",
     outline: "outline",
     ghost: "ghost",
   };
-  const buttonVariant = widget.variant ? variantMap[widget.variant] || "default" : "default";
-  
+  const buttonVariant = widget.variant
+    ? variantMap[widget.variant] || "default"
+    : "default";
+
   const handleClick = widget.onClickAction
     ? () => onAction(widget.onClickAction!, itemId)
     : undefined;
-  
+
   return (
     <Button
       type={widget.submit ? "submit" : "button"}
@@ -346,7 +368,7 @@ function SelectComponent({ widget }: { widget: SelectWidget }) {
   const { onAction, itemId } = useWidgetContext();
   const sizeClass = getSizeClass(widget.size, "control");
   const blockClass = widget.block ? "w-full" : "";
-  
+
   const handleChange = (value: string) => {
     if (widget.onChangeAction) {
       onAction(
@@ -358,7 +380,7 @@ function SelectComponent({ widget }: { widget: SelectWidget }) {
       );
     }
   };
-  
+
   return (
     <Select
       name={widget.name}
@@ -382,7 +404,7 @@ function SelectComponent({ widget }: { widget: SelectWidget }) {
 
 function CheckboxComponent({ widget }: { widget: CheckboxWidget }) {
   const { onAction, itemId } = useWidgetContext();
-  
+
   const handleChange = (checked: boolean) => {
     if (widget.onChangeAction) {
       onAction(
@@ -394,7 +416,7 @@ function CheckboxComponent({ widget }: { widget: CheckboxWidget }) {
       );
     }
   };
-  
+
   return (
     <div className="flex items-center space-x-2">
       <Checkbox
@@ -405,7 +427,10 @@ function CheckboxComponent({ widget }: { widget: CheckboxWidget }) {
         onCheckedChange={handleChange}
       />
       {widget.label && (
-        <Label htmlFor={widget.id || widget.name} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+        <Label
+          htmlFor={widget.id || widget.name}
+          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+        >
           {widget.label}
         </Label>
       )}
@@ -417,19 +442,22 @@ function InputComponent({ widget }: { widget: InputWidget }) {
   const { onAction, itemId } = useWidgetContext();
   const sizeClass = getSizeClass(widget.size, "control");
   const blockClass = widget.block ? "w-full" : "";
-  
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (widget.onChangeAction) {
       onAction(
         {
           ...widget.onChangeAction,
-          payload: { ...widget.onChangeAction.payload, [widget.name]: e.target.value },
+          payload: {
+            ...widget.onChangeAction.payload,
+            [widget.name]: e.target.value,
+          },
         },
         itemId,
       );
     }
   };
-  
+
   return (
     <Input
       type={widget.type || "text"}
@@ -445,7 +473,7 @@ function InputComponent({ widget }: { widget: InputWidget }) {
 
 function RadioGroupComponent({ widget }: { widget: RadioGroupWidget }) {
   const { onAction, itemId } = useWidgetContext();
-  
+
   const handleChange = (value: string) => {
     if (widget.onChangeAction) {
       onAction(
@@ -457,7 +485,7 @@ function RadioGroupComponent({ widget }: { widget: RadioGroupWidget }) {
       );
     }
   };
-  
+
   return (
     <RadioGroup
       name={widget.name}
@@ -467,8 +495,13 @@ function RadioGroupComponent({ widget }: { widget: RadioGroupWidget }) {
     >
       {widget.options.map((option) => (
         <div key={option.value} className="flex items-center space-x-2">
-          <RadioGroupItem value={option.value} id={`${widget.name}-${option.value}`} />
-          <Label htmlFor={`${widget.name}-${option.value}`}>{option.label}</Label>
+          <RadioGroupItem
+            value={option.value}
+            id={`${widget.name}-${option.value}`}
+          />
+          <Label htmlFor={`${widget.name}-${option.value}`}>
+            {option.label}
+          </Label>
         </div>
       ))}
     </RadioGroup>
@@ -478,19 +511,22 @@ function RadioGroupComponent({ widget }: { widget: RadioGroupWidget }) {
 function TextareaComponent({ widget }: { widget: TextareaWidget }) {
   const { onAction, itemId } = useWidgetContext();
   const blockClass = widget.block ? "w-full" : "";
-  
+
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     if (widget.onChangeAction) {
       onAction(
         {
           ...widget.onChangeAction,
-          payload: { ...widget.onChangeAction.payload, [widget.name]: e.target.value },
+          payload: {
+            ...widget.onChangeAction.payload,
+            [widget.name]: e.target.value,
+          },
         },
         itemId,
       );
     }
   };
-  
+
   return (
     <Textarea
       name={widget.name}
@@ -527,11 +563,14 @@ function BadgeComponent({ widget }: { widget: BadgeWidget }) {
     info: "outline",
     discovery: "outline",
   };
-  
+
   const variant = widget.color ? colorVariants[widget.color] : "default";
-  
+
   return (
-    <Badge variant={variant as any} className={widget.pill ? "rounded-full" : ""}>
+    <Badge
+      variant={variant as "default" | "secondary" | "destructive" | "outline"}
+      className={widget.pill ? "rounded-full" : ""}
+    >
       {widget.label}
     </Badge>
   );
@@ -540,23 +579,27 @@ function BadgeComponent({ widget }: { widget: BadgeWidget }) {
 function IconComponent({ widget }: { widget: IconWidget }) {
   const sizeClass = getSizeClass(widget.size, "icon");
   const colorResult = colorToStyle(widget.color);
-  
+
   // Combine size and color classes for the icon
   const iconClassName = cn(sizeClass, colorResult.className);
-  
+
   return getIconComponent(widget.name, iconClassName);
 }
 
 function ImageComponent({ widget }: { widget: ImageWidget }) {
   const radiusClass = widget.radius ? radiusToClass(widget.radius) : "";
-  
+
   const style: React.CSSProperties = {};
-  if (widget.width) style.width = typeof widget.width === "number" ? `${widget.width}px` : widget.width;
-  if (widget.height) style.height = typeof widget.height === "number" ? `${widget.height}px` : widget.height;
+  if (widget.width)
+    style.width =
+      typeof widget.width === "number" ? `${widget.width}px` : widget.width;
+  if (widget.height)
+    style.height =
+      typeof widget.height === "number" ? `${widget.height}px` : widget.height;
   if (widget.aspectRatio) style.aspectRatio = String(widget.aspectRatio);
   if (widget.fit) style.objectFit = widget.fit;
   if (widget.position) style.objectPosition = widget.position;
-  
+
   return (
     <img
       src={widget.src}
@@ -574,9 +617,12 @@ function DividerComponent({ widget }: { widget: DividerWidget }) {
 function SpacerComponent({ widget }: { widget: SpacerWidget }) {
   const style: React.CSSProperties = {};
   if (widget.minSize) {
-    style.minHeight = typeof widget.minSize === "number" ? `${widget.minSize}px` : widget.minSize;
+    style.minHeight =
+      typeof widget.minSize === "number"
+        ? `${widget.minSize}px`
+        : widget.minSize;
   }
-  
+
   return <div className="flex-1" style={style} />;
 }
 
@@ -585,26 +631,28 @@ function SpacerComponent({ widget }: { widget: SpacerWidget }) {
 // ============================================================================
 function CardComponent({ widget }: { widget: CardWidget }) {
   const { onAction, itemId } = useWidgetContext();
-  const paddingClass = widget.padding !== undefined ? `p-${widget.padding}` : "p-6";
+  const paddingClass =
+    widget.padding !== undefined ? `p-${widget.padding}` : "p-6";
   const radiusClass = radiusToClass("lg");
-  
+
   const handleConfirm = widget.confirm
     ? () => onAction(widget.confirm!.action, itemId)
     : undefined;
-  
+
   const handleCancel = widget.cancel
     ? () => onAction(widget.cancel!.action, itemId)
     : undefined;
-  
+
   return (
     <Card className={cn(radiusClass, paddingClass, "border")}>
       {widget.status && (
         <div className="mb-4 flex items-center gap-2 text-sm text-muted-foreground">
-          {widget.status.icon && getIconComponent(widget.status.icon, "h-4 w-4")}
+          {widget.status.icon &&
+            getIconComponent(widget.status.icon, "h-4 w-4")}
           <span>{widget.status.text}</span>
         </div>
       )}
-      
+
       {!widget.collapsed && (
         <div className="space-y-4">
           {widget.children.map((child, index) => (
@@ -612,7 +660,7 @@ function CardComponent({ widget }: { widget: CardWidget }) {
           ))}
         </div>
       )}
-      
+
       {(widget.confirm || widget.cancel) && (
         <div className="mt-6 flex gap-2">
           {widget.confirm && (
@@ -633,20 +681,28 @@ function CardComponent({ widget }: { widget: CardWidget }) {
 
 function ListViewItemComponent({ widget }: { widget: ListViewItem }) {
   const { onAction, itemId } = useWidgetContext();
-  
+
   const handleClick = widget.onClickAction
     ? () => onAction(widget.onClickAction!, itemId)
     : undefined;
-  
+
   const alignClass = widget.align ? `items-${widget.align}` : "";
-  const gapStyle = widget.gap ? { gap: typeof widget.gap === "number" ? `${widget.gap * 0.25}rem` : widget.gap } : {};
-  
+  const gapStyle = widget.gap
+    ? {
+        gap:
+          typeof widget.gap === "number"
+            ? `${widget.gap * 0.25}rem`
+            : widget.gap,
+      }
+    : {};
+
   return (
     <div
       className={cn(
         "flex",
         alignClass,
-        widget.onClickAction && "cursor-pointer hover:bg-accent transition-colors",
+        widget.onClickAction &&
+          "cursor-pointer hover:bg-accent transition-colors",
         "px-4 py-3 rounded-lg",
       )}
       style={gapStyle}
@@ -661,28 +717,33 @@ function ListViewItemComponent({ widget }: { widget: ListViewItem }) {
 
 function ListViewComponent({ widget }: { widget: ListViewWidget }) {
   const [showAll, setShowAll] = React.useState(false);
-  
-  const visibleItems = widget.limit && !showAll && widget.limit !== "auto"
-    ? widget.children.slice(0, widget.limit)
-    : widget.children;
-  
-  const hasMore = widget.limit && widget.limit !== "auto" && widget.children.length > widget.limit;
-  
+
+  const visibleItems =
+    widget.limit && !showAll && widget.limit !== "auto"
+      ? widget.children.slice(0, widget.limit)
+      : widget.children;
+
+  const hasMore =
+    widget.limit &&
+    widget.limit !== "auto" &&
+    widget.children.length > widget.limit;
+
   return (
     <div className="space-y-2">
       {widget.status && (
         <div className="mb-4 flex items-center gap-2 text-sm text-muted-foreground">
-          {widget.status.icon && getIconComponent(widget.status.icon, "h-4 w-4")}
+          {widget.status.icon &&
+            getIconComponent(widget.status.icon, "h-4 w-4")}
           <span>{widget.status.text}</span>
         </div>
       )}
-      
+
       <div className="space-y-1">
         {visibleItems.map((item, index) => (
           <ListViewItemComponent key={item.key || index} widget={item} />
         ))}
       </div>
-      
+
       {hasMore && !showAll && (
         <Button
           variant="ghost"
@@ -745,7 +806,7 @@ function WidgetComponentRenderer({ widget }: { widget: WidgetComponent }) {
     case "ListViewItem":
       return <ListViewItemComponent widget={widget as ListViewItem} />;
     default:
-      console.warn("Unknown widget type:", (widget as any).type);
+      console.warn("Unknown widget type:", widget.type);
       return null;
   }
 }
@@ -759,9 +820,13 @@ interface WidgetRendererProps {
   onAction: (action: ActionConfig, itemId: string) => void;
 }
 
-export function WidgetRenderer({ widget, itemId, onAction }: WidgetRendererProps) {
+export function WidgetRenderer({
+  widget,
+  itemId,
+  onAction,
+}: WidgetRendererProps) {
   const contextValue: WidgetContextValue = { onAction, itemId };
-  
+
   return (
     <WidgetContext.Provider value={contextValue}>
       <div className="w-full animate-in fade-in-0 slide-in-from-bottom-2 duration-300">

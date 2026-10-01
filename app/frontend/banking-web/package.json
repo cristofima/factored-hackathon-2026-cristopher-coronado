@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
     "test": "vitest run",
     "dev": "vite",
@@ -83,6 +86,7 @@
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.0.1",
     "vite": "^8.3.1",
+    "@vitest/coverage-v8": "^5.0.2",
     "vitest": "^5.0.2"
   }
 }
