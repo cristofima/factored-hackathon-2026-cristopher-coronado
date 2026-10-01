@@ -136,6 +136,31 @@
   "Request failed": "The request could not be completed. Please try again.",
   "Session expired": "Your session expired or is invalid. Sign in again.",
   "Access denied": "You do not have permission to make this request.",
+  "Transaction Disputes": "Transaction Disputes",
+  "Refresh": "Refresh",
+  "Support cases description": "Track transaction-dispute cases you opened, respond to approval requests, and follow the review timeline.",
+  "Loading support cases...": "Loading support cases...",
+  "Support cases are unavailable": "Support cases are unavailable",
+  "No support cases yet.": "No support cases yet.",
+  "Loading support case...": "Loading support case...",
+  "Support case is unavailable": "Support case is unavailable",
+  "Case Details": "Case Details",
+  "Reason": "Reason",
+  "Resolution": "Resolution",
+  "Approval Needed": "Approval Needed",
+  "Dispute approval prompt": "Confirm you want to proceed with this dispute. Approving will block the related card while the dispute is reviewed.",
+  "Approve dispute": "Approve dispute",
+  "Decline": "Decline",
+  "Recommendation": "Recommendation",
+  "Dismiss recommendation": "Dismiss recommendation",
+  "Could not dismiss the recommendation": "Could not dismiss the recommendation",
+  "Could not record your response": "Could not record your response",
+  "Timeline": "Timeline",
+  "Report dispute": "Report dispute",
+  "Report a transaction dispute": "Report a transaction dispute",
+  "Describe why you don't recognize this charge": "Describe why you don't recognize this charge",
+  "Submit dispute": "Submit dispute",
+  "Could not open the dispute": "Could not open the dispute",
   "transactions": {
     "types": {
       "Payment": "Payment",
@@ -158,6 +183,29 @@
       "Reversed": "Reversed",
       "Declined": "Declined",
       "Pending": "Pending"
+    }
+  },
+  "support-cases": {
+    "status": {
+      "OPEN": "Open",
+      "WAITING_USER_APPROVAL": "Waiting for your approval",
+      "IN_REVIEW": "In review",
+      "RESOLVED": "Resolved"
+    },
+    "resolution": {
+      "fast_tracked_provisional_credit": "Fast-tracked: provisional credit issued",
+      "fraud_confirmed_refund_issued": "Fraud confirmed: refund issued",
+      "withdrawn_by_customer": "Withdrawn by you"
+    },
+    "events": {
+      "CASE_OPENED": "Dispute opened",
+      "APPROVAL_REQUESTED": "Approval requested",
+      "APPROVAL_GRANTED": "You approved the dispute",
+      "APPROVAL_DECLINED": "You declined the dispute",
+      "FAST_TRACKED": "Fast-tracked for automatic resolution",
+      "ESCALATED_TO_REVIEW": "Escalated to manual review",
+      "RESOLVED": "Case resolved",
+      "RECOMMENDATION_DISMISSED": "Recommendation dismissed"
     }
   }
 }

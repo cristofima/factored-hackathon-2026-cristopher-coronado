@@ -95,3 +95,18 @@ def resolve_support_case(
     except ValueError as ve:
         logger.exception("Validation error while resolving a support case")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve)) from ve
+
+
+@router.post("/{case_id}/recommendation/dismiss")
+def dismiss_support_case_recommendation(
+    case_id: str,
+    customer_id: Annotated[str, Depends(get_jwt_customer_id)],
+):
+    """Record the customer's explicit opt-out of the post-resolution recommendation."""
+    try:
+        return service.dismiss_recommendation(case_id, customer_id)
+    except PermissionError as error:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(error)) from error
+    except ValueError as ve:
+        logger.exception("Validation error while dismissing a support case recommendation")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve)) from ve

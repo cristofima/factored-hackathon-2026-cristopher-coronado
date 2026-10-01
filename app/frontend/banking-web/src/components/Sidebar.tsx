@@ -10,6 +10,7 @@ import {
   PieChart,
   User,
   HelpCircle,
+  ShieldAlert,
 } from "lucide-react";
 
 const navigation = [
@@ -18,6 +19,7 @@ const navigation = [
   { name: "Investment Portfolio", href: "/portfolio", icon: PieChart },
   { name: "Transaction Analytics", href: "/analytics", icon: TrendingUp },
   { name: "Account", href: "/account", icon: User },
+  { name: "Transaction Disputes", href: "/support-cases", icon: ShieldAlert },
   { name: "Support", href: "/support", icon: HelpCircle },
 ];
 

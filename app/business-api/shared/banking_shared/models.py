@@ -195,6 +195,9 @@ class SupportCase(SQLModel, table=True):
     )
     resolution_outcome: str | None = Field(default=None, max_length=64)
     resolution_notes: str | None = Field(default=None, max_length=1000)
+    recommendation_type: str | None = Field(default=None, max_length=64)
+    recommendation_rationale: str | None = Field(default=None, max_length=500)
+    recommendation_opted_out: bool = Field(default=False)
     opened_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(DateTime(timezone=True), nullable=False),

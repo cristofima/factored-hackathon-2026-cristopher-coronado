@@ -48,6 +48,18 @@ TRIAGE_FAST_TRACK = "fast_track"
 TRIAGE_ESCALATED = "escalated"
 TRIAGE_INSUFFICIENT_SIGNAL = "insufficient_signal"
 
+# Resolution outcomes that count as the dispute being ruled in the customer's favor.
+# A recommendation is only generated for these; a withdrawn or declined case gets none.
+FAVORABLE_RESOLUTION_OUTCOMES = {"fast_tracked_provisional_credit", "fraud_confirmed_refund_issued"}
+
+# Single guardrailed post-resolution recommendation: suggest enabling transaction
+# alerts, the one product feature directly relevant to a resolved fraud dispute.
+RECOMMENDATION_TYPE_TRANSACTION_ALERTS = "transaction_alerts"
+RECOMMENDATION_RATIONALE_TRANSACTION_ALERTS = (
+    "This dispute involved an unrecognized charge. Enabling instant transaction "
+    "alerts can help you spot similar charges sooner."
+)
+
 
 class SupportCaseService:
     def __init__(self, session_factory: SessionFactory = create_session) -> None:
@@ -131,6 +143,7 @@ class SupportCaseService:
             if case.status != "IN_REVIEW":
                 raise ValueError(f"Case {case_id} is not in review")
             _transition(case, "RESOLVED", resolution_outcome=resolution_outcome, resolution_notes=resolution_notes)
+            _apply_recommendation(case)
             _add_event(
                 session,
                 case.case_id,
@@ -169,6 +182,26 @@ class SupportCaseService:
                 .order_by(SupportCaseEvent.created_at.asc())
             )
             return [_to_dispute_case_event(event) for event in session.exec(statement).all()]
+
+    def dismiss_recommendation(self, case_id: str, customer_id: str) -> DisputeCase:
+        logger.info("dismiss_recommendation called with case_id=%s", case_id)
+        with self._session_factory() as session:
+            case = _get_owned_case(session, case_id, customer_id)
+            if case.recommendation_type is None:
+                raise ValueError(f"Case {case_id} has no recommendation to dismiss")
+            case.recommendation_opted_out = True
+            case.updated_at = datetime.now(timezone.utc)
+            session.add(case)
+            _add_event(
+                session,
+                case.case_id,
+                "RECOMMENDATION_DISMISSED",
+                "customer",
+                "Customer dismissed the post-resolution recommendation",
+            )
+            session.commit()
+            session.refresh(case)
+            return _to_dispute_case(case, _get_case_product(session, case))
 
 
 support_case_service_singleton = SupportCaseService()
@@ -211,6 +244,7 @@ def _grant_approval(session: Session, case: SupportCase) -> SupportCase:
             "Low fraud-risk score; fast-tracked without manual review",
         )
         _transition(case, "RESOLVED", resolution_outcome="fast_tracked_provisional_credit")
+        _apply_recommendation(case)
         _add_event(
             session,
             case.case_id,
@@ -339,6 +373,14 @@ def _triage(fraud_score: Decimal | None) -> str:
     return TRIAGE_FAST_TRACK
 
 
+def _apply_recommendation(case: SupportCase) -> None:
+    """Set the single post-resolution recommendation, only for a favorable outcome."""
+    if case.resolution_outcome not in FAVORABLE_RESOLUTION_OUTCOMES:
+        return
+    case.recommendation_type = RECOMMENDATION_TYPE_TRANSACTION_ALERTS
+    case.recommendation_rationale = RECOMMENDATION_RATIONALE_TRANSACTION_ALERTS
+
+
 def _assign_review_agent(session: Session) -> ServiceAgent | None:
     statement = (
         select(ServiceAgent)
@@ -390,6 +432,9 @@ def _to_dispute_case(case: SupportCase, product: Product | None) -> DisputeCase:
         triageOutcome=case.triage_outcome,
         resolutionOutcome=case.resolution_outcome,
         resolutionNotes=case.resolution_notes,
+        recommendationType=case.recommendation_type,
+        recommendationRationale=case.recommendation_rationale,
+        recommendationOptedOut=case.recommendation_opted_out,
         openedAt=case.opened_at.isoformat(),
         updatedAt=case.updated_at.isoformat(),
         resolvedAt=case.resolved_at.isoformat() if case.resolved_at else None,
