@@ -181,8 +181,10 @@ pygments==2.21.0
     # via
     #   rich
     #   rich-rst
-pyjwt==2.15.1
-    # via mcp
+pyjwt==2.10.1
+    # via
+    #   banking-assistant-account-mcp (app/business-api/account/pyproject.toml)
+    #   mcp
 pyperclip==1.11.0
     # via fastmcp-slim
 python-dotenv==1.2.3

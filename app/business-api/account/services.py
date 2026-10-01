@@ -12,7 +12,15 @@ from banking_shared.product_types import (
     card_type,
     normalize_product_type,
 )
-from models import Account, Beneficiary, Card, PaymentMethod, PaymentMethodSummary
+from models import (
+    Account,
+    AccountSummary,
+    Beneficiary,
+    Card,
+    CardSummary,
+    PaymentMethod,
+    PaymentMethodSummary,
+)
 from sqlmodel import Session, select
 
 logger = logging.getLogger(__name__)
@@ -72,6 +80,17 @@ class AccountService:
             _get_owned_product(session, account_id, customer_id, ACCOUNT_PRODUCT_TYPES)
         raise RuntimeError("Registered beneficiaries are unavailable for persisted products")
 
+    def list_accounts(self, customer_id: str) -> list[AccountSummary]:
+        logger.info("Request to list_accounts for customer_id: %s", customer_id)
+        with self._session_factory() as session:
+            products = session.exec(
+                select(Product)
+                .where(Product.customer_id == customer_id)
+                .where(Product.product_type.in_(ACCOUNT_PRODUCT_TYPES))
+                .order_by(Product.product_id)
+            ).all()
+            return [_to_account_summary(product) for product in products]
+
 
 class UserService:
     def __init__(self, session_factory: SessionFactory = create_session) -> None:
@@ -123,6 +142,17 @@ class CardService:
             product = _get_owned_product(session, card_id, customer_id, CARD_PRODUCT_TYPES)
             return _to_card(product)
 
+    def list_cards(self, customer_id: str) -> list[CardSummary]:
+        logger.info("Request to list_cards for customer_id: %s", customer_id)
+        with self._session_factory() as session:
+            products = session.exec(
+                select(Product)
+                .where(Product.customer_id == customer_id)
+                .where(Product.product_type.in_(CARD_PRODUCT_TYPES))
+                .order_by(Product.product_id)
+            ).all()
+            return [_to_card_summary(product) for product in products]
+
     def recharge_card(self, card_id: str, amount: float, customer_id: str) -> Card:
         self._authorize_card(card_id, customer_id)
         if amount <= 0:
@@ -142,6 +172,7 @@ class CardService:
 
 
 card_service_singleton = CardService()
+account_service_singleton = AccountService()
 
 
 def _require_identifier(value: str, field_name: str) -> None:
@@ -207,6 +238,33 @@ def _to_payment_method(product: Product) -> PaymentMethod:
         expirationDate=_date_value(product.expiration_date),
         availableBalance=_decimal_float(product.current_balance),
         status=product.product_status,
+    )
+
+
+def _to_account_summary(product: Product) -> AccountSummary:
+    return AccountSummary(
+        type=normalize_product_type(product.product_type),
+        status=product.product_status,
+        opened=_date_value(product.opening_date),
+        number=product.product_number,
+        currency=product.currency,
+        balance=_decimal_text(product.current_balance),
+    )
+
+
+def _to_card_summary(product: Product) -> CardSummary:
+    return CardSummary(
+        type=normalize_product_type(product.product_type),
+        status=product.product_status,
+        opened=_date_value(product.opening_date),
+        expires=_date_value(product.expiration_date),
+        number=(
+            f"**** {product.product_number[-4:]}"
+            if product.product_number and len(product.product_number) > 4 else None
+        ),
+        currency=product.currency,
+        balance=_decimal_text(product.current_balance),
+        credit_limit=_decimal_text(product.credit_limit),
     )
 
 

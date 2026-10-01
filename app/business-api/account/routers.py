@@ -4,9 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 import logging
 
-from internal_identity import get_http_customer_id
-from models import Card
-from services import card_service_singleton
+from jwt_identity import get_jwt_customer_id
+from models import AccountSummary, Card, CardSummary
+from services import account_service_singleton, card_service_singleton
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -25,10 +25,22 @@ def _to_runtime_http_error(err: RuntimeError) -> HTTPException:
     return HTTPException(status_code=code, detail=message)
 
 
+@router.get("/accounts", response_model=List[AccountSummary])
+def list_accounts(customer_id: Annotated[str, Depends(get_jwt_customer_id)]):
+    """List all bank accounts owned by the authenticated customer."""
+    return account_service_singleton.list_accounts(customer_id)
+
+
+@router.get("/cards", response_model=List[CardSummary])
+def list_cards(customer_id: Annotated[str, Depends(get_jwt_customer_id)]):
+    """List all cards owned by the authenticated customer."""
+    return card_service_singleton.list_cards(customer_id)
+
+
 @router.get("/accounts/{product_number}/cards", response_model=List[Card])
 def list_credit_cards(
     product_number: str,
-    customer_id: Annotated[str, Depends(get_http_customer_id)],
+    customer_id: Annotated[str, Depends(get_jwt_customer_id)],
 ):
     """Return all credit cards for a given account."""
     try:
@@ -46,7 +58,7 @@ def list_credit_cards(
 @router.get("/cards/{product_number}", response_model=Card)
 def get_card_details(
     product_number: str,
-    customer_id: Annotated[str, Depends(get_http_customer_id)],
+    customer_id: Annotated[str, Depends(get_jwt_customer_id)],
 ):
     """Return the card details for a single identifier."""
     try:
@@ -65,7 +77,7 @@ def get_card_details(
 def recharge_card(
     card_id: str,
     request: CardAmountRequest,
-    customer_id: Annotated[str, Depends(get_http_customer_id)],
+    customer_id: Annotated[str, Depends(get_jwt_customer_id)],
 ):
     """Recharge the selected card.
 
@@ -90,7 +102,7 @@ def recharge_card(
 def pay_with_card(
     card_id: str,
     request: CardAmountRequest,
-    customer_id: Annotated[str, Depends(get_http_customer_id)],
+    customer_id: Annotated[str, Depends(get_jwt_customer_id)],
 ):
     """Record a payment and debit the available balance."""
     logger.info("Pay with card card_id=%s amount=%.2f", card_id, request.amount)
