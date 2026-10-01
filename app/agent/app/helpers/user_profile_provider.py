@@ -83,5 +83,15 @@ class UserProfileProvider(ContextProvider):
             f"Respond to the user in {language} ({principal.locale}), including errors and "
             "unavailable-operation explanations. Use this authenticated profile language "
             "regardless of the language of the user's messages or conversation history. "
-            "Keep tool calls and operational data unchanged.",
+            "Translate every piece of user-facing text into this language: prose, headings, "
+            "table or list column/field labels you generate, and human-readable status or "
+            "category words a tool returns (for example an account/card/transaction status "
+            "like active, blocked, approved, or declined). Never leave a label, heading, or "
+            "translatable status word in English (or any other language) inside an "
+            "otherwise-translated response. The only exception is a machine-readable code: "
+            "an identifier written in snake_case or kebab-case (containing `_` or `-`, for "
+            "example a support-case status like WAITING_USER_APPROVAL) exists for frontend "
+            "i18n lookups and must be passed through exactly as returned, never translated or "
+            "reworded. Likewise never translate account/card/transaction numbers, amounts, "
+            "currency codes, dates, merchant names, or other literal identifiers.",
         )
