@@ -5,27 +5,11 @@ import { fileURLToPath } from "node:url";
 
 const projectRoot = fileURLToPath(new URL(".", import.meta.url));
 
-const backendTarget = process.env.BACKEND_URL ?? "http://127.0.0.1:8000";
-
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
   server: {
     port: 5170,
     host: "0.0.0.0",
-    proxy: {
-      "/accounts": {
-        target: 'http://localhost:8080',
-        changeOrigin: true,
-      },
-      "/responses": {
-        target: 'http://localhost:8080',
-        changeOrigin: true,
-      },
-      "/auth": {
-        target: 'http://localhost:8080',
-        changeOrigin: true,
-      },
-    },
   },
   plugins: [
     react()

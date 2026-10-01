@@ -158,6 +158,14 @@ resource "azapi_update_resource" "api_cors" {
           allowedOrigins     = ["https://${azapi_resource.app["web"].output.properties.defaultHostName}"]
           supportCredentials = false
         }
+        appSettings = [
+          { name = "WEBSITES_PORT", value = "8080" },
+          { name = "PORT", value = "8080" },
+          { name = "APPLICATIONINSIGHTS_CONNECTION_STRING", value = azurerm_application_insights.main.connection_string },
+          { name = "SCM_DO_BUILD_DURING_DEPLOYMENT", value = "true" },
+          { name = "DATABASE_URL", value = local.postgres_database_url },
+          { name = "CORS_ALLOWED_ORIGINS", value = "https://${azapi_resource.app["web"].output.properties.defaultHostName}" }
+        ]
       }
     }
   }

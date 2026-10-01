@@ -6,18 +6,26 @@ This repository is a banking-assistant prototype built with Python, Microsoft Ag
 
 ```mermaid
 flowchart LR
-    Browser[React banking web] --> BFF[Responses BFF]
+    Browser[React banking web] -->|chat| BFF[Responses BFF]
     BFF --> Agent[Responses agent]
     Agent --> Account[Account MCP]
     Agent --> Transaction[Transaction MCP]
+    Browser -->|accounts, cards, transactions, disputes| Account
+    Browser -->|accounts, cards, transactions, disputes| Transaction
 ```
 
 - `app/agent`: Account/Transaction handoff workflow and Responses host.
-- `app/responses-bff`: application JWT boundary and Responses proxy.
-- `app/business-api/account`: Account REST and MCP service.
-- `app/business-api/transaction`: Transaction REST and MCP service.
+- `app/responses-bff`: application JWT boundary and Responses proxy, scoped to identity
+  (`/auth/login`, `/auth/me`) and fronting the agent only; it does not read account, card,
+  or transaction data.
+- `app/business-api/account`: Account REST and MCP service. Its REST endpoints verify the
+  browser's application JWT directly (`jwt_identity.py`); its MCP tools verify a separate
+  short-lived agent-only bearer (`internal_identity.py`).
+- `app/business-api/transaction`: Transaction REST and MCP service, same dual-auth split
+  as Account.
 - `app/business-api/data`: SQLModel/Alembic schema and verified CSV-to-PostgreSQL pipeline.
-- `app/frontend/banking-web`: React/Vite banking UI and Responses stream client.
+- `app/frontend/banking-web`: React/Vite banking UI, calling Account/Transaction directly
+  for financial data and the Responses stream through the BFF for chat.
 - `infra`: Terraform for the App Service stack and Foundry resources.
 - `app/agent/azure.yaml`: separate azd root for the hosted Foundry agent.
 
@@ -25,11 +33,22 @@ Payment remains under `app/business-api/payment` and in the root infrastructure 
 
 ## Security Boundaries
 
-- The browser calls the BFF and never calls Foundry or the local agent directly.
-- The BFF authenticates PostgreSQL-backed Argon2 users, issues short-lived application JWTs, validates those JWTs, and obtains Azure credentials server-side. Its [service guide](app/responses-bff/README.md) documents login, profile, and owned-account reads.
+- The browser calls the BFF for chat and never calls Foundry or the local agent directly.
+  For account, card, transaction, and support-case reads, the browser calls Account and
+  Transaction directly instead, authenticated with the same application JWT the BFF issues;
+  this is the one scoped exception to the BFF-only rule.
+- The BFF authenticates PostgreSQL-backed Argon2 users, issues short-lived application JWTs,
+  validates those JWTs for its own two routes, and obtains Azure credentials server-side. Its
+  [service guide](app/responses-bff/README.md) documents login and profile only; it no longer
+  reads account/card/transaction data.
 - Conversation ownership is bound to the verified JWT subject.
 - The BFF signs verified `sub` and `customer_id` claims for the agent. The agent verifies that envelope and issues a fresh 60-second bearer for Account and Transaction MCP calls. This chain is validated locally; hosted transport behavior still requires proof.
-- Account and Transaction enforce customer-resource ownership in `services.py` through PostgreSQL product relationships and transaction filters. Preserve these checks when changing repositories.
+- Account and Transaction independently verify the browser's application JWT for their REST
+  endpoints (`jwt_identity.py`, same HS256 secret/issuer/audience as the BFF) and enforce
+  customer-resource ownership in `services.py` through PostgreSQL product relationships and
+  transaction filters. This is a separate auth dependency from the MCP-only
+  `internal_identity.py` bearer; never conflate the two. CORS is enabled via
+  `CORS_ALLOWED_ORIGINS` on both services.
 - Persisted users, customer names, owned-account selection and signed profile/locale injection are implemented. Actual multilingual conversations and hosted identity transport validation remain pending. Do not add fixed tokens, `MOCK_SESSION_TOKEN`, fabricated claims, or a second login mechanism.
 - Never log JWTs, passwords, bearer tokens, or Azure credentials.
 
@@ -91,7 +110,13 @@ uv run pytest tests/test_hosted_workflow.py tests/test_settings.py -q
 cd ../responses-bff
 uv run pytest -q
 
-cd ../frontend/banking-web
+cd ../business-api/account
+uv run --directory . python -m pytest tests -q
+
+cd ../transaction
+uv run --directory . python -m pytest tests -q
+
+cd ../../frontend/banking-web
 npm run lint
 npm run build
 

@@ -69,12 +69,16 @@ Set these in **Settings > Environments > Development > Variables**.
 - `AZURE_LOCATION`
 - `AZURE_RESOURCE_GROUP`
 
-### Responses BFF secret (`cd-responses-bff.yaml`)
+### Shared application JWT secret (`cd-responses-bff.yaml`, `cd-account.yaml`, `cd-transaction.yaml`)
 
 Set `RESPONSES_BFF_JWT_SECRET` under **Settings > Environments > Development > Secrets**.
-It must contain at least 32 characters. The workflow writes it directly to App Service
-settings, so Terraform and `azd` environment state never contain it. Terraform configures
-the BFF `DATABASE_URL` for the shared PostgreSQL database.
+It must contain at least 32 characters. The BFF signs the browser's application JWT with
+this value; Account and Transaction verify that same JWT directly for their REST endpoints,
+so all three workflows write it to their own App Service as `JWT_SECRET_KEY` without
+printing it. Keep the value identical across all three. Terraform and `azd` environment
+state never contain it. Terraform configures the BFF `DATABASE_URL` for the shared
+PostgreSQL database and sets Account/Transaction's `CORS_ALLOWED_ORIGINS` directly
+(no secret involved).
 
 ### Internal identity secret
 
