@@ -48,6 +48,17 @@ def parse_decimal(value: str | None) -> Decimal | None:
     return Decimal(value) if value else None
 
 
+def parse_bool(value: str | None) -> bool | None:
+    if not value:
+        return None
+    text = value.strip().lower()
+    if text in ("true", "1", "yes"):
+        return True
+    if text in ("false", "0", "no"):
+        return False
+    return None
+
+
 def optional(value: str | None) -> str | None:
     return value if value else None
 
