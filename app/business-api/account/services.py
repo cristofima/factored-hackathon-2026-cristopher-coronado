@@ -70,7 +70,7 @@ class AccountService:
         _require_identifier(account_id, "AccountId")
         with self._session_factory() as session:
             _get_owned_product(session, account_id, customer_id, ACCOUNT_PRODUCT_TYPES)
-        return []
+        raise RuntimeError("Registered beneficiaries are unavailable for persisted products")
 
 
 class UserService:
