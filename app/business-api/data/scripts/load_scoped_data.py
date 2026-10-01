@@ -25,6 +25,7 @@ from shared import (
     batched,
     csv_rows,
     optional,
+    parse_bool,
     parse_customer_ids,
     parse_date,
     parse_datetime,
@@ -154,11 +155,17 @@ def map_transaction(row: dict[str, str]) -> Row:
         "transaction_category": optional(row["transaction_category"]),
         "amount": parse_decimal(row["amount"]),
         "currency": row["currency"],
+        "amount_usd": parse_decimal(row.get("amount_usd")),
         "channel": optional(row["channel"]),
         "branch_id": optional(row["branch_id"]),
         "merchant_name": optional(row["merchant_name"]),
         "merchant_category": optional(row["merchant_category"]),
+        "transaction_country": optional(row.get("transaction_country")),
+        "transaction_city": optional(row.get("transaction_city")),
         "transaction_status": optional(row["transaction_status"]),
+        "response_code": optional(row.get("response_code")),
+        "is_fraud": parse_bool(row.get("is_fraud")),
+        "fraud_score": parse_decimal(row.get("fraud_score")),
     }
 
 

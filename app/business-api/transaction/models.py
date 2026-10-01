@@ -20,3 +20,38 @@ class Transaction(BaseModel):
     #paid, pending, failed
     status: Optional[str] = None
 
+
+class DisputeCase(BaseModel):
+    caseId: str
+    productNumber: Optional[str] = None
+    transactionId: str
+    reason: str
+    status: str
+    triageOutcome: Optional[str] = None
+    resolutionOutcome: Optional[str] = None
+    resolutionNotes: Optional[str] = None
+    openedAt: str
+    updatedAt: str
+    resolvedAt: Optional[str] = None
+
+
+class DisputeCaseEvent(BaseModel):
+    eventType: str
+    actor: str
+    message: Optional[str] = None
+    createdAt: str
+
+
+class OpenDisputeRequest(BaseModel):
+    transactionId: str
+    reason: str
+
+
+class DisputeApprovalRequest(BaseModel):
+    approved: bool
+
+
+class ResolveCaseRequest(BaseModel):
+    resolutionOutcome: str
+    resolutionNotes: Optional[str] = None
+
