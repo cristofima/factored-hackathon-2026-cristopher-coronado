@@ -6,9 +6,13 @@ from decimal import Decimal
 
 import pytest
 from banking_shared.models import Customer, Product, SQLModel, TransactionRecord
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, create_engine
 
+import routers
+from jwt_identity import get_jwt_customer_id
 from services import TransactionService
 
 
@@ -225,3 +229,44 @@ def test_owned_debit_card_transactions_are_masked(
 
     assert [transaction.id for transaction in transactions] == ["card-tx-1"]
     assert transactions[0].product_number == "**** 1111"
+
+
+def test_transaction_history_paginates_and_filters_by_inclusive_date_window(
+    session_factory: Callable[[], Session],
+) -> None:
+    service = TransactionService(session_factory)
+
+    first_page, total = service.get_transaction_history(
+        "ACCOUNT-NUMBER", "customer-owned",
+        start_date=date(2026, 6, 2), end_date=date(2026, 6, 4),
+        limit=2, offset=0,
+    )
+    second_page, _ = service.get_transaction_history(
+        "ACCOUNT-NUMBER", "customer-owned",
+        start_date=date(2026, 6, 2), end_date=date(2026, 6, 4),
+        limit=2, offset=2,
+    )
+
+    assert total == 3
+    assert [transaction.id for transaction in first_page] == ["account-tx-3", "account-tx-2"]
+    assert [transaction.id for transaction in second_page] == ["account-tx-1"]
+    assert first_page[0].currency == "USD"
+
+
+def test_transaction_history_rest_endpoint_requires_jwt_identity(
+    session_factory: Callable[[], Session],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("JWT_SECRET_KEY", "test-jwt-secret-key-with-at-least-32-bytes")
+    monkeypatch.setattr(routers, "service", TransactionService(session_factory))
+    app = FastAPI()
+    app.include_router(routers.router, prefix="/api/transactions")
+
+    with TestClient(app) as client:
+        denied = client.get("/api/transactions/ACCOUNT-NUMBER/history")
+        app.dependency_overrides[get_jwt_customer_id] = lambda: "customer-owned"
+        allowed = client.get("/api/transactions/ACCOUNT-NUMBER/history")
+
+    assert denied.status_code == 401
+    assert allowed.status_code == 200
+    assert allowed.json()["total"] == 6
