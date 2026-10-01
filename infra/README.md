@@ -40,7 +40,13 @@ The app names, derived web URLs, and infrastructure settings are emitted as Terr
 Terraform deliberately omits `JWT_SECRET_KEY` and configures the BFF with the shared
 PostgreSQL `DATABASE_URL`. Before deploying the BFF, configure the GitHub Environment
 secret `RESPONSES_BFF_JWT_SECRET`, then use `.github/workflows/cd-responses-bff.yaml`, or
-set the App Service secret through an equivalent secret-management path. The BFF identity
+set the App Service secret through an equivalent secret-management path. Account and
+Transaction verify that same browser-issued JWT directly for their REST endpoints, so
+`cd-account.yaml` and `cd-transaction.yaml` set the identical `JWT_SECRET_KEY` value from
+the same `RESPONSES_BFF_JWT_SECRET` secret; keep all three services' value in sync. Terraform
+sets `CORS_ALLOWED_ORIGINS` for Account and Transaction to the deployed web app's origin
+directly (no secret involved), alongside the existing native App Service CORS configuration.
+The BFF identity
 receives `Foundry Agent Consumer` and a custom project-scoped role containing
 `Microsoft.CognitiveServices/accounts/agents/UserIdentityImpersonation/action`. Do not send
 Azure credentials or the delegated identity header from the browser.
