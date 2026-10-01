@@ -1,6 +1,7 @@
 from fastmcp import FastMCP
 from fastmcp.server.dependencies import CurrentHeaders
 import logging
+from dispute_service import support_case_service_singleton as dispute_service
 from internal_identity import get_customer_id
 from services import transaction_service_singleton as service
 
@@ -39,5 +40,67 @@ def get_last_transactions(
     headers: dict[str, str] = CurrentHeaders(),
 ):
     return service.get_transactions(product_number, get_customer_id(headers))
+
+
+@mcp.tool(
+    name="reportTransactionDispute",
+    description=(
+        "Open a transaction-dispute support case for a transaction the customer does not "
+        "recognize or disputes. Use this after confirming the specific transaction with the "
+        "customer. This only opens the case and requests the customer's approval; it never "
+        "decides whether the dispute is legitimate."
+    ),
+)
+def report_transaction_dispute(
+    transaction_id: str,
+    reason: str,
+    headers: dict[str, str] = CurrentHeaders(),
+):
+    return dispute_service.open_transaction_dispute(
+        transaction_id,
+        get_customer_id(headers),
+        reason,
+    )
+
+
+@mcp.tool(
+    name="respondToDisputeApproval",
+    description=(
+        "Record the customer's approval or decline for a dispute case awaiting approval. "
+        "Only call this after the customer has explicitly confirmed or declined."
+    ),
+)
+def respond_to_dispute_approval(
+    case_id: str,
+    approved: bool,
+    headers: dict[str, str] = CurrentHeaders(),
+):
+    return dispute_service.respond_to_approval(case_id, get_customer_id(headers), approved)
+
+
+@mcp.tool(name="listSupportCases", description="List the customer's transaction-dispute support cases")
+def list_support_cases(
+    headers: dict[str, str] = CurrentHeaders(),
+):
+    return dispute_service.list_cases(get_customer_id(headers))
+
+
+@mcp.tool(name="getSupportCase", description="Get a single transaction-dispute support case by ID")
+def get_support_case(
+    case_id: str,
+    headers: dict[str, str] = CurrentHeaders(),
+):
+    return dispute_service.get_case(case_id, get_customer_id(headers))
+
+
+@mcp.tool(
+    name="getSupportCaseTimeline",
+    description="Get the event timeline for a transaction-dispute support case",
+)
+def get_support_case_timeline(
+    case_id: str,
+    headers: dict[str, str] = CurrentHeaders(),
+):
+    return dispute_service.get_case_timeline(case_id, get_customer_id(headers))
 
 
