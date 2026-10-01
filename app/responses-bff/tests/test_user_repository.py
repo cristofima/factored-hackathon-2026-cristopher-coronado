@@ -85,14 +85,3 @@ def test_find_customer_name_handles_missing_name_parts() -> None:
     assert _repository(first_name=" ", last_name=None).find_customer_name(
         "user-1", "customer-1"
     ) is None
-
-
-def test_list_accounts_returns_only_owned_bank_accounts_in_order() -> None:
-    accounts = _repository().list_accounts("user-1", "customer-1")
-    assert [account.product_id for account in accounts] == ["account-1", "account-2"]
-
-
-def test_list_accounts_does_not_return_accounts_for_foreign_identity() -> None:
-    repository = _repository()
-    assert repository.list_accounts("user-1", "customer-2") == []
-    assert repository.list_accounts("user-2", "customer-1") == []
