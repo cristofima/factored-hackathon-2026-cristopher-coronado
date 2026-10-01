@@ -59,7 +59,13 @@ Business scenario
 
 Users can converse with the assistant to inquire about account balances and review recent transactions instead of navigating traditional menus. The active workflow does not execute payments.
 
-The submission MVP extends this flow into support operations: users can open a support case from conversation context, track status progression, complete at least one meaningful approval step, and receive a contextual product recommendation only after case resolution.
+The submission MVP extends this flow into support operations: users can open a
+transaction-dispute support case from conversation context or directly from a
+transaction row, track its status through `OPEN -> WAITING_USER_APPROVAL -> IN_REVIEW
+-> RESOLVED`, approve or decline the dispute, and receive a single contextual product
+recommendation with an explicit opt-out after case resolution. See the
+[frontend guide](app/frontend/banking-web/README.md#transaction-disputes) and
+[business API guide](app/business-api/README.md) for the implementation.
 
 The Account and Transaction APIs read banking data from PostgreSQL through a shared SQLModel package and enforce ownership in their service layer. The Payment service and invoice samples remain as inherited artifacts but are not connected to the agent. The [Responses BFF](./app/responses-bff/README.md) authenticates persisted users with Argon2, returns customer names, and fronts the Responses agent; the frontend calls Account and Transaction directly, with the same application JWT, for account, card, and transaction reads.
 
@@ -77,7 +83,9 @@ The React frontend streams OpenAI Responses events for account and transaction i
  - **Microsoft Agent Framework First** <br/>
  Use [MAF](https://learn.microsoft.com/en-us/agent-framework/overview/agent-framework-overview) chat agents to flexibly support AzureOpenAI or Foundry Agent Service based agents
  - **Human-In-The-Loop (HITL) patterns** <br/>
- Generic approval events can be presented by the Responses client without coupling the UI to payment-specific behavior.
+ The transaction-dispute support case gates on a real customer approval step before
+ routing to automatic fast-tracking or a simulated human reviewer, backed by a
+ persisted case/event audit trail, not just generic protocol approval events.
 - **Separate hosted agent and App Services** <br/>
 The Foundry hosted agent uses its own azd project; the root Terraform stack defines five App Services for the BFF, web frontend, and business APIs.
 - **Automated IaC and App build & Deployment**
@@ -229,7 +237,12 @@ Current limitations to keep explicit:
 - The frontend must not call Foundry or agent endpoints directly; browser traffic for the chat path must go through the Responses BFF. Account and Transaction reads are the one scoped exception: the frontend calls those two services directly, authenticated with the same application JWT the BFF issues.
 - The BFF validates application identity and proxies upstream requests, but this does not replace per-resource authorization in business services.
 - The previous ChatKit-style direct browser-to-agent pattern is no longer the target architecture.
-- HITL approval widgets are generic protocol support; approval policy still requires business-specific hardening and audit coverage.
+- HITL approval widgets back a real business workflow for transaction disputes (case
+  creation, customer approval gate, triage, simulated reviewer assignment, and a
+  single post-resolution recommendation with opt-out), but the 90-day dispute window
+  is a mock policy evaluated against the real system clock and will reject opening new
+  disputes once the loaded dataset's transactions fall outside it; see
+  [continue-workflow.md](continue-workflow.md).
 - Prompt-injection resilience is bounded by deterministic authorization checks and does not rely on model instruction following alone.
 - Logging and tracing are useful for diagnostics, but sensitive-data controls and retention governance must be reviewed before production.
 

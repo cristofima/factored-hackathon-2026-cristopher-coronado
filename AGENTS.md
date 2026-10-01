@@ -25,7 +25,10 @@ flowchart LR
   as Account.
 - `app/business-api/data`: SQLModel/Alembic schema and verified CSV-to-PostgreSQL pipeline.
 - `app/frontend/banking-web`: React/Vite banking UI, calling Account/Transaction directly
-  for financial data and the Responses stream through the BFF for chat.
+  for financial data and the Responses stream through the BFF for chat. Includes the
+  transaction-dispute support-case pages (`/support-cases`, `/support-cases/:caseId`,
+  `ReportDisputeDialog`), calling Transaction's `/api/support-cases` directly with the
+  same application JWT, never through the BFF.
 - `infra`: Terraform for the App Service stack and Foundry resources.
 - `app/agent/azure.yaml`: separate azd root for the hosted Foundry agent.
 
