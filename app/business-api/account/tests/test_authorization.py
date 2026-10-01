@@ -111,10 +111,11 @@ def test_owned_account_resources_are_mapped_from_storage(
     assert "4111111111111111" not in cards[0].model_dump_json()
     assert cards[0].circuit is None
     assert len(user_accounts) == 1
-    assert account_service.get_registered_beneficiary(
-        "ACCOUNT-SOURCE-NUMBER",
-        "customer-owned",
-    ) == []
+    with pytest.raises(RuntimeError, match="unavailable"):
+        account_service.get_registered_beneficiary(
+            "ACCOUNT-SOURCE-NUMBER",
+            "customer-owned",
+        )
 
 
 def test_foreign_product_numbers_are_denied(session_factory: Callable[[], Session]) -> None:

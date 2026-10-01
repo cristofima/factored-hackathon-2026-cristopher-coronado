@@ -5,6 +5,8 @@ from banking_shared.models import (
     ProductMonthlySnapshot,
     ServiceAgent,
     SQLModel,
+    SupportCase,
+    SupportCaseEvent,
     TransactionRecord,
     User,
 )
@@ -16,6 +18,8 @@ __all__ = [
     "ProductMonthlySnapshot",
     "SQLModel",
     "ServiceAgent",
+    "SupportCase",
+    "SupportCaseEvent",
     "TransactionRecord",
     "User",
 ]
