@@ -30,7 +30,34 @@ description: A Python sample app using Foundry Responses for account and transac
 
 # Multi Agent Banking Assistant
 
-This hackathon prototype extends Microsoft's public [Azure-Samples/agent-openai-python-banking-assistant](https://github.com/Azure-Samples/agent-openai-python-banking-assistant) sample. The current workflow focuses on Account and Transaction inquiries through Foundry Responses. Data persistence, dynamic localization, hosted validation, and evaluation work are tracked in [the prototype plan](./plan/README.md).
+This hackathon prototype extends Microsoft's public [Azure-Samples/agent-openai-python-banking-assistant](https://github.com/Azure-Samples/agent-openai-python-banking-assistant) sample. The current workflow focuses on Account and Transaction inquiries through Foundry Responses.
+
+### What changed from the upstream sample
+
+The upstream sample is a proof-of-concept with no persistence layer: account,
+transaction, and payment data are in-memory/dummy fixtures, there is no end-user
+authentication at all (access is controlled only by an Azure RBAC role assignment
+on a publicly reachable Container App), and its supervisor plus three domain
+agents (account, transaction, payment with Document Intelligence invoice OCR) are
+co-located on Azure Container Apps, talking to the browser over the OpenAI ChatKit
+protocol, provisioned with Bicep, running `gpt-4.1`.
+
+This fork replaces each of those with a different answer rather than extending them
+as-is:
+
+| Area           | Upstream sample                                                         | This fork                                                                                                       |
+| -------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Data           | In-memory/dummy fixtures, no database                                   | Azure Database for PostgreSQL Flexible Server via a shared SQLModel package, with a real CSV ingestion pipeline |
+| Users          | None; RBAC-gated Container App, no end-user auth                        | Persisted Argon2-hashed users, custom JWT issued by a dedicated Responses BFF                                   |
+| Agent hosting  | Supervisor + 3 agents co-located on Container Apps                      | Account/Transaction handoff workflow deployed as a separately hosted Foundry agent, with its own `azd` project  |
+| Protocol       | OpenAI ChatKit (client-managed widgets)                                 | OpenAI Responses API, proxied through the BFF                                                                   |
+| Infra          | Bicep, Container Apps                                                   | Terraform, App Service                                                                                          |
+| Workflow scope | Account + Transaction + Payment (invoice OCR via Document Intelligence) | Account + Transaction only; Payment kept as inert infrastructure, never wired to the agent                      |
+| Added          | —                                                                       | Persisted transaction-dispute support case with a customer approval gate, and `es`/`pt`/`en` localization       |
+| Model          | `gpt-4.1`                                                               | `gpt-4.1-mini`                                                                                                  |
+
+See [ARCHITECTURE.md](./ARCHITECTURE.md) and [the ADRs](./docs/adr/README.md) for
+why each of these changed.
 
 For the 2026-10-05 submission, the target audience is retail banking customers who need fast support resolution and clear balance-movement explanations. Dataset profiling shows higher monthly activity in 2026 than 2025 for selected customers, but the core value proposition remains workflow clarity, approval control, and end-to-end case traceability rather than high-volume optimization alone. The demo scope includes one contextual product recommendation after case resolution, with strict guardrails (single recommendation, rationale shown, and opt-out support) to avoid spam-like behavior.
 
@@ -108,8 +135,8 @@ The home banking assistant uses a handoff workflow whose agents specialize in ac
 ### Additional resources
 
 - [Skilling-Presentation](./docs/Home%20Banking%20Assistant.pdf)
-- [Technical Architecture](./docs/technical-architecture.md)
-- [Historical ChatKit protocol reference](./docs/chat-server-protocol.md)
+- [Architecture](./ARCHITECTURE.md)
+- [Architecture Decision Records](./docs/adr/README.md)
 - For Semantic Kernel version check this [branch](https://github.com/Azure-Samples/agent-openai-python-banking-assistant/tree/semantic-kernel)
 
 <br /><br />
