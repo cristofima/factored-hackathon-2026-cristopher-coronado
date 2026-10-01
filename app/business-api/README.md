@@ -24,6 +24,12 @@ Each service runs as an independent FastMCP server exposing banking tools throug
 > Each service has its own `.venv`. Select the interpreter in the service directory you are running (for example, `transaction/.venv/Scripts/python.exe` on Windows).
 
 > [!NOTE]
+> Account and Transaction require `DATABASE_URL`, `INTERNAL_IDENTITY_SECRET` (MCP),
+> and `JWT_SECRET_KEY` (browser REST) to start without a `503`. `CORS_ALLOWED_ORIGINS`
+> defaults to `http://localhost:5170` if unset. The root `.env.dev` already sets all
+> of these for local development; see [Configuration](#configuration) below.
+
+> [!NOTE]
 > Docker deployment paths were removed along with the per-service Dockerfiles. Run the servers directly with Python or package them using the shared App Service workflow.
 
 ## 🔧 Service Setup
@@ -108,14 +114,34 @@ The Payment service will be available at: **http://localhost:8072**
 
 ## 🛠️ Available Banking Tools
 
+Each service exposes two parallel surfaces that never share an auth mechanism:
+
+- **MCP tools** (`mcp_tools.py`), mounted at `/mcp`, called only by the Responses agent.
+  They authenticate with `internal_identity.py`'s short-lived HMAC bearer, minted
+  fresh per request from the BFF-verified identity the agent receives.
+- **REST endpoints** (`routers.py`, `dispute_routers.py`), mounted at `/api`, called
+  directly by the browser. They authenticate with `jwt_identity.py`'s
+  `get_jwt_customer_id`, which validates the same application JWT the BFF issues at
+  login (HS256, `JWT_SECRET_KEY`/`JWT_ISSUER`/`JWT_AUDIENCE`). CORS is enabled via
+  `CORS_ALLOWED_ORIGINS` (defaults to `http://localhost:5170`).
+
 ### Account Service (Port 8070)
 
-Exposes the following MCP tools:
+MCP tools:
 
 - **`getAccountsByUserName`** - Get all accounts for a specific user
 - **`getAccountDetails`** - Get account details and available payment methods
-- **`getPaymentMethodDetails`** - Get payment method details with available balance
-- **`getRegisteredBeneficiary`** - Get registered beneficiaries for an account
+- **`getRegisteredBeneficiary`** - Get registered beneficiaries for an account (unavailable for persisted products)
+- **`getCreditCards`** - Get the list of credit cards bound to an account
+- **`getCardDetails`** - Get the details of a single credit card
+
+REST endpoints (`/api` prefix):
+
+- **`GET /accounts`** - List every bank account owned by the authenticated customer
+- **`GET /cards`** - List every card owned by the authenticated customer
+- **`GET /accounts/{product_number}/cards`**, **`GET /cards/{product_number}`**,
+  **`POST /cards/{card_id}/recharge`**, **`POST /cards/{card_id}/pay`** - existing
+  single-resource operations (recharge/pay are unavailable for persisted products)
 
 ### Payment Service (Port 8072)
 
@@ -125,12 +151,22 @@ Exposes the following MCP tools:
 
 ### Transaction Service (Port 8071)
 
-Exposes the following MCP tools:
+MCP tools:
 
 - **`getTransactionsByRecipientName`** - Search transactions by recipient name
 - **`getLastTransactions`** - Get recent transaction history for an account
+- **`getCardTransactions`** - Get credit and debit card transactions
+- **`reportTransactionDispute`**, **`respondToDisputeApproval`**, **`listSupportCases`**,
+  **`getSupportCase`**, **`getSupportCaseTimeline`** - transaction-dispute support-case
+  workflow (intake/triage only; the agent never decides legitimacy)
 
-Additionally provides REST API endpoints at `/api/transactions` for direct HTTP access.
+REST endpoints (`/api/transactions` prefix):
+
+- **`GET /{product_number}`** - Last 5 transactions, or filtered by `payment_type`/`transaction_type`/`card_product_number`
+- **`GET /{product_number}/history`** - Paginated history with inclusive `start_date`/`end_date`, `limit`, `offset`
+
+Support-case REST endpoints at `/api/support-cases` (same JWT auth; `resolve` is
+simulated-reviewer-only and is never exposed as an MCP tool).
 
 ### Port Configuration
 
@@ -141,6 +177,17 @@ Services use different ports based on the `PROFILE` environment variable:
 | Account     | 8070             | 8080            |
 | Transaction | 8071             | 8080            |
 | Payment     | 8072             | 8080            |
+
+## ⚙️ Configuration
+
+| Variable                      | Used by              | Purpose / default                                                         |
+| ----------------------------- | -------------------- | ------------------------------------------------------------------------- |
+| `DATABASE_URL`                | Account, Transaction | Shared PostgreSQL connection (via `banking-shared`).                      |
+| `INTERNAL_IDENTITY_SECRET`    | Account, Transaction | HMAC secret verifying the agent's short-lived MCP bearer.                 |
+| `JWT_SECRET_KEY`              | Account, Transaction | Must match the BFF's signing key; verifies the browser's application JWT. |
+| `JWT_ISSUER` / `JWT_AUDIENCE` | Account, Transaction | Default `home-banking-api` / `home-banking-web`, matching the BFF.        |
+| `CORS_ALLOWED_ORIGINS`        | Account, Transaction | Comma-separated browser origins; defaults to `http://localhost:5170`.     |
+| `TRANSACTIONS_API_SERVER_URL` | Payment              | Upstream Transaction service URL.                                         |
 
 ## 📁 Service Structure
 
@@ -180,9 +227,13 @@ Responses agent from BFF-verified identity. Their `services.py` methods enforce
 filters before returning customer-owned resources. Keep those checks in the service layer;
 tool descriptions and agent instructions are not authorization boundaries.
 
-The [Responses BFF](../responses-bff/README.md) separately reads persisted users,
-customer names, and owned savings/checking products for browser login and the Account
-page. Browser application JWTs are not substitutes for the internal MCP bearer.
+The browser calls Account and Transaction REST endpoints directly, authenticated with
+the application JWT issued by the [Responses BFF](../responses-bff/README.md) at
+login. The BFF itself only handles identity (`/auth/login`, `/auth/me`) and fronts the
+Responses agent; it does not read account, card, or transaction data from PostgreSQL.
+Browser application JWTs are not substitutes for the internal MCP bearer, and the two
+auth dependencies (`jwt_identity.get_jwt_customer_id` for REST, `internal_identity.get_customer_id`
+for MCP) are never interchangeable.
 
 ## 🐛 Development & Debugging
 
