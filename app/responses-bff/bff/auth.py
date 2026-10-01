@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Annotated, Literal
 
 import jwt
-from banking_shared.product_types import normalize_product_type
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import InvalidTokenError
@@ -36,25 +35,11 @@ class UserProfile(AuthenticatedUser):
     name: str | None = None
 
 
-class AccountSummary(BaseModel):
-    type: str
-    status: str | None
-    opened: date | None
-    number: str | None
-    currency: str
-    balance: str | None
-
-
 class LoginResponse(BaseModel):
     access_token: str
     token_type: Literal["bearer"] = "bearer"
     expires_in: int
     user: UserProfile
-
-
-class CardSummary(AccountSummary):
-    expires: date | None
-    credit_limit: str | None
 
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -121,59 +106,6 @@ def get_current_user(
 ) -> UserProfile:
     """Return the persisted profile for the verified bearer identity."""
     return _get_profile(user, request)
-
-
-@router.get("/me/accounts", response_model=list[AccountSummary])
-def get_current_user_accounts(
-    request: Request,
-    user: Annotated[AuthenticatedUser, Depends(get_authenticated_user)],
-) -> list[AccountSummary]:
-    """List only bank accounts owned by the verified identity."""
-    repository: UserRepository = request.app.state.user_repository
-    try:
-        products = repository.list_accounts(user.sub, user.customer_id)
-    except (RuntimeError, SQLAlchemyError):
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"code": "SERVICE_UNAVAILABLE"},
-        ) from None
-    return [AccountSummary(
-        type=normalize_product_type(product.product_type),
-        status=product.product_status,
-        opened=product.opening_date,
-        number=product.product_number,
-        currency=product.currency,
-        balance=format(product.current_balance, "f") if product.current_balance is not None else None,
-    ) for product in products]
-
-
-@router.get("/me/cards", response_model=list[CardSummary])
-def get_current_user_cards(
-    request: Request,
-    user: Annotated[AuthenticatedUser, Depends(get_authenticated_user)],
-) -> list[CardSummary]:
-    """List persisted credit and debit cards owned by the verified identity."""
-    repository: UserRepository = request.app.state.user_repository
-    try:
-        products = repository.list_cards(user.sub, user.customer_id)
-    except (RuntimeError, SQLAlchemyError):
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"code": "SERVICE_UNAVAILABLE"},
-        ) from None
-    return [CardSummary(
-        type=normalize_product_type(product.product_type),
-        status=product.product_status,
-        opened=product.opening_date,
-        expires=product.expiration_date,
-        number=(
-            f"**** {product.product_number[-4:]}"
-            if product.product_number and len(product.product_number) > 4 else None
-        ),
-        currency=product.currency,
-        balance=format(product.current_balance, "f") if product.current_balance is not None else None,
-        credit_limit=format(product.credit_limit, "f") if product.credit_limit is not None else None,
-    ) for product in products]
 
 
 def _get_profile(user: AuthenticatedUser, request: Request) -> UserProfile:
