@@ -1,0 +1,88 @@
+name: CI Node App
+description: Install dependencies, lint, type-check, run tests with coverage, and build.
+
+inputs:
+  project-path:
+    description: Path to the Node project.
+    required: true
+  node-version:
+    description: Node.js version used by the project.
+    required: false
+    default: "22"
+  artifact-name:
+    description: Name of the uploaded coverage artifact.
+    required: false
+    default: coverage-report
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@v7.0.0
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: npm
+        cache-dependency-path: ${{ inputs.project-path }}/package-lock.json
+
+    - name: Install dependencies
+      shell: bash
+      working-directory: ${{ inputs.project-path }}
+      run: npm ci
+
+    - name: Run linter
+      shell: bash
+      working-directory: ${{ inputs.project-path }}
+      run: npm run lint --if-present
+
+    - name: Run type check
+      shell: bash
+      working-directory: ${{ inputs.project-path }}
+      run: npm run typecheck --if-present
+
+    - name: Run unit tests with coverage
+      shell: bash
+      working-directory: ${{ inputs.project-path }}
+      run: npm run test -- --coverage.enabled=true --coverage.reporter=text-summary --coverage.reporter=json-summary --coverage.reporter=html
+
+    - name: Generate Coverage Job Summary
+      if: always()
+      shell: bash
+      working-directory: ${{ inputs.project-path }}
+      run: |
+        echo "### Code Coverage Summary (Vitest)" >> "$GITHUB_STEP_SUMMARY"
+
+        if [ -f coverage/coverage-summary.json ]; then
+          if jq -e '.total' coverage/coverage-summary.json >/dev/null 2>&1; then
+            lines_pct=$(jq -r '.total.lines.pct // "N/A"' coverage/coverage-summary.json)
+            statements_pct=$(jq -r '.total.statements.pct // "N/A"' coverage/coverage-summary.json)
+            functions_pct=$(jq -r '.total.functions.pct // "N/A"' coverage/coverage-summary.json)
+            branches_pct=$(jq -r '.total.branches.pct // "N/A"' coverage/coverage-summary.json)
+
+            {
+              echo "| Metric | Coverage Percentage |"
+              echo "| :--- | :--- |"
+              echo "| **Lines** | ${lines_pct}% |"
+              echo "| **Statements** | ${statements_pct}% |"
+              echo "| **Functions** | ${functions_pct}% |"
+              echo "| **Branches** | ${branches_pct}% |"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Coverage summary JSON is present but invalid." >> "$GITHUB_STEP_SUMMARY"
+          fi
+        else
+          echo "Coverage summary file not found." >> "$GITHUB_STEP_SUMMARY"
+        fi
+
+    - name: Upload coverage report artifact
+      if: always()
+      uses: actions/upload-artifact@v7.0.1
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ inputs.project-path }}/coverage/
+        retention-days: 14
+        if-no-files-found: ignore
+
+    - name: Build application (Vite)
+      shell: bash
+      working-directory: ${{ inputs.project-path }}
+      run: npm run build

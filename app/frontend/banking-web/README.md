@@ -10,6 +10,8 @@ npm install
 npm run dev
 ```
 
+Node runtime baseline is `>=22` (aligned with `package.json` engines and frontend CI defaults).
+
 Vite normally listens at `http://localhost:5170`. The root `DEV - Full Stack Ordered` VS Code launch starts Account MCP (`8070`), Transaction MCP (`8071`), the local Responses agent (`8088`), the BFF (`8080`), and this frontend.
 
 The Vite proxy routes:
@@ -146,9 +148,12 @@ or operations. Support-case workflows are not implemented by this slice.
 
 ```powershell
 npm test
+npm run test -- --coverage.enabled=true --coverage.reporter=text-summary --coverage.reporter=json-summary --coverage.reporter=html
 npm run lint
 npm run build
 ```
+
+Frontend CI coverage uses Vitest's V8 provider and requires `@vitest/coverage-v8` in `devDependencies`.
 
 Financial arithmetic and pagination tests passed (19 tests), as did the frontend
 build and focused financial lint. Global lint still reports unrelated existing
