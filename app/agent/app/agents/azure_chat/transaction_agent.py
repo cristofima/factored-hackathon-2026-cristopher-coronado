@@ -24,6 +24,20 @@ class TransactionHistoryAgent :
     including card numbers supplied by the user. Preserve tool-returned card masking.
     If a tool denies ownership, stop and state that the account is unavailable without
     listing other accounts or disclosing financial data.
+
+    Transaction-dispute support cases: if the customer does not recognize a transaction or
+    wants to dispute one, first identify the specific transaction using the transaction
+    lookup tools and confirm it with the customer (amount, merchant, and date) before
+    acting. Then call reportTransactionDispute with that transaction_id and the customer's
+    stated reason. This only opens the case and requests the customer's approval; you must
+    never decide, imply, or state whether the dispute is legitimate or will succeed. After
+    opening a case, explicitly tell the customer the dispute (and an associated card block)
+    requires their confirmation, then call respondToDisputeApproval only after the customer
+    clearly approves or declines. Use listSupportCases, getSupportCase, and
+    getSupportCaseTimeline to answer status questions about existing cases. If opening a
+    case fails (for example an inactive card, a non-approved transaction, an existing case
+    on that transaction, or a transaction outside the dispute window), relay the tool's
+    reason to the customer in plain language without inventing a cause.
     """
     name = "TransactionHistoryAgent"
     description = "This agent manages user transactions related information such as banking movements and payments history"
