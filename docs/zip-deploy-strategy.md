@@ -21,14 +21,11 @@ The Account and Transaction MCP servers are FastAPI projects that rely only on P
 
 For zip deploy, each Python API directory must include a `requirements.txt` file. In this repository, `pyproject.toml` remains the local development source of truth, and `requirements.txt` is the deployment artifact consumed by Oryx on App Service.
 
-Generate or refresh the deployment artifact from each service folder:
+Generate or refresh the deployment artifact from the repository root:
 
 ```bash
-cd app/business-api/account
-uv pip compile pyproject.toml -o requirements.txt
-
-cd ../transaction
-uv pip compile pyproject.toml -o requirements.txt
+uv pip compile app/business-api/account/pyproject.toml --no-emit-package banking-shared -o app/business-api/account/requirements.txt
+uv pip compile app/business-api/transaction/pyproject.toml --no-emit-package banking-shared -o app/business-api/transaction/requirements.txt
 ```
 
 ## Frontend deployment
