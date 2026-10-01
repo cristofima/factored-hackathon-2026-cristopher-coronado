@@ -136,6 +136,31 @@
   "Request failed": "No se pudo completar la solicitud. Inténtalo de nuevo.",
   "Session expired": "Tu sesión venció o no es válida. Inicia sesión de nuevo.",
   "Access denied": "No tienes permiso para realizar esta solicitud.",
+  "Transaction Disputes": "Reclamos de transacciones",
+  "Refresh": "Actualizar",
+  "Support cases description": "Da seguimiento a los reclamos que abriste, responde a las solicitudes de aprobación y revisa la línea de tiempo del caso.",
+  "Loading support cases...": "Cargando reclamos...",
+  "Support cases are unavailable": "Los reclamos no están disponibles",
+  "No support cases yet.": "Aún no hay reclamos.",
+  "Loading support case...": "Cargando el reclamo...",
+  "Support case is unavailable": "El reclamo no está disponible",
+  "Case Details": "Detalles del caso",
+  "Reason": "Motivo",
+  "Resolution": "Resolución",
+  "Approval Needed": "Se requiere tu aprobación",
+  "Dispute approval prompt": "Confirma que deseas continuar con este reclamo. Al aprobar, la tarjeta relacionada se bloqueará mientras se revisa el caso.",
+  "Approve dispute": "Aprobar reclamo",
+  "Decline": "Rechazar",
+  "Recommendation": "Recomendación",
+  "Dismiss recommendation": "Descartar recomendación",
+  "Could not dismiss the recommendation": "No se pudo descartar la recomendación",
+  "Could not record your response": "No se pudo registrar tu respuesta",
+  "Timeline": "Línea de tiempo",
+  "Report dispute": "Reportar reclamo",
+  "Report a transaction dispute": "Reportar un reclamo de transacción",
+  "Describe why you don't recognize this charge": "Describe por qué no reconoces este cargo",
+  "Submit dispute": "Enviar reclamo",
+  "Could not open the dispute": "No se pudo abrir el reclamo",
   "transactions": {
     "types": {
       "Payment": "Pago",
@@ -158,6 +183,29 @@
       "Reversed": "Revertida",
       "Declined": "Rechazada",
       "Pending": "Pendiente"
+    }
+  },
+  "support-cases": {
+    "status": {
+      "OPEN": "Abierto",
+      "WAITING_USER_APPROVAL": "Esperando tu aprobación",
+      "IN_REVIEW": "En revisión",
+      "RESOLVED": "Resuelto"
+    },
+    "resolution": {
+      "fast_tracked_provisional_credit": "Resuelto automáticamente: crédito provisional emitido",
+      "fraud_confirmed_refund_issued": "Fraude confirmado: reembolso emitido",
+      "withdrawn_by_customer": "Retirado por ti"
+    },
+    "events": {
+      "CASE_OPENED": "Reclamo abierto",
+      "APPROVAL_REQUESTED": "Aprobación solicitada",
+      "APPROVAL_GRANTED": "Aprobaste el reclamo",
+      "APPROVAL_DECLINED": "Rechazaste el reclamo",
+      "FAST_TRACKED": "Enviado a resolución automática",
+      "ESCALATED_TO_REVIEW": "Escalado a revisión manual",
+      "RESOLVED": "Caso resuelto",
+      "RECOMMENDATION_DISMISSED": "Recomendación descartada"
     }
   }
 }

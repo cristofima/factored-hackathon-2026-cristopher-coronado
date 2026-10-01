@@ -41,6 +41,9 @@ class DisputeCase(BaseModel):
     triageOutcome: Optional[str] = None
     resolutionOutcome: Optional[str] = None
     resolutionNotes: Optional[str] = None
+    recommendationType: Optional[str] = None
+    recommendationRationale: Optional[str] = None
+    recommendationOptedOut: bool = False
     openedAt: str
     updatedAt: str
     resolvedAt: Optional[str] = None

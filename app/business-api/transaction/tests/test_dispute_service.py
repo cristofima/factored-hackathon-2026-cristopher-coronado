@@ -273,3 +273,55 @@ def test_list_and_timeline_are_scoped_to_the_owning_customer(
     assert [case.caseId for case in cases] == [opened.caseId]
     assert [event.eventType for event in timeline] == ["CASE_OPENED", "APPROVAL_REQUESTED"]
     assert service.list_cases("customer-foreign") == []
+
+
+def test_fast_tracked_case_gets_a_recommendation(session_factory: Callable[[], Session]) -> None:
+    service = SupportCaseService(session_factory)
+    opened = service.open_transaction_dispute("tx-low-risk", "customer-owned", "Reclamo")
+
+    resolved = service.respond_to_approval(opened.caseId, "customer-owned", approved=True)
+
+    assert resolved.recommendationType == "transaction_alerts"
+    assert resolved.recommendationRationale
+    assert resolved.recommendationOptedOut is False
+
+
+def test_withdrawn_case_gets_no_recommendation(session_factory: Callable[[], Session]) -> None:
+    service = SupportCaseService(session_factory)
+    opened = service.open_transaction_dispute("tx-low-risk", "customer-owned", "Reclamo")
+
+    declined = service.respond_to_approval(opened.caseId, "customer-owned", approved=False)
+
+    assert declined.recommendationType is None
+
+
+def test_customer_can_dismiss_the_recommendation(session_factory: Callable[[], Session]) -> None:
+    service = SupportCaseService(session_factory)
+    opened = service.open_transaction_dispute("tx-low-risk", "customer-owned", "Reclamo")
+    resolved = service.respond_to_approval(opened.caseId, "customer-owned", approved=True)
+
+    dismissed = service.dismiss_recommendation(resolved.caseId, "customer-owned")
+
+    assert dismissed.recommendationOptedOut is True
+
+
+def test_dismissing_a_recommendation_requires_one_to_exist(
+    session_factory: Callable[[], Session],
+) -> None:
+    service = SupportCaseService(session_factory)
+    opened = service.open_transaction_dispute("tx-low-risk", "customer-owned", "Reclamo")
+    service.respond_to_approval(opened.caseId, "customer-owned", approved=False)
+
+    with pytest.raises(ValueError, match="no recommendation"):
+        service.dismiss_recommendation(opened.caseId, "customer-owned")
+
+
+def test_foreign_customer_cannot_dismiss_another_customers_recommendation(
+    session_factory: Callable[[], Session],
+) -> None:
+    service = SupportCaseService(session_factory)
+    opened = service.open_transaction_dispute("tx-low-risk", "customer-owned", "Reclamo")
+    resolved = service.respond_to_approval(opened.caseId, "customer-owned", approved=True)
+
+    with pytest.raises(PermissionError, match="authenticated customer"):
+        service.dismiss_recommendation(resolved.caseId, "customer-foreign")

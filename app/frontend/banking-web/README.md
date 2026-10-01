@@ -150,7 +150,29 @@ No mixed-currency total or estimated monthly snapshot is displayed.
 
 Dashboard and Analytics have no mock financial fallback. Payments, investments,
 beneficiaries, and card mutations remain unavailable rather than simulating data
-or operations. Support-case workflows are not implemented by this slice.
+or operations.
+
+## Transaction Disputes
+
+The [support-cases list](src/pages/SupportCases.tsx) and
+[case detail/timeline](src/pages/SupportCaseDetail.tsx) pages, at `/support-cases` and
+`/support-cases/:caseId`, read and act on Transaction's `/api/support-cases` REST
+surface directly through [disputeClient.ts](src/api/disputeClient.ts), authenticated
+with the same application JWT as the rest of the direct reads above, never through the
+BFF. A [`ReportDisputeDialog`](src/components/ReportDisputeDialog.tsx) is wired into
+the Analytics transaction table for `Approved` rows and opens a new case from a
+customer-entered reason.
+
+The detail page shows the case status, an approve/decline gate while
+`WAITING_USER_APPROVAL`, the full event timeline, and the single post-resolution
+recommendation card with an explicit dismiss action once a case resolves favorably. All
+status, resolution, and event values are machine-readable codes translated for display
+through a dedicated `support-cases.*` i18n namespace in all three locale catalogs.
+
+The backend's `DISPUTE_WINDOW_DAYS` mock policy (90 days, evaluated against the real
+system clock) rejects opening a _new_ dispute once every loaded transaction falls
+outside that window; this is a dataset-staleness constraint, not a frontend bug. See
+[continue-workflow.md](../../../continue-workflow.md) for the full design record.
 
 ## Validation
 
@@ -195,4 +217,5 @@ Reloading clears them: the next message creates a new conversation even if the
 login JWT is still valid. Later messages in the same thread reuse the identifier.
 Hosted identity transport and deployed financial parity are not verified. See the
 [real-data gate](../../../DEMO_SCOPE_CHECKLIST.md#0-real-data-verification-gate-next)
-before starting support cases. Payment submission and attachment upload are not active features.
+for the separately tracked real-data verification checklist. Payment submission and
+attachment upload are not active features.

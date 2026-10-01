@@ -20,6 +20,8 @@ import InvestmentPortfolio from "./pages/InvestmentPortfolio";
 import TransactionAnalytics from "./pages/TransactionAnalytics";
 import Account from "./pages/Account";
 import Support from "./pages/Support";
+import SupportCases from "./pages/SupportCases";
+import SupportCaseDetail from "./pages/SupportCaseDetail";
 import NotFound from "./pages/NotFound";
 import Login from "./pages/Login";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
@@ -89,6 +91,11 @@ const App = () => (
                 <Route path="analytics" element={<TransactionAnalytics />} />
                 <Route path="account" element={<Account />} />
                 <Route path="support" element={<Support />} />
+                <Route path="support-cases" element={<SupportCases />} />
+                <Route
+                  path="support-cases/:caseId"
+                  element={<SupportCaseDetail />}
+                />
                 <Route path="*" element={<NotFound />} />
               </Route>
             </Routes>

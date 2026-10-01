@@ -12,6 +12,7 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import ReportDisputeDialog from "@/components/ReportDisputeDialog";
 import { useTranslation } from "react-i18next";
 
 export default function FinancialOverview({
@@ -283,6 +284,7 @@ export default function FinancialOverview({
                             {t(heading)}
                           </th>
                         ))}
+                        {analytics && <th className="p-3 whitespace-nowrap" />}
                       </tr>
                     </thead>
                     <tbody>
@@ -329,6 +331,15 @@ export default function FinancialOverview({
                           <td className="p-3 whitespace-nowrap text-right font-medium tabular-nums">
                             {record.currency} {record.amount}
                           </td>
+                          {analytics && (
+                            <td className="p-3 whitespace-nowrap">
+                              {record.status === "Approved" && (
+                                <ReportDisputeDialog
+                                  transactionId={record.id}
+                                />
+                              )}
+                            </td>
+                          )}
                         </tr>
                       ))}
                     </tbody>

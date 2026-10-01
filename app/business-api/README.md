@@ -165,8 +165,10 @@ REST endpoints (`/api/transactions` prefix):
 - **`GET /{product_number}`** - Last 5 transactions, or filtered by `payment_type`/`transaction_type`/`card_product_number`
 - **`GET /{product_number}/history`** - Paginated history with inclusive `start_date`/`end_date`, `limit`, `offset`
 
-Support-case REST endpoints at `/api/support-cases` (same JWT auth; `resolve` is
-simulated-reviewer-only and is never exposed as an MCP tool).
+Support-case REST endpoints at `/api/support-cases` (same JWT auth) additionally expose
+`POST /{case_id}/approval`, `POST /{case_id}/recommendation/dismiss` (records the
+customer's explicit opt-out of the single post-resolution recommendation), and
+`POST /{case_id}/resolve` (simulated-reviewer-only, never exposed as an MCP tool).
 
 ### Port Configuration
 
