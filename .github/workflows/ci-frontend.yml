@@ -1,0 +1,38 @@
+name: Frontend CI
+
+on:
+  push:
+    branches: ["main", "develop", "feature/*", "refactor/*"]
+    paths:
+      - "app/frontend/banking-web/**"
+      - "!app/frontend/banking-web/**/*.md"
+      - ".github/workflows/ci-frontend.yml"
+      - ".github/actions/ci-node/**"
+  pull_request:
+    branches: ["main", "develop"]
+    types: [opened, reopened, synchronize, ready_for_review]
+    paths:
+      - "app/frontend/banking-web/**"
+      - "!app/frontend/banking-web/**/*.md"
+      - ".github/workflows/ci-frontend.yml"
+      - ".github/actions/ci-node/**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  build-and-test:
+    name: Build & Test (frontend)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: ./.github/actions/ci-node
+        with:
+          project-path: app/frontend/banking-web
+          artifact-name: frontend-coverage-report

@@ -1,4 +1,4 @@
-name: Deploy Web
+name: Deploy Frontend
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     paths:
       - "app/frontend/banking-web/**"
       - "!app/frontend/banking-web/**/*.md"
-      - ".github/workflows/cd-web.yaml"
+      - ".github/workflows/cd-frontend.yaml"
       - ".github/actions/cd-azure/**"
   workflow_dispatch:
 
@@ -28,5 +28,5 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
           location: ${{ vars.AZURE_LOCATION }}
           resource-group: ${{ vars.AZURE_RESOURCE_GROUP }}
-      - name: Deploy web
+      - name: Deploy frontend
         run: azd deploy web --no-prompt
