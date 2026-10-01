@@ -14,24 +14,29 @@ Node runtime baseline is `>=22` (aligned with `package.json` engines and fronten
 
 Vite normally listens at `http://localhost:5170`. The root `DEV - Full Stack Ordered` VS Code launch starts Account MCP (`8070`), Transaction MCP (`8071`), the local Responses agent (`8088`), the BFF (`8080`), and this frontend.
 
-The Vite proxy routes:
+Account, Transaction, and the BFF are separate origins in every environment, local
+and deployed, so the frontend calls each one by its absolute URL instead of relying
+on a dev-server proxy. Locally those absolute URLs just happen to share the
+`localhost` host with a different port per service:
 
-| Route         | Local target            |
+| Service       | Local URL               |
 | ------------- | ----------------------- |
-| `/accounts/*` | `http://localhost:8080` |
-| `/responses`  | `http://localhost:8080` |
-| `/auth/*`     | `http://localhost:8080` |
+| Account       | `http://localhost:8070` |
+| Transaction   | `http://localhost:8071` |
+| Responses BFF | `http://localhost:8080` |
 
 ## Environment
 
-| Variable                 | Purpose                                                            | Local default             |
-| ------------------------ | ------------------------------------------------------------------ | ------------------------- |
-| `VITE_RESPONSES_API_URL` | Responses BFF endpoint                                             | `/responses` in code      |
-| `VITE_RESPONSES_BFF_URL` | BFF base URL for authentication, accounts, cards, and transactions | Empty; same-origin routes |
+| Variable                   | Purpose                                                     | Local default                     |
+| -------------------------- | ----------------------------------------------------------- | --------------------------------- |
+| `VITE_ACCOUNT_API_URL`     | Account API base URL (including `/api`)                     | `http://localhost:8070/api`       |
+| `VITE_TRANSACTION_API_URL` | Transaction API base URL (including `/api`)                 | `http://localhost:8071/api`       |
+| `VITE_RESPONSES_API_URL`   | Responses BFF chat/stream endpoint                          | `http://localhost:8080/responses` |
+| `VITE_RESPONSES_BFF_URL`   | BFF base URL for authentication (`/auth/login`, `/auth/me`) | `http://localhost:8080`           |
 
-Active browser reads do not call Account or Transaction MCP services directly.
-Legacy REST client modules remain in the source tree, but are not used by the
-in-scope financial screens and have no direct-service Vite proxy.
+Active browser reads call Account and Transaction directly, authenticated with the
+same application JWT the BFF issues at login. Legacy REST client modules remain in
+the source tree, but are not used by the in-scope financial screens.
 
 The frontend signs in through the [Responses BFF](../../responses-bff/README.md) at `/auth/login`, keeps the short-lived application JWT in browser storage, and restores verified identity through `/auth/me`. The BFF verifies PostgreSQL-backed Argon2 users and returns the persisted customer name. Navigation uses that name, with an email fallback. The frontend does not create users, fixed bearer tokens, or synthetic profiles.
 
