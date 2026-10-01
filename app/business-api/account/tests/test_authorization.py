@@ -16,7 +16,7 @@ from sqlmodel import Session, create_engine
 
 import mcp_tools
 import routers
-from internal_identity import get_http_customer_id
+from jwt_identity import get_jwt_customer_id
 from services import AccountService, CardService, UserService
 
 
@@ -79,6 +79,49 @@ def session_factory() -> Callable[[], Session]:
         )
         session.commit()
     return lambda: Session(engine)
+
+
+def test_list_accounts_and_cards_are_scoped_to_owner(
+    session_factory: Callable[[], Session],
+) -> None:
+    account_service = AccountService(session_factory)
+    card_service = CardService(session_factory)
+
+    owned_accounts = account_service.list_accounts("customer-owned")
+    owned_cards = card_service.list_cards("customer-owned")
+    foreign_accounts = account_service.list_accounts("customer-foreign")
+
+    assert [account.number for account in owned_accounts] == ["ACCOUNT-SOURCE-NUMBER"]
+    assert owned_accounts[0].type == "Checking Account"
+    assert owned_accounts[0].balance == "1250.5000"
+    assert len(owned_cards) == 1
+    assert owned_cards[0].number == "**** 1111"
+    assert owned_cards[0].credit_limit == "3000.0000"
+    assert len(foreign_accounts) == 1
+    assert foreign_accounts[0].number is None
+
+
+def test_list_accounts_rest_endpoint_requires_jwt_identity(
+    session_factory: Callable[[], Session],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("JWT_SECRET_KEY", "test-jwt-secret-key-with-at-least-32-bytes")
+    monkeypatch.setattr(routers, "account_service_singleton", AccountService(session_factory))
+    monkeypatch.setattr(routers, "card_service_singleton", CardService(session_factory))
+    app = FastAPI()
+    app.include_router(routers.router, prefix="/api")
+
+    with TestClient(app) as client:
+        denied = client.get("/api/accounts")
+        app.dependency_overrides[get_jwt_customer_id] = lambda: "customer-owned"
+        allowed = client.get("/api/accounts")
+        cards = client.get("/api/cards")
+
+    assert denied.status_code == 401
+    assert allowed.status_code == 200
+    assert [item["number"] for item in allowed.json()] == ["ACCOUNT-SOURCE-NUMBER"]
+    assert cards.status_code == 200
+    assert [item["number"] for item in cards.json()] == ["**** 1111"]
 
 
 def test_owned_account_resources_are_mapped_from_storage(
@@ -288,7 +331,7 @@ def test_rest_account_cards_denial_returns_403(
     monkeypatch.setattr(routers, "card_service_singleton", CardService(session_factory))
     app = FastAPI()
     app.include_router(routers.router, prefix="/api")
-    app.dependency_overrides[get_http_customer_id] = lambda: "customer-owned"
+    app.dependency_overrides[get_jwt_customer_id] = lambda: "customer-owned"
 
     with TestClient(app) as client:
         response = client.get(f"/api/accounts/{resource_id}/cards")
