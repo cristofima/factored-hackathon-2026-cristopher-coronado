@@ -15,10 +15,21 @@ class Transaction(BaseModel):
     #BankTransfer,DirectDebit,CreditCard
     paymentType: Optional[str] = None
     amount: Optional[float] = None
+    currency: Optional[str] = None
     timestamp: Optional[str] = None
     category: Optional[str] = None
     #paid, pending, failed
     status: Optional[str] = None
+
+
+class TransactionPage(BaseModel):
+    items: list[Transaction]
+    total: int
+    limit: int
+    offset: int
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+
 
 
 class DisputeCase(BaseModel):
