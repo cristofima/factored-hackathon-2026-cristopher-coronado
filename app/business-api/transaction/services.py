@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from datetime import date, datetime, time
 
 from banking_shared.database import create_session
 from banking_shared.models import Product, TransactionRecord
 from banking_shared.product_types import CARD_PRODUCT_TYPES
 from models import Transaction
+from sqlalchemy import func
 from sqlmodel import Session, select
 from sqlmodel.sql.expression import SelectOfScalar
 
@@ -89,6 +91,36 @@ class TransactionService:
             _get_owned_product(session, account_id, customer_id)
         raise RuntimeError("Transaction creation is unavailable for persisted records")
 
+    def get_transaction_history(
+        self,
+        account_id: str,
+        customer_id: str,
+        start_date: date | None,
+        end_date: date | None,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[Transaction], int]:
+        logger.info(
+            "get_transaction_history called with account_id=%s, start_date=%s, end_date=%s",
+            account_id,
+            start_date,
+            end_date,
+        )
+        with self._session_factory() as session:
+            product = _get_owned_product(session, account_id, customer_id)
+            statement = _transaction_statement(product.product_id, customer_id)
+            if start_date is not None:
+                statement = statement.where(
+                    TransactionRecord.transaction_date >= datetime.combine(start_date, time.min)
+                )
+            if end_date is not None:
+                statement = statement.where(
+                    TransactionRecord.transaction_date <= datetime.combine(end_date, time.max)
+                )
+            total = session.exec(select(func.count()).select_from(statement.subquery())).one()
+            records = session.exec(statement.limit(limit).offset(offset)).all()
+            return [_to_transaction(record, product) for record in records], total
+
 
 transaction_service_singleton = TransactionService()
 
@@ -158,6 +190,7 @@ def _to_transaction(record: TransactionRecord, product: Product) -> Transaction:
         product_number=product_number,
         paymentType=record.channel,
         amount=float(record.amount),
+        currency=record.currency,
         timestamp=record.transaction_date.isoformat(),
         category=record.transaction_category,
         status=record.transaction_status,

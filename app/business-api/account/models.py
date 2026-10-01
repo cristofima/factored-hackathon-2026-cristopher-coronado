@@ -55,3 +55,18 @@ class Account(BaseModel):
     activationDate: Optional[str] = None
     balance: Optional[str] = None
     paymentMethods: Optional[List[PaymentMethodSummary]] = None
+
+
+class AccountSummary(BaseModel):
+    type: str
+    status: Optional[str] = None
+    opened: Optional[str] = None
+    number: Optional[str] = None
+    currency: str
+    balance: Optional[str] = None
+
+
+class CardSummary(AccountSummary):
+    expires: Optional[str] = None
+    credit_limit: Optional[str] = None
+

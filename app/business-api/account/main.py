@@ -4,6 +4,7 @@ import logging
 from logging_config import configure_logging
 from mcp_tools import mcp
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from routers import router as account_routers
 import uvicorn
 
@@ -22,6 +23,19 @@ def create_app() -> FastAPI:
 
     # Include the transaction router
     app.include_router(account_routers, prefix="/api", tags=["accounts"]) 
+
+    allowed_origins = [
+        origin.strip()
+        for origin in os.environ.get("CORS_ALLOWED_ORIGINS", "http://localhost:5170").split(",")
+        if origin.strip()
+    ]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=allowed_origins,
+        allow_credentials=True,
+        allow_methods=["GET", "POST"],
+        allow_headers=["Authorization", "Content-Type"],
+    )
 
     logger.info("FastAPI application created successfully")
     return app

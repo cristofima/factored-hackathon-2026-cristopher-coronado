@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 
 import jwt
 from asgi_lifespan import LifespanManager
@@ -11,7 +11,7 @@ from pwdlib import PasswordHash
 
 from bff.main import create_app
 from bff.settings import Settings
-from banking_shared.models import Product, User
+from banking_shared.models import User
 
 TEST_SECRET = "test-secret-key-with-at-least-32-bytes"
 TEST_PASSWORD = "correct-horse-battery-staple"
@@ -43,17 +43,6 @@ class StubUserRepository:
         if self.user and self.user.id == user_id and self.user.customer_id == customer_id:
             return "Mariana Flores"
         return None
-
-    def list_accounts(self, user_id: str, customer_id: str) -> list[Product]:
-        if self.error:
-            raise self.error
-        if not self.user or self.user.id != user_id or self.user.customer_id != customer_id:
-            return []
-        return [Product(
-            product_id="account-1", customer_id=customer_id,
-            product_type="Cuenta Ahorro", currency="USD", product_status="Activa",
-            opening_date=date(2026, 1, 15), product_number="12345678",
-        )]
 
 
 def _settings() -> Settings:
@@ -197,35 +186,3 @@ async def test_me_is_unavailable_when_profile_lookup_fails() -> None:
 
     assert response.status_code == 503
     assert response.json()["detail"] == {"code": "SERVICE_UNAVAILABLE"}
-
-
-async def test_accounts_returns_persisted_fields_for_verified_identity() -> None:
-    repository = StubUserRepository()
-    app = create_app(_settings(), user_repository=repository)
-    async with LifespanManager(app):
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            login_response = await client.post(
-                "/auth/login", json={"email": "demo@example.com", "password": TEST_PASSWORD},
-            )
-            headers = {"Authorization": f"Bearer {login_response.json()['access_token']}"}
-            response = await client.get("/auth/me/accounts?customer_id=foreign", headers=headers)
-            repository.error = RuntimeError("Database unavailable")
-            unavailable = await client.get("/auth/me/accounts", headers=headers)
-
-    assert response.status_code == 200
-    assert response.json() == [{
-        "type": "Savings Account", "status": "Activa",
-        "opened": "2026-01-15", "number": "12345678", "currency": "USD",
-        "balance": None,
-    }]
-    assert unavailable.status_code == 503
-    assert unavailable.json()["detail"] == {"code": "SERVICE_UNAVAILABLE"}
-
-
-async def test_accounts_requires_bearer_identity() -> None:
-    app = create_app(_settings(), user_repository=StubUserRepository())
-    async with LifespanManager(app):
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            response = await client.get("/auth/me/accounts")
-
-    assert response.status_code == 401

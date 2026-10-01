@@ -29,12 +29,17 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
           location: ${{ vars.AZURE_LOCATION }}
           resource-group: ${{ vars.AZURE_RESOURCE_GROUP }}
-      - name: Configure internal identity secret
+      - name: Configure shared secrets
         env:
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          JWT_SECRET_KEY: ${{ secrets.RESPONSES_BFF_JWT_SECRET }}
           INTERNAL_IDENTITY_SECRET: ${{ secrets.INTERNAL_IDENTITY_SECRET }}
         run: |
           set -euo pipefail
+          if [ ${#JWT_SECRET_KEY} -lt 32 ]; then
+            echo "::error::RESPONSES_BFF_JWT_SECRET must contain at least 32 characters"
+            exit 1
+          fi
           if [ ${#INTERNAL_IDENTITY_SECRET} -lt 32 ]; then
             echo "::error::INTERNAL_IDENTITY_SECRET must contain at least 32 characters"
             exit 1
@@ -47,7 +52,7 @@ jobs:
           az webapp config appsettings set \
             --resource-group "$AZURE_RESOURCE_GROUP" \
             --name "$APP_NAME" \
-            --settings "INTERNAL_IDENTITY_SECRET=$INTERNAL_IDENTITY_SECRET" \
+            --settings "JWT_SECRET_KEY=$JWT_SECRET_KEY" "INTERNAL_IDENTITY_SECRET=$INTERNAL_IDENTITY_SECRET" \
             --output none
       - name: Deploy transaction
         run: azd deploy transaction --no-prompt
