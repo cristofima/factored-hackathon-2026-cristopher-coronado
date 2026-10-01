@@ -52,7 +52,23 @@ runs:
         echo "### Code Coverage Summary (Vitest)" >> "$GITHUB_STEP_SUMMARY"
 
         if [ -f coverage/coverage-summary.json ]; then
-          node -e "const fs=require('fs');const p='coverage/coverage-summary.json';const d=JSON.parse(fs.readFileSync(p,'utf8')).total;console.log('| Metric | Coverage Percentage |');console.log('| :--- | :--- |');console.log(`| **Lines** | ${d.lines.pct}% |`);console.log(`| **Statements** | ${d.statements.pct}% |`);console.log(`| **Functions** | ${d.functions.pct}% |`);console.log(`| **Branches** | ${d.branches.pct}% |`);" >> "$GITHUB_STEP_SUMMARY"
+          if jq -e '.total' coverage/coverage-summary.json >/dev/null 2>&1; then
+            lines_pct=$(jq -r '.total.lines.pct // "N/A"' coverage/coverage-summary.json)
+            statements_pct=$(jq -r '.total.statements.pct // "N/A"' coverage/coverage-summary.json)
+            functions_pct=$(jq -r '.total.functions.pct // "N/A"' coverage/coverage-summary.json)
+            branches_pct=$(jq -r '.total.branches.pct // "N/A"' coverage/coverage-summary.json)
+
+            {
+              echo "| Metric | Coverage Percentage |"
+              echo "| :--- | :--- |"
+              echo "| **Lines** | ${lines_pct}% |"
+              echo "| **Statements** | ${statements_pct}% |"
+              echo "| **Functions** | ${functions_pct}% |"
+              echo "| **Branches** | ${branches_pct}% |"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Coverage summary JSON is present but invalid." >> "$GITHUB_STEP_SUMMARY"
+          fi
         else
           echo "Coverage summary file not found." >> "$GITHUB_STEP_SUMMARY"
         fi
