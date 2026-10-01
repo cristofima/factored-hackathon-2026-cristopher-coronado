@@ -57,7 +57,7 @@ This will allow the scripts to run for the current session without permanently c
 | **Common Issue**                      | **Quick Solution**                             | **Full Guide Link**                                                             |
 | ------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------- |
 | **ReadOnlyDisabledSubscription**      | Check if you have an active subscription       | [Troubleshooting Guide](./troubleshooting.md#readonlydisabledsubscription)      |
-| **InsufficientQuota**                 | Verify quota availability                      | [Quota Check Guide](./quota_check.md)                                           |
+| **InsufficientQuota**                 | Check quota with `az vm list-usage`, see below | [Troubleshooting Guide](./troubleshooting.md#quota--capacity-limitations)       |
 | **ResourceGroupNotFound**             | Create new environment with `azd env new`      | [Troubleshooting Guide](./troubleshooting.md#resourcegroupnotfound)             |
 | **InvalidParameter (Workspace Name)** | Use compliant names (3-33 chars, alphanumeric) | [Troubleshooting Guide](./troubleshooting.md#workspace-name---invalidparameter) |
 | **ResourceNameInvalid**               | Follow Azure naming conventions                | [Troubleshooting Guide](./troubleshooting.md#resourcenameinvalid)               |
