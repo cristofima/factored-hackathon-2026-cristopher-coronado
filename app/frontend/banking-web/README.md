@@ -171,8 +171,7 @@ through a dedicated `support-cases.*` i18n namespace in all three locale catalog
 
 The backend's `DISPUTE_WINDOW_DAYS` mock policy (90 days, evaluated against the real
 system clock) rejects opening a _new_ dispute once every loaded transaction falls
-outside that window; this is a dataset-staleness constraint, not a frontend bug. See
-[continue-workflow.md](../../../continue-workflow.md) for the full design record.
+outside that window; this is a dataset-staleness constraint, not a frontend bug.
 
 ## Validation
 
@@ -215,7 +214,6 @@ missing/empty results, multi-turn and approval continuation remain separate chec
 Threads, messages, and the returned conversation identifier live in React state.
 Reloading clears them: the next message creates a new conversation even if the
 login JWT is still valid. Later messages in the same thread reuse the identifier.
-Hosted identity transport and deployed financial parity are not verified. See the
-[real-data gate](../../../DEMO_SCOPE_CHECKLIST.md#0-real-data-verification-gate-next)
-for the separately tracked real-data verification checklist. Payment submission and
-attachment upload are not active features.
+Hosted identity transport and deployed financial parity are not verified; the
+separately tracked real-data verification checklist lives outside this public
+repository. Payment submission and attachment upload are not active features.

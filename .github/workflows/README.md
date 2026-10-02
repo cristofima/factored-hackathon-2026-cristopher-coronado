@@ -77,8 +77,10 @@ this value; Account and Transaction verify that same JWT directly for their REST
 so all three workflows write it to their own App Service as `JWT_SECRET_KEY` without
 printing it. Keep the value identical across all three. Terraform and `azd` environment
 state never contain it. Terraform configures the BFF `DATABASE_URL` for the shared
-PostgreSQL database and sets Account/Transaction's `CORS_ALLOWED_ORIGINS` directly
-(no secret involved).
+PostgreSQL database and sets Account/Transaction's `DATABASE_URL`/`CORS_ALLOWED_ORIGINS`
+directly (no secret involved); `cd-account.yaml`/`cd-transaction.yaml` only verify those
+two settings already exist on the target App Service before deploying (failing fast with
+a `azd provision` hint if Terraform hasn't run yet) and never set or overwrite them.
 
 ### Internal identity secret
 
@@ -86,11 +88,20 @@ Set `INTERNAL_IDENTITY_SECRET` under **Settings > Environments > Development > S
 
 ### Hosted-agent variables (`cd-hosted-agent.yaml`)
 
+`app/agent/azure.yaml` substitutes `${ACCOUNT_MCP_URL}`/`${TRANSACTION_MCP_URL}` at deploy
+time, so set both under **Settings > Environments > Development > Variables** to the
+deployed Account/Transaction App Service MCP endpoints
+(`https://<app-hostname>/mcp`), alongside the other required variables below. The workflow
+validates and injects them with `azd -C app/agent env set` the same way as the rest of this
+list.
+
 Required:
 
 - `FOUNDRY_PROJECT_ENDPOINT`
 - `AZURE_AI_PROJECT_ID`
 - `MODEL_DEPLOYMENT_NAME`
+- `ACCOUNT_MCP_URL`
+- `TRANSACTION_MCP_URL`
 
 Optional (observability and tracing behavior):
 

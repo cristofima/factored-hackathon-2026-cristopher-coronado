@@ -1,0 +1,13 @@
+name: smoke-core
+agent:
+    name: home-banking-agent
+    kind: hosted
+dataset:
+    local_uri: C:\Factored\factored-hackathon-2026-cristopher-coronado\app\agent\datasets\held-out-identity-independent.jsonl
+evaluators:
+    - name: smoke-core
+      version: "1"
+      local_uri: evaluators\smoke-core\rubric_dimensions.json
+options:
+    eval_model: gpt-5.4-mini
+max_samples: 15

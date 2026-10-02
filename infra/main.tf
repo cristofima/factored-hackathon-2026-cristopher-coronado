@@ -288,6 +288,22 @@ resource "azapi_resource" "postgres_allow_azure_services" {
   }
 }
 
+# Opt-in: only created when postgres_allowed_client_ip is set, for example to let a
+# developer reach the server directly from pgAdmin.
+resource "azapi_resource" "postgres_allow_local_client" {
+  count     = var.postgres_allowed_client_ip != null && var.postgres_allowed_client_ip != "" ? 1 : 0
+  type      = "Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2024-08-01"
+  parent_id = azapi_resource.postgres_server.id
+  name      = "AllowLocalClientIp"
+
+  body = {
+    properties = {
+      startIpAddress = var.postgres_allowed_client_ip
+      endIpAddress   = var.postgres_allowed_client_ip
+    }
+  }
+}
+
 resource "azapi_resource" "foundry_account_dedicated" {
   type                      = "Microsoft.CognitiveServices/accounts@2025-06-01"
   name                      = local.foundry_account_name
