@@ -3,13 +3,11 @@ output "AZURE_TENANT_ID" { value = data.azurerm_client_config.current.tenant_id 
 output "AZURE_RESOURCE_GROUP" { value = data.azurerm_resource_group.main.name }
 
 output "AZURE_ACCOUNT_NAME" { value = azapi_resource.app["account"].name }
-output "AZURE_PAYMENT_NAME" { value = azapi_resource.app["payment"].name }
 output "AZURE_TRANSACTION_NAME" { value = azapi_resource.app["transaction"].name }
 output "AZURE_WEB_NAME" { value = azapi_resource.web.name }
 output "AZURE_RESPONSES_BFF_NAME" { value = azapi_resource.responses_bff.name }
 
 output "ACCOUNT_URI" { value = "https://${azapi_resource.app["account"].output.properties.defaultHostName}" }
-output "PAYMENT_URI" { value = "https://${azapi_resource.app["payment"].output.properties.defaultHostName}" }
 output "TRANSACTION_URI" { value = "https://${azapi_resource.app["transaction"].output.properties.defaultHostName}" }
 output "WEB_URI" { value = "https://${azapi_resource.web.output.properties.defaultHostName}" }
 output "RESPONSES_BFF_URI" { value = "https://${azapi_resource.responses_bff.output.properties.defaultHostName}" }
