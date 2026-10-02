@@ -17,7 +17,7 @@ The Account/Transaction orchestrator runs through a Foundry Responses host. Its 
 
 ## MCP API deployment
 
-The Account and Transaction MCP servers are FastAPI projects that rely only on Python packages. The Payment App Service remains in the root infrastructure but is not connected to the active agent workflow. App Service build automation (`SCM_DO_BUILD_DURING_DEPLOYMENT=true`) restores dependencies during zip deploy. Select an App Service plan SKU (for example B1, B2, or P1v3) that aligns with expected concurrent tool calls.
+The Account and Transaction MCP servers are FastAPI projects that rely only on Python packages. App Service build automation (`SCM_DO_BUILD_DURING_DEPLOYMENT=true`) restores dependencies during zip deploy. Select an App Service plan SKU (for example B1, B2, or P1v3) that aligns with expected concurrent tool calls.
 
 For zip deploy, each Python API directory must include a `requirements.txt` file. In this repository, `pyproject.toml` remains the local development source of truth, and `requirements.txt` is the deployment artifact consumed by Oryx on App Service.
 

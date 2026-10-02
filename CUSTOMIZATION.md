@@ -9,7 +9,7 @@ The active workflow contains a triage agent plus Account and Transaction special
 - Add or refine tools on the existing Account and Transaction MCP servers.
 - Improve generic MCP approval rendering and submission in the Responses frontend.
 
-Adding another specialist, reconnecting Payment, or restoring ChatKit changes the locked architecture and requires explicit approval first.
+Adding another specialist or restoring ChatKit changes the locked architecture and requires explicit approval first.
 
 ## Agent Changes
 
@@ -28,7 +28,7 @@ uv run pytest tests/test_hosted_workflow.py tests/test_settings.py -q
 
 ## Tool Changes
 
-Keep `mcp_tools.py` as a thin schema and delegation layer. Put business rules, data access, and customer-resource authorization in the corresponding `services.py`. Do not alter the Payment service as part of active workflow changes.
+Keep `mcp_tools.py` as a thin schema and delegation layer. Put business rules, data access, and customer-resource authorization in the corresponding `services.py`.
 
 ## Browser Contract
 
