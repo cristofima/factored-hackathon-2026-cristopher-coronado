@@ -2,7 +2,7 @@ name: Payment CI
 
 on:
   push:
-    branches: ["main", "develop", "feature/*", "refactor/*"]
+    branches: ["main", "develop", "feature/*", "refactor/*", "fix/*"]
     paths:
       - "app/business-api/payment/**"
       - "!app/business-api/payment/**/*.md"
