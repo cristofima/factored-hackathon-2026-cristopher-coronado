@@ -2,7 +2,7 @@ name: Transaction CI
 
 on:
   push:
-    branches: ["main", "develop", "feature/*", "refactor/*"]
+    branches: ["main", "develop", "feature/*", "refactor/*", "fix/*"]
     paths:
       - "app/business-api/transaction/**"
       - "!app/business-api/transaction/**/*.md"

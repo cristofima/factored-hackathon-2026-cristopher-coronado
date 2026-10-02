@@ -2,7 +2,7 @@ name: Responses BFF CI
 
 on:
   push:
-    branches: ["main", "develop", "feature/*", "refactor/*"]
+    branches: ["main", "develop", "feature/*", "refactor/*", "fix/*"]
     paths:
       - "app/responses-bff/**"
       - "!app/responses-bff/**/*.md"
