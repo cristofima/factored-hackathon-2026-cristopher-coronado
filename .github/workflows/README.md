@@ -36,14 +36,12 @@ Reusable building blocks live in [../actions](../actions):
 | ----------------------- | --------------------------------------- | -------------------------------------- | ---------------- | -------------------------------------------------------- |
 | `ci-account.yml`        | Validate Account API Python build/tests | `app/business-api/account/**`          | n/a              | Shared action (`ci-python`)                              |
 | `ci-transaction.yml`    | Validate Transaction API build/tests    | `app/business-api/transaction/**`      | n/a              | Shared action (`ci-python`)                              |
-| `ci-payment.yml`        | Validate Payment API build/tests        | `app/business-api/payment/**`          | n/a              | Shared action (`ci-python`)                              |
 | `ci-responses-bff.yml`  | Validate Responses BFF build/tests      | `app/responses-bff/**`                 | n/a              | Shared action (`ci-python`)                              |
 | `ci-hosted-agent.yml`   | Validate hosted-agent build/tests       | `app/agent/**`                         | n/a              | Shared action (`ci-python`)                              |
 | `ci-data.yml`           | Validate data module build/tests        | `app/business-api/data/**`             | n/a              | Shared action (`ci-python`)                              |
 | `ci-frontend.yml`       | Validate frontend lint/tests/build      | `app/frontend/banking-web/**`          | n/a              | Shared action (`ci-node`)                                |
 | `cd-account.yaml`       | Deploy Account API App Service          | `app/business-api/account/**`          | repository root  | `azd deploy account --no-prompt`                         |
 | `cd-transaction.yaml`   | Deploy Transaction API App Service      | `app/business-api/transaction/**`      | repository root  | `azd deploy transaction --no-prompt`                     |
-| `cd-payment.yaml`       | Deploy Payment API App Service          | `app/business-api/payment/**`          | repository root  | `azd deploy payment --no-prompt`                         |
 | `cd-responses-bff.yaml` | Deploy JWT-protected Responses BFF      | `app/responses-bff/**`                 | repository root  | `azd deploy responses-bff --no-prompt`                   |
 | `cd-frontend.yaml`      | Deploy frontend Web App Service         | `app/frontend/banking-web/**`          | repository root  | `azd deploy web --no-prompt`                             |
 | `cd-hosted-agent.yaml`  | Deploy Foundry hosted agent             | `app/agent/**` and `workflow_dispatch` | `app/agent`      | `azd -C app/agent deploy home-banking-agent --no-prompt` |
@@ -52,7 +50,7 @@ Reusable building blocks live in [../actions](../actions):
 
 This repository uses two independent `azure.yaml` manifests:
 
-1. Root [azure.yaml](../../azure.yaml): App Service stack (`account`, `payment`, `transaction`, `responses-bff`, `web`).
+1. Root [azure.yaml](../../azure.yaml): App Service stack (`account`, `transaction`, `responses-bff`, `web`).
 2. Agent [azure.yaml](../../app/agent/azure.yaml): Foundry hosted-agent stack (`home-banking-agent`).
 
 For that reason, `cd-hosted-agent.yaml` always uses `azd -C app/agent ...` so it resolves the agent manifest explicitly and never the root manifest.
