@@ -104,6 +104,15 @@ message without `conversation`; the BFF creates a new opaque ID bound to verifie
 agent persists workflow checkpoints through the SDK filesystem store, not this BFF
 or PostgreSQL. See the [agent state guide](../agent/README.md#conversation-state).
 
+This opaque, BFF-signed conversation token is only forwarded upstream in `local`
+mode. The hosted Foundry Responses gateway validates `conversation` against its
+own platform-managed Conversation object ids (for example `conv_...`), so an
+opaque token in that format is rejected as a malformed identifier; in `foundry`
+mode the field is dropped from the upstream payload entirely, and each hosted
+turn starts without cross-request conversation state on the Azure side. Wiring
+real multi-turn continuity for hosted mode (via the platform's own Conversations
+API or `previous_response_id` chaining) remains open.
+
 Hosted identity transport and deployed parity still require separate validation.
 Registration, password reset, MFA, revocation, and production identity lifecycle
 controls are not implemented.
