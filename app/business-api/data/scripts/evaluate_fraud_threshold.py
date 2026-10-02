@@ -2,8 +2,8 @@
 
 Scans the full raw transaction CSVs (not the loaded Postgres subset, for statistical
 power) and compares each candidate fraud_score threshold against the dataset's own
-is_fraud label. This is the Phase 4 data-backed baseline continue-workflow.md calls
-for; is_fraud is used here only for offline evaluation, never surfaced to the agent.
+is_fraud label. This is the data-backed baseline for the transaction-dispute triage
+threshold; is_fraud is used here only for offline evaluation, never surfaced to the agent.
 """
 from __future__ import annotations
 
