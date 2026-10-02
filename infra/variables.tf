@@ -122,3 +122,9 @@ variable "postgres_backup_retention_days" {
   type        = number
   default     = 7
 }
+
+variable "postgres_allowed_client_ip" {
+  description = "Optional single public IP allowed to connect directly to PostgreSQL Flexible Server (for example, a developer's local IP for pgAdmin). Leave unset to keep the server reachable only from Azure-hosted resources."
+  type        = string
+  default     = null
+}
