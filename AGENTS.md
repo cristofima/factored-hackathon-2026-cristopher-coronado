@@ -32,8 +32,6 @@ flowchart LR
 - `infra`: Terraform for the App Service stack and Foundry resources.
 - `app/agent/azure.yaml`: separate azd root for the hosted Foundry agent.
 
-Payment remains under `app/business-api/payment` and in the root infrastructure for compatibility, but it is not part of the active agent workflow. Do not reconnect it, modify that service as part of agent work, or reintroduce ChatKit and attachment uploads.
-
 ## Security Boundaries
 
 - The browser calls the BFF for chat and never calls Foundry or the local agent directly.

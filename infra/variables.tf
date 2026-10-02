@@ -22,8 +22,9 @@ variable "resource_group_name" {
 }
 
 variable "plan_sku" {
-  type    = string
-  default = "B1"
+  description = "App Service Plan SKU. B1 cannot sustain Always On across 5 App Services (3 Python + Node + BFF) sharing one core/1.75 GiB; B2 (2 cores/3.5 GiB) is the minimum validated to avoid CPU/memory contention once Always On is enabled on all of them."
+  type        = string
+  default     = "B2"
 }
 
 variable "app_names" {
@@ -125,6 +126,24 @@ variable "postgres_backup_retention_days" {
 
 variable "postgres_allowed_client_ip" {
   description = "Optional single public IP allowed to connect directly to PostgreSQL Flexible Server (for example, a developer's local IP for pgAdmin). Leave unset to keep the server reachable only from Azure-hosted resources."
+  type        = string
+  default     = null
+}
+
+variable "key_vault_name" {
+  description = "Optional override for the shared Key Vault storing jwt-secret-key/internal-identity-secret."
+  type        = string
+  default     = null
+}
+
+variable "github_actions_principal_id" {
+  description = "Optional object ID (not the client/app ID) of the GitHub Actions federated identity service principal, granted Key Vault Secrets User so cd-hosted-agent.yaml can resolve internal-identity-secret for the Foundry hosted agent, which has no native Key Vault reference support. Leave unset to skip this role assignment."
+  type        = string
+  default     = null
+}
+
+variable "deployer_principal_id" {
+  description = "Optional object ID (not the client/app ID) of whoever runs terraform apply/azd provision, granted Key Vault Secrets Officer so Terraform can write the database-url secret. Key Vault RBAC does not inherit from subscription Owner/Contributor. Leave unset to skip this role assignment."
   type        = string
   default     = null
 }

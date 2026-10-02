@@ -28,5 +28,23 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
           location: ${{ vars.AZURE_LOCATION }}
           resource-group: ${{ vars.AZURE_RESOURCE_GROUP }}
+      - name: Configure frontend build-time environment
+        # CI never provisions, so the root azure.yaml postprovision hook (which derives these
+        # from Terraform outputs) never runs here; set the same VITE_* keys directly so Vite
+        # bakes the real backend URLs at build time instead of falling back to .env.local defaults.
+        env:
+          VITE_ACCOUNT_API_URL: ${{ vars.VITE_ACCOUNT_API_URL }}
+          VITE_TRANSACTION_API_URL: ${{ vars.VITE_TRANSACTION_API_URL }}
+          VITE_RESPONSES_BFF_URL: ${{ vars.VITE_RESPONSES_BFF_URL }}
+          VITE_RESPONSES_API_URL: ${{ vars.VITE_RESPONSES_API_URL }}
+        run: |
+          set -euo pipefail
+          for var in VITE_ACCOUNT_API_URL VITE_TRANSACTION_API_URL VITE_RESPONSES_BFF_URL VITE_RESPONSES_API_URL; do
+            if [ -z "${!var}" ]; then
+              echo "::error::Missing required GitHub environment variable: $var"
+              exit 1
+            fi
+            azd env set "$var" "${!var}"
+          done
       - name: Deploy frontend
         run: azd deploy web --no-prompt

@@ -2,7 +2,7 @@ name: Frontend CI
 
 on:
   push:
-    branches: ["main", "develop", "feature/*", "refactor/*"]
+    branches: ["main", "develop", "feature/*", "refactor/*", "fix/*"]
     paths:
       - "app/frontend/banking-web/**"
       - "!app/frontend/banking-web/**/*.md"

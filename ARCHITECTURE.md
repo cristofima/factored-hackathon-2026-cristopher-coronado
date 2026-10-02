@@ -13,9 +13,7 @@ frontend, a Responses BFF that owns the browser trust boundary, a Responses agen
 (Microsoft Agent Framework `HandoffBuilder`, served through Foundry Responses) that
 does triage and conversation, and two FastMCP business services (Account,
 Transaction) that own the data and the business rules. PostgreSQL is the only
-operational data store; Terraform provisions the Azure App Service stack. A fifth
-service, Payment, is provisioned in infrastructure but intentionally disconnected
-from the active agent workflow.
+operational data store; Terraform provisions the Azure App Service stack.
 
 The one deliberate architectural split to internalize before changing anything: the
 BFF is scoped to identity and chat-proxying only. The browser calls Account and
@@ -69,11 +67,6 @@ WAITING_USER_APPROVAL -> IN_REVIEW -> RESOLVED`, fast-track-vs-escalate triage
 against the dataset's `fraud_score`) and `dispute_routers.py` (`/api/support-cases`).
 Both services enable `CORSMiddleware` via `CORS_ALLOWED_ORIGINS`.
 
-### `app/business-api/payment/`
-
-Kept for infrastructure/compatibility only. Not imported by the agent workflow, not
-exposed to the frontend. Do not wire it back in as part of unrelated work.
-
 ### `app/business-api/shared/banking_shared/`
 
 The shared SQLModel package: one class defines both the Postgres table and the
@@ -90,8 +83,8 @@ dispute triage threshold. Alembic migrations live alongside the SQLModel schema.
 
 ### `infra/`
 
-Terraform only (no Bicep in this repo). One Linux App Service plan, five App
-Services (`account`, `payment`, `transaction`, Responses BFF, `web`), Log Analytics,
+Terraform only (no Bicep in this repo). One Linux App Service plan, four App
+Services (`account`, `transaction`, Responses BFF, `web`), Log Analytics,
 Application Insights, and a Foundry account/project.
 
 ### `app/agent/azure.yaml` vs root `azure.yaml`
@@ -133,8 +126,6 @@ separately. Commands against the agent stack need `--cwd app/agent`.
 - The BFF never queries Account, Transaction, or PostgreSQL financial tables
   directly. If a future change adds that back, it reopens a closed migration
   (`docs/adr/0005-...md`) and needs the same explicit sign-off that closed it.
-- Payment is never imported by `app/agent` or called by the frontend. Its presence
-  in `infra/` and `app/business-api/` is compatibility-only, not a live dependency.
 - `plan/` is gitignored and local-only. Nothing under it is ever staged, committed,
   or pushed, regardless of how much planning content accumulates there.
 - No second conversational specialist agent exists beside Account and Transaction.
