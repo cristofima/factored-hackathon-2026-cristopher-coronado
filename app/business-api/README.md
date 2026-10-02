@@ -1,6 +1,6 @@
 # Banking Assistant Business API - Python FastMCP Services
 
-A collection of Python-based FastMCP servers used by the Banking Assistant. Account and Transaction read PostgreSQL-backed dataset rows through the shared SQLModel package and expose inquiry tools through the Model Context Protocol (MCP). Payment remains an inherited compatibility service outside the active workflow.
+A collection of Python-based FastMCP servers used by the Banking Assistant. Account and Transaction read PostgreSQL-backed dataset rows through the shared SQLModel package and expose inquiry tools through the Model Context Protocol (MCP).
 
 ## 🏗️ Architecture
 
@@ -8,7 +8,6 @@ This business API layer contains **specialized MCP servers** for different banki
 
 - **Account Service**: Active workflow dependency for account details, payment methods, and beneficiaries
 - **Transaction Service**: Active workflow dependency for transaction history and search operations
-- **Payment Service**: Inherited compatibility service, not connected to the active agent workflow
 
 Each service runs as an independent FastMCP server exposing banking tools through HTTP endpoints that the copilot agents can consume.
 
@@ -34,7 +33,7 @@ Each service runs as an independent FastMCP server exposing banking tools throug
 
 ## 🔧 Service Setup
 
-Each service follows the same setup pattern. Navigate to the specific service directory and follow below steps. Examples are shown for account service, make sure to adjust paths and environment variables for payment and transaction services:
+Each service follows the same setup pattern. Navigate to the specific service directory and follow below steps. Examples are shown for account service, make sure to adjust paths and environment variables for the transaction service:
 
 ### 1. Account Service Setup
 
@@ -88,30 +87,6 @@ python main.py
 
 The Transaction service will be available at: **http://localhost:8071**
 
----
-
-### 2. Payment Service Setup
-
-```powershell
-cd app/business-api/payment
-```
-
-#### Install dependencies and run
-
-```powershell
-# Create virtual environment and install dependencies
-uv venv
-.\.venv\Scripts\Activate.ps1
-uv sync
-
-# Run the Payment MCP Server
-$env:PROFILE="dev"
-$env:TRANSACTIONS_API_SERVER_URL="http://localhost:8071"
-python main.py
-```
-
-The Payment service will be available at: **http://localhost:8072**
-
 ## 🛠️ Available Banking Tools
 
 Each service exposes two parallel surfaces that never share an auth mechanism:
@@ -143,12 +118,6 @@ REST endpoints (`/api` prefix):
   **`POST /cards/{card_id}/recharge`**, **`POST /cards/{card_id}/pay`** - existing
   single-resource operations (recharge/pay are unavailable for persisted products)
 
-### Payment Service (Port 8072)
-
-Exposes the following MCP tools:
-
-- **`processPayment`** - Submit and process payment requests with full transaction details
-
 ### Transaction Service (Port 8071)
 
 MCP tools:
@@ -178,7 +147,6 @@ Services use different ports based on the `PROFILE` environment variable:
 | ----------- | ---------------- | --------------- |
 | Account     | 8070             | 8080            |
 | Transaction | 8071             | 8080            |
-| Payment     | 8072             | 8080            |
 
 ## ⚙️ Configuration
 
@@ -189,7 +157,6 @@ Services use different ports based on the `PROFILE` environment variable:
 | `JWT_SECRET_KEY`              | Account, Transaction | Must match the BFF's signing key; verifies the browser's application JWT. |
 | `JWT_ISSUER` / `JWT_AUDIENCE` | Account, Transaction | Default `home-banking-api` / `home-banking-web`, matching the BFF.        |
 | `CORS_ALLOWED_ORIGINS`        | Account, Transaction | Comma-separated browser origins; defaults to `http://localhost:5170`.     |
-| `TRANSACTIONS_API_SERVER_URL` | Payment              | Upstream Transaction service URL.                                         |
 
 ## 📁 Service Structure
 
@@ -220,8 +187,6 @@ The copilot's active specialist agents use these tools to:
 
 - **Account Agent**: Query account details and payment methods
 - **Transaction Agent**: Search and retrieve transaction history
-
-The Payment service remains in this directory but is not connected to the active agent workflow.
 
 Account and Transaction MCP endpoints require a short-lived bearer created by the
 Responses agent from BFF-verified identity. Their `services.py` methods enforce

@@ -2,7 +2,7 @@ name: Hosted Agent CI
 
 on:
   push:
-    branches: ["main", "develop", "feature/*", "refactor/*"]
+    branches: ["main", "develop", "feature/*", "refactor/*", "fix/*"]
     paths:
       - "app/agent/**"
       - "!app/agent/**/*.md"

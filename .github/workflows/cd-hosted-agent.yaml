@@ -35,6 +35,24 @@ jobs:
           working-directory: app/agent
       - name: Install Foundry extensions
         run: azd -C app/agent ext install microsoft.foundry
+      - name: Resolve shared secrets from Key Vault
+        env:
+          AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME }}
+        run: |
+          set -euo pipefail
+          if [ -z "$AZURE_KEY_VAULT_NAME" ]; then
+            echo "::error::Missing required GitHub environment variable: AZURE_KEY_VAULT_NAME"
+            exit 1
+          fi
+          # Foundry hosted agents have no native Key Vault app-setting reference (see
+          # plan/tmp/KEY_VAULT_SECRETS_MIGRATION_PLAN.md), so this workflow resolves the secret
+          # itself and masks it before exporting it to later steps.
+          INTERNAL_IDENTITY_SECRET="$(az keyvault secret show \
+            --vault-name "$AZURE_KEY_VAULT_NAME" \
+            --name internal-identity-secret \
+            --query value --output tsv)"
+          echo "::add-mask::$INTERNAL_IDENTITY_SECRET"
+          echo "INTERNAL_IDENTITY_SECRET=$INTERNAL_IDENTITY_SECRET" >> "$GITHUB_ENV"
       - name: Configure Foundry environment
         env:
           AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
@@ -43,7 +61,6 @@ jobs:
           MODEL_DEPLOYMENT_NAME: ${{ vars.MODEL_DEPLOYMENT_NAME }}
           ACCOUNT_MCP_URL: ${{ vars.ACCOUNT_MCP_URL }}
           TRANSACTION_MCP_URL: ${{ vars.TRANSACTION_MCP_URL }}
-          INTERNAL_IDENTITY_SECRET: ${{ secrets.INTERNAL_IDENTITY_SECRET }}
           ENABLE_INSTRUMENTATION: ${{ vars.ENABLE_INSTRUMENTATION }}
           ENABLE_SENSITIVE_DATA: ${{ vars.ENABLE_SENSITIVE_DATA }}
           AZURE_EXPERIMENTAL_ENABLE_GENAI_TRACING: ${{ vars.AZURE_EXPERIMENTAL_ENABLE_GENAI_TRACING }}
