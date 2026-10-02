@@ -3,6 +3,13 @@ plan/
 
 # Azure az webapp deployment details
 .azure
+
+# azd ai agent eval generated/LLM-authored assets (eval.yaml and hand-curated
+# datasets/*.jsonl are versioned; the generated evaluator rubric and baseline
+# config snapshot are run-local state, not reviewable source)
+.agent_configs/
+app/agent/evaluators/
+
 **/.terraform/
 *.tfstate
 *.tfstate.*

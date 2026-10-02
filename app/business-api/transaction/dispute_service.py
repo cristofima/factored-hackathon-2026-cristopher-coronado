@@ -4,9 +4,9 @@ State machine: OPEN -> WAITING_USER_APPROVAL -> IN_REVIEW -> RESOLVED. The AI ag
 only performs intake/triage; it never decides a dispute's legitimacy. Deterministic
 triage uses fraud_score (populated at ingestion, never computed by the agent) to
 fast-track low-risk cases and escalate higher-risk ones to a simulated human reviewer
-drawn from the existing ServiceAgent table. See continue-workflow.md for the full
-decision record and app/business-api/data/scripts/evaluate_fraud_threshold.py for the
-threshold's offline precision/recall evidence.
+drawn from the existing ServiceAgent table. See
+app/business-api/data/scripts/evaluate_fraud_threshold.py for the threshold's offline
+precision/recall evidence.
 """
 from __future__ import annotations
 

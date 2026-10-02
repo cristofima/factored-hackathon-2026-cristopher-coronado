@@ -33,6 +33,16 @@ Catalog support and `terraform validate` do not guarantee capacity at creation t
 Changing the region of an existing server requires replacement and a separate data
 migration.
 
+PostgreSQL Flexible Server has `publicNetworkAccess = "Enabled"`, but the only firewall
+rule created by default (`AllowAllAzureServicesAndResourcesWithinAzureIps`, the special
+`0.0.0.0`/`0.0.0.0` range) permits Azure-hosted resources only, not an arbitrary public
+IP. To reach the server directly from a local client such as pgAdmin, set the azd
+environment value `POSTGRES_ALLOWED_CLIENT_IP` to that single public IP
+(`azd env set POSTGRES_ALLOWED_CLIENT_IP <your-ip>`) before provisioning; `main.tfvars.json`
+forwards it to `postgres_allowed_client_ip`, which creates one extra `AllowLocalClientIp`
+firewall rule. Leave the value unset to keep the server reachable only from Azure. Rotate
+or remove this value (and reprovision) whenever the allowed IP changes.
+
 Before enabling `azd provision` against an existing Bicep deployment, inspect the actual resource IDs and names. Set `app_names` and the storage name override for existing resources; set `hostname_scope = null` when importing sites created without a unique hostname. Azure only accepts the unique hostname scope on site creation; changing it on an existing site requires replacing that site. Back up the existing deployment and Terraform state before any cutover. Import each managed resource (the plan, existing sites, monitoring, storage account, and container) with `terraform import -var-file=<local.tfvars> <address> <resource-id>` after initializing remote state. Example Terraform addresses: `azurerm_service_plan.main`, `azapi_resource.app["account"]`, `azurerm_log_analytics_workspace.main`, `azurerm_application_insights.main`, `azurerm_storage_account.content`, and `azurerm_storage_container.content`. The Responses BFF is a new dedicated resource at `azapi_resource.responses_bff`; do not import an unrelated backend site at that address. Terraform does not automatically import Bicep-managed resources. Review `terraform plan` for **zero unexpected deletes or replacements** before running `azd provision`. Do not run Bicep and Terraform provisioning concurrently on the same resources.
 
 The app names, derived web URLs, and infrastructure settings are emitted as Terraform outputs for azd. Do not derive a web URL from the site name when unique hostnames are enabled; consume the `defaultHostName` output. The root environment also receives `AZURE_OPENAI_ENDPOINT`, `FOUNDRY_PROJECT_ENDPOINT`, `AZURE_RESPONSES_BFF_NAME`, and `RESPONSES_BFF_URI`. The web frontend receives the BFF `/responses` URL at build time. `azd deploy --cwd app/agent` is the separate hosted-agent deploy path; plain root `azd deploy` targets only the five App Services.

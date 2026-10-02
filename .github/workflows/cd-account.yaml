@@ -49,6 +49,13 @@ jobs:
             echo "::error::Account App Service was not found in $AZURE_RESOURCE_GROUP"
             exit 1
           fi
+          for setting in DATABASE_URL CORS_ALLOWED_ORIGINS; do
+            existing_value="$(az webapp config appsettings list --resource-group "$AZURE_RESOURCE_GROUP" --name "$APP_NAME" --query "[?name=='$setting'].value | [0]" --output tsv)"
+            if [ -z "$existing_value" ]; then
+              echo "::error::$setting app setting is missing on $APP_NAME. Run 'azd provision' (Terraform) before deploying."
+              exit 1
+            fi
+          done
           az webapp config appsettings set \
             --resource-group "$AZURE_RESOURCE_GROUP" \
             --name "$APP_NAME" \
