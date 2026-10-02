@@ -29,30 +29,23 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
           location: ${{ vars.AZURE_LOCATION }}
           resource-group: ${{ vars.AZURE_RESOURCE_GROUP }}
-      - name: Configure BFF secrets
+      - name: Validate required app settings
         env:
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
-          JWT_SECRET_KEY: ${{ secrets.RESPONSES_BFF_JWT_SECRET }}
-          INTERNAL_IDENTITY_SECRET: ${{ secrets.INTERNAL_IDENTITY_SECRET }}
         run: |
           set -euo pipefail
-          if [ ${#JWT_SECRET_KEY} -lt 32 ]; then
-            echo "::error::RESPONSES_BFF_JWT_SECRET must contain at least 32 characters"
-            exit 1
-          fi
-          if [ ${#INTERNAL_IDENTITY_SECRET} -lt 32 ]; then
-            echo "::error::INTERNAL_IDENTITY_SECRET must contain at least 32 characters"
-            exit 1
-          fi
           BFF_APP_NAME="$(az resource list --resource-type Microsoft.Web/sites --query "[?resourceGroup=='$AZURE_RESOURCE_GROUP' && contains(name, 'responses-bff')].name | [0]" --output tsv)"
           if [ -z "$BFF_APP_NAME" ]; then
             echo "::error::Responses BFF App Service was not found in $AZURE_RESOURCE_GROUP"
             exit 1
           fi
-          az webapp config appsettings set \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --name "$BFF_APP_NAME" \
-            --settings "JWT_SECRET_KEY=$JWT_SECRET_KEY" "INTERNAL_IDENTITY_SECRET=$INTERNAL_IDENTITY_SECRET" \
-            --output none
+          # JWT_SECRET_KEY/INTERNAL_IDENTITY_SECRET are Key Vault references owned by Terraform
+          for setting in JWT_SECRET_KEY INTERNAL_IDENTITY_SECRET; do
+            existing_value="$(az webapp config appsettings list --resource-group "$AZURE_RESOURCE_GROUP" --name "$BFF_APP_NAME" --query "[?name=='$setting'].value | [0]" --output tsv)"
+            if [ -z "$existing_value" ]; then
+              echo "::error::$setting app setting is missing on $BFF_APP_NAME. Run 'azd provision' (Terraform) before deploying."
+              exit 1
+            fi
+          done
       - name: Deploy Responses BFF
         run: azd deploy responses-bff --no-prompt
