@@ -1,5 +1,12 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
 
+# azd >=1.23.7 is required for the frontend's VITE_* build-time injection (cd-frontend.yaml,
+# .github/workflows/README.md#frontend-variables-cd-frontendyaml): before that release, `azd env set`
+# values were passed into Docker builds and hooks only, never into non-Docker framework build
+# subprocesses like `npm run build` (see https://github.com/Azure/azure-dev/issues/6903).
+requiredVersions:
+  azd: ">=1.23.7"
+
 name: home-banking-assistant-python
 services:
   account:
@@ -65,6 +72,7 @@ services:
           run: rm -rf ./banking_shared
   web:
     project: ./app/frontend/banking-web
+    dist: dist
     language: js
     host: appservice
 infra:

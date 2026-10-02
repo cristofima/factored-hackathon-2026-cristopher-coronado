@@ -29,37 +29,23 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
           location: ${{ vars.AZURE_LOCATION }}
           resource-group: ${{ vars.AZURE_RESOURCE_GROUP }}
-      - name: Configure shared secrets
+      - name: Validate required app settings
         env:
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
-          JWT_SECRET_KEY: ${{ secrets.RESPONSES_BFF_JWT_SECRET }}
-          INTERNAL_IDENTITY_SECRET: ${{ secrets.INTERNAL_IDENTITY_SECRET }}
         run: |
           set -euo pipefail
-          if [ ${#JWT_SECRET_KEY} -lt 32 ]; then
-            echo "::error::RESPONSES_BFF_JWT_SECRET must contain at least 32 characters"
-            exit 1
-          fi
-          if [ ${#INTERNAL_IDENTITY_SECRET} -lt 32 ]; then
-            echo "::error::INTERNAL_IDENTITY_SECRET must contain at least 32 characters"
-            exit 1
-          fi
           APP_NAME="$(az resource list --resource-type Microsoft.Web/sites --query "[?resourceGroup=='$AZURE_RESOURCE_GROUP' && contains(name, 'transaction')].name | [0]" --output tsv)"
           if [ -z "$APP_NAME" ]; then
             echo "::error::Transaction App Service was not found in $AZURE_RESOURCE_GROUP"
             exit 1
           fi
-          for setting in DATABASE_URL CORS_ALLOWED_ORIGINS; do
+          # JWT_SECRET_KEY/INTERNAL_IDENTITY_SECRET are Key Vault references owned by Terraform
+          for setting in DATABASE_URL CORS_ALLOWED_ORIGINS JWT_SECRET_KEY INTERNAL_IDENTITY_SECRET; do
             existing_value="$(az webapp config appsettings list --resource-group "$AZURE_RESOURCE_GROUP" --name "$APP_NAME" --query "[?name=='$setting'].value | [0]" --output tsv)"
             if [ -z "$existing_value" ]; then
               echo "::error::$setting app setting is missing on $APP_NAME. Run 'azd provision' (Terraform) before deploying."
               exit 1
             fi
           done
-          az webapp config appsettings set \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --name "$APP_NAME" \
-            --settings "JWT_SECRET_KEY=$JWT_SECRET_KEY" "INTERNAL_IDENTITY_SECRET=$INTERNAL_IDENTITY_SECRET" \
-            --output none
       - name: Deploy transaction
         run: azd deploy transaction --no-prompt
