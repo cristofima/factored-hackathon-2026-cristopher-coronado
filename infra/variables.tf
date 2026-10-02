@@ -22,8 +22,9 @@ variable "resource_group_name" {
 }
 
 variable "plan_sku" {
-  type    = string
-  default = "B1"
+  description = "App Service Plan SKU. B1 cannot sustain Always On across 5 App Services (3 Python + Node + BFF) sharing one core/1.75 GiB; B2 (2 cores/3.5 GiB) is the minimum validated to avoid CPU/memory contention once Always On is enabled on all of them."
+  type        = string
+  default     = "B2"
 }
 
 variable "app_names" {

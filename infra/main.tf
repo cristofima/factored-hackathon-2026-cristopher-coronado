@@ -8,7 +8,7 @@ locals {
   token = lower(replace(var.environment_name, "-", ""))
   tags  = merge(var.tags, { "azd-env-name" = var.environment_name })
   apps = {
-    for service in ["account", "payment", "transaction"] :
+    for service in ["account", "transaction"] :
     service => lookup(var.app_names, service, "app-${service}-${var.environment_name}")
   }
   web_name = lookup(var.app_names, "web", "app-banking-web-${var.environment_name}")
@@ -138,7 +138,8 @@ resource "azapi_resource" "web" {
       httpsOnly    = true
       siteConfig = {
         linuxFxVersion = "NODE|22-lts"
-        alwaysOn       = var.plan_sku != "F1" && var.plan_sku != "B1"
+        # Always On is supported from Basic (B1) up; only Free/Shared tiers lack it.
+        alwaysOn = var.plan_sku != "F1"
         # web serves azd's "dist" deployment artifact directly as wwwroot (azure.yaml services.web.dist: dist),
         # not a nested dist/ subfolder, and skips SCM_DO_BUILD_DURING_DEPLOYMENT/POST_BUILD_COMMAND entirely:
         # the deploy zip contains only the already-built static output, no package.json, so there is nothing
@@ -174,8 +175,9 @@ resource "azapi_resource" "app" {
       httpsOnly    = true
       siteConfig = {
         linuxFxVersion = "PYTHON|3.11"
-        alwaysOn       = var.plan_sku != "F1" && var.plan_sku != "B1"
-        appCommandLine = each.key == "payment" ? "python main.py" : "python -m uvicorn main:app --host 0.0.0.0 --port 8080"
+        # Always On is supported from Basic (B1) up; only Free/Shared tiers lack it.
+        alwaysOn       = var.plan_sku != "F1"
+        appCommandLine = "python -m uvicorn main:app --host 0.0.0.0 --port 8080"
         appSettings = concat([
           { name = "WEBSITES_PORT", value = "8080" },
           { name = "APPLICATIONINSIGHTS_CONNECTION_STRING", value = azurerm_application_insights.main.connection_string },
@@ -230,7 +232,8 @@ resource "azapi_resource" "responses_bff" {
       httpsOnly    = true
       siteConfig = {
         linuxFxVersion = "PYTHON|3.11"
-        alwaysOn       = var.plan_sku != "F1" && var.plan_sku != "B1"
+        # Always On is supported from Basic (B1) up; only Free/Shared tiers lack it.
+        alwaysOn       = var.plan_sku != "F1"
         appCommandLine = "python -m uvicorn bff.main:app --host 0.0.0.0 --port 8080"
         # Native App Service CORS is intentionally cleared (not merely omitted) here: Microsoft's own
         # docs state it takes precedence over and disables the app's own CORS code entirely when both
@@ -250,7 +253,10 @@ resource "azapi_resource" "responses_bff" {
           { name = "SCM_DO_BUILD_DURING_DEPLOYMENT", value = "true" },
           { name = "PROFILE", value = "prod" },
           { name = "RESPONSES_UPSTREAM_MODE", value = "foundry" },
-          { name = "RESPONSES_AGENT_ENDPOINT", value = "${local.foundry_project_endpoint}/agents/home-banking-agent/endpoint/protocols/openai/responses" },
+          # The Foundry Agent Service protocol endpoint requires an explicit api-version
+          # (unlike the generic Azure OpenAI /openai/v1/responses surface, where it's optional);
+          # see evals/run_held_out_eval.py, which already hardcodes the same value.
+          { name = "RESPONSES_AGENT_ENDPOINT", value = "${local.foundry_project_endpoint}/agents/home-banking-agent/endpoint/protocols/openai/responses?api-version=v1" },
           { name = "DATABASE_URL", value = local.database_url_reference },
           { name = "ALLOWED_ORIGINS", value = jsonencode(["https://${azapi_resource.web.output.properties.defaultHostName}"]) },
           { name = "JWT_SECRET_KEY", value = local.jwt_secret_key_reference },
@@ -267,26 +273,6 @@ resource "azapi_resource" "responses_bff" {
   # here (see plan/tmp/KEY_VAULT_SECRETS_MIGRATION_PLAN.md); this is the single owner of this site's
   # appSettings, so no ignore_changes/manual az webapp config appsettings set is needed.
   depends_on = [azurerm_key_vault_secret.database_url]
-}
-
-resource "azapi_update_resource" "payment_transaction_url" {
-  type      = "Microsoft.Web/sites@2024-11-01"
-  name      = azapi_resource.app["payment"].name
-  parent_id = data.azurerm_resource_group.main.id
-  body = {
-    properties = {
-      siteConfig = {
-        appSettings = [
-          { name = "WEBSITES_PORT", value = "8080" },
-          { name = "PORT", value = "8080" },
-          { name = "APPLICATIONINSIGHTS_CONNECTION_STRING", value = azurerm_application_insights.main.connection_string },
-          { name = "SCM_DO_BUILD_DURING_DEPLOYMENT", value = "true" },
-          { name = "TRANSACTIONS_API_SERVER_URL", value = "https://${azapi_resource.app["transaction"].output.properties.defaultHostName}" }
-        ]
-      }
-    }
-  }
-  depends_on = [azapi_resource.app["payment"], azapi_resource.app["transaction"]]
 }
 
 
