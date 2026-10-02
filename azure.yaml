@@ -28,10 +28,6 @@ services:
         posix:
           shell: sh
           run: rm -rf ./banking_shared
-  payment:
-    project: ./app/business-api/payment
-    language: python
-    host: appservice
   transaction:
     project: ./app/business-api/transaction
     language: python
