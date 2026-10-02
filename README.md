@@ -52,7 +52,7 @@ as-is:
 | Agent hosting  | Supervisor + 3 agents co-located on Container Apps                      | Account/Transaction handoff workflow deployed as a separately hosted Foundry agent, with its own `azd` project  |
 | Protocol       | OpenAI ChatKit (client-managed widgets)                                 | OpenAI Responses API, proxied through the BFF                                                                   |
 | Infra          | Bicep, Container Apps                                                   | Terraform, App Service                                                                                          |
-| Workflow scope | Account + Transaction + Payment (invoice OCR via Document Intelligence) | Account + Transaction only; Payment kept as inert infrastructure, never wired to the agent                      |
+| Workflow scope | Account + Transaction + Payment (invoice OCR via Document Intelligence) | Account + Transaction only; Payment dropped entirely, never wired to the agent                                  |
 | Added          | —                                                                       | Persisted transaction-dispute support case with a customer approval gate, and `es`/`pt`/`en` localization       |
 | Model          | `gpt-4.1`                                                               | `gpt-4.1-mini`                                                                                                  |
 
@@ -94,7 +94,7 @@ recommendation with an explicit opt-out after case resolution. See the
 [frontend guide](app/frontend/banking-web/README.md#transaction-disputes) and
 [business API guide](app/business-api/README.md) for the implementation.
 
-The Account and Transaction APIs read banking data from PostgreSQL through a shared SQLModel package and enforce ownership in their service layer. The Payment service and invoice samples remain as inherited artifacts but are not connected to the agent. The [Responses BFF](./app/responses-bff/README.md) authenticates persisted users with Argon2, returns customer names, and fronts the Responses agent; the frontend calls Account and Transaction directly, with the same application JWT, for account, card, and transaction reads.
+The Account and Transaction APIs read banking data from PostgreSQL through a shared SQLModel package and enforce ownership in their service layer. The [Responses BFF](./app/responses-bff/README.md) authenticates persisted users with Argon2, returns customer names, and fronts the Responses agent; the frontend calls Account and Transaction directly, with the same application JWT, for account, card, and transaction reads.
 
 ### Key Features
 
@@ -114,7 +114,7 @@ The React frontend streams OpenAI Responses events for account and transaction i
  routing to automatic fast-tracking or a simulated human reviewer, backed by a
  persisted case/event audit trail, not just generic protocol approval events.
 - **Separate hosted agent and App Services** <br/>
-The Foundry hosted agent uses its own azd project; the root Terraform stack defines five App Services for the BFF, web frontend, and business APIs.
+The Foundry hosted agent uses its own azd project; the root Terraform stack defines four App Services for the BFF, web frontend, and business APIs.
 - **Automated IaC and App build & Deployment**
 Automated Azure resources creation and solution deployment leveraging [Azure Developer CLI](https://learn.microsoft.com/en-us/azure/developer/azure-developer-cli/).
 
@@ -169,7 +169,7 @@ Clone this repository and select an azd environment. Before provisioning the roo
 
 This repository intentionally uses two separate Azure Developer CLI project roots:
 
-- Root project (`./azure.yaml`): Terraform provisions the shared Linux plan, five App Services, monitoring, Blob storage, and a dedicated Foundry account and project; root `azd deploy` deploys only the App Service workloads.
+- Root project (`./azure.yaml`): Terraform provisions the shared Linux plan, four App Services, monitoring, Blob storage, and a dedicated Foundry account and project; root `azd deploy` deploys only the App Service workloads.
 - Agent project (`./app/agent/azure.yaml`): the `microsoft.foundry` provider deploys the hosted agent to the existing Foundry project. Set its `FOUNDRY_PROJECT_ENDPOINT` from the root environment output before deploying; the two azd environments are separate.
 
 Naming note for the App Service stack: the frontend app uses `app-banking-web-<env>` (for example, `app-banking-web-development`) so the web workload name is explicit and distinct from backend services.
@@ -194,12 +194,11 @@ azd deploy --cwd app/agent
 
 ### Python dependency artifact for App Service zip deploy
 
-The three Python MCP APIs (`account`, `transaction`, `payment`) and the Responses BFF are deployed independently from the root `azure.yaml`. For App Service zip deploy, each Python service directory must include its own `requirements.txt` so Oryx can install runtime dependencies. Keep `pyproject.toml` and the `uv` lock files as the development source of truth and regenerate `requirements.txt` before deployment changes.
+The two Python MCP APIs (`account`, `transaction`) and the Responses BFF are deployed independently from the root `azure.yaml`. For App Service zip deploy, each Python service directory must include its own `requirements.txt` so Oryx can install runtime dependencies. Keep `pyproject.toml` and the `uv` lock files as the development source of truth and regenerate `requirements.txt` before deployment changes.
 
 ```shell
 uv pip compile app/business-api/account/pyproject.toml --no-emit-package banking-shared -o app/business-api/account/requirements.txt
 uv pip compile app/business-api/transaction/pyproject.toml --no-emit-package banking-shared -o app/business-api/transaction/requirements.txt
-uv pip compile app/business-api/payment/pyproject.toml -o app/business-api/payment/requirements.txt
 uv export --project app/responses-bff --no-dev --no-hashes --no-emit-project --no-emit-package banking-shared --output-file app/responses-bff/requirements.txt
 ```
 
@@ -223,7 +222,7 @@ For more info about deployment click [here](./docs/deployment-guide.md)
 Pricing varies per region and usage, so it isn't possible to predict exact costs for your usage.
 However, you can try the [Azure pricing calculator](https://azure.com/e/8ffbe5b1919c4c72aed89b022294df76) for the resources below.
 
-- Azure App Service: a shared Linux B1 plan for the five apps. [Pricing](https://azure.microsoft.com/en-us/pricing/details/app-service/linux/)
+- Azure App Service: a shared Linux plan for the four apps. [Pricing](https://azure.microsoft.com/en-us/pricing/details/app-service/linux/)
 - Azure Blob Storage: Standard LRS. [Pricing](https://azure.microsoft.com/pricing/details/storage/blobs/)
 - Azure Monitor: Log Analytics and Application Insights, billed by usage. [Pricing](https://azure.microsoft.com/en-us/pricing/details/monitor/)
 - The separate Foundry project and model usage have their own costs.
