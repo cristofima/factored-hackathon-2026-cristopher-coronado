@@ -128,3 +128,21 @@ variable "postgres_allowed_client_ip" {
   type        = string
   default     = null
 }
+
+variable "key_vault_name" {
+  description = "Optional override for the shared Key Vault storing jwt-secret-key/internal-identity-secret."
+  type        = string
+  default     = null
+}
+
+variable "github_actions_principal_id" {
+  description = "Optional object ID (not the client/app ID) of the GitHub Actions federated identity service principal, granted Key Vault Secrets User so cd-hosted-agent.yaml can resolve internal-identity-secret for the Foundry hosted agent, which has no native Key Vault reference support. Leave unset to skip this role assignment."
+  type        = string
+  default     = null
+}
+
+variable "deployer_principal_id" {
+  description = "Optional object ID (not the client/app ID) of whoever runs terraform apply/azd provision, granted Key Vault Secrets Officer so Terraform can write the database-url secret. Key Vault RBAC does not inherit from subscription Owner/Contributor. Leave unset to skip this role assignment."
+  type        = string
+  default     = null
+}
