@@ -170,5 +170,21 @@ and real reviewer permissions remain unavailable. Admin operator password reset,
 active/inactive status and token-version revocation are implemented in Identity;
 synthetic coverage does not establish deployed acceptance.
 
+## App Service Deployment
+
+[BFF CD](../../.github/workflows/cd-responses-bff.yaml) reads the GitHub
+`Development` Variable `AZURE_RESPONSES_BFF_APP_NAME`. Set it manually to the
+physical App Service name from Terraform output `AZURE_RESPONSES_BFF_APP_NAME`.
+Shared setup exports that value as azd `AZURE_RESPONSES_BFF_APP_NAME`, which the root
+[manifest](../../azure.yaml) binds through `resourceName`. Preflight checks the
+same named app; tags do not select it.
+
+The BFF uses Identity endpoint settings and protected introspection, never
+`DATABASE_URL`. Service URLs come from actual hostname outputs, not app-name
+reconstruction. The hosted agent deploys separately from the agent project root.
+See [workflow configuration](../../.github/workflows/README.md#required-github-environment-variables)
+and the [infrastructure guide](../../infra/README.md). Configuration preflight does
+not establish login, startup or hosted identity acceptance.
+
 For zip packaging and dependency export, follow the
 [root deployment artifact guide](../../README.md#python-dependency-artifact-for-app-service-zip-deploy).

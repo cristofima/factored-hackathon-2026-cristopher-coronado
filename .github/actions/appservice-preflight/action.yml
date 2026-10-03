@@ -1,0 +1,29 @@
+name: App Service deployment preflight
+description: Validate explicitly named App Service configuration and Key Vault reference status without exposing values.
+inputs:
+  service:
+    description: Root azd service name.
+    required: true
+  resource-group:
+    description: Existing resource group.
+    required: true
+  app-name:
+    description: Exact existing App Service name used by the root manifest.
+    required: true
+outputs:
+  app-name:
+    description: Validated deployment target name.
+    value: ${{ steps.preflight.outputs.app-name }}
+runs:
+  using: composite
+  steps:
+    - name: Validate preflight regression tests
+      shell: bash
+      run: node --test "$GITHUB_ACTION_PATH/preflight.test.cjs"
+    - id: preflight
+      shell: bash
+      env:
+        PREFLIGHT_SERVICE: ${{ inputs.service }}
+        PREFLIGHT_RESOURCE_GROUP: ${{ inputs.resource-group }}
+        PREFLIGHT_APP_NAME: ${{ inputs.app-name }}
+      run: node "$GITHUB_ACTION_PATH/preflight.cjs"

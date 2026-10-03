@@ -2,10 +2,12 @@ output "AZURE_LOCATION" { value = var.location }
 output "AZURE_TENANT_ID" { value = data.azurerm_client_config.current.tenant_id }
 output "AZURE_RESOURCE_GROUP" { value = data.azurerm_resource_group.main.name }
 
-output "AZURE_ACCOUNT_NAME" { value = azapi_resource.app["account"].name }
-output "AZURE_TRANSACTION_NAME" { value = azapi_resource.app["transaction"].name }
-output "AZURE_WEB_NAME" { value = azapi_resource.web.name }
-output "AZURE_RESPONSES_BFF_NAME" { value = azapi_resource.responses_bff.name }
+output "AZURE_ACCOUNT_APP_NAME" { value = azapi_resource.app["account"].name }
+output "AZURE_TRANSACTION_APP_NAME" { value = azapi_resource.app["transaction"].name }
+output "AZURE_WEB_APP_NAME" { value = azapi_resource.web.name }
+output "AZURE_RESPONSES_BFF_APP_NAME" { value = azapi_resource.responses_bff.name }
+output "AZURE_IDENTITY_APP_NAME" { value = azapi_resource.identity.name }
+output "IDENTITY_URI" { value = "https://${azapi_resource.identity.output.properties.defaultHostName}" }
 
 output "ACCOUNT_URI" { value = "https://${azapi_resource.app["account"].output.properties.defaultHostName}" }
 output "TRANSACTION_URI" { value = "https://${azapi_resource.app["transaction"].output.properties.defaultHostName}" }

@@ -163,7 +163,7 @@ The React frontend streams OpenAI Responses events for account and transaction i
  routing to automatic fast-tracking or a simulated human reviewer, backed by a
  persisted case/event audit trail, not just generic protocol approval events.
 - **Separate hosted agent and App Services** <br/>
-The Foundry hosted agent uses its own azd project; the root Terraform stack defines four App Services for the BFF, web frontend, and business APIs.
+The Foundry hosted agent uses its own azd project; the root Terraform stack defines five App Services for Identity, the BFF, web frontend, and business APIs.
 - **Automated IaC and App build & Deployment**
 Automated Azure resources creation and solution deployment leveraging [Azure Developer CLI](https://learn.microsoft.com/en-us/azure/developer/azure-developer-cli/).
 
@@ -208,10 +208,27 @@ Clone this repository and select an azd environment. Before provisioning the roo
 
 This repository intentionally uses two separate Azure Developer CLI project roots:
 
-- Root project (`./azure.yaml`): Terraform provisions the shared Linux plan, four App Services, monitoring, Blob storage, and a dedicated Foundry account and project; root `azd deploy` deploys only the App Service workloads.
+- Root project (`./azure.yaml`): Terraform provisions the shared Linux plan, five App Services (Identity, Account, Transaction, Responses BFF, web), monitoring, Blob storage, and a dedicated Foundry account and project; root `azd deploy` deploys only the App Service workloads. All five services use explicit `resourceName` bindings to Terraform app-name outputs; each CD workflow requires its corresponding GitHub Development name variable. See the [infrastructure guide](./infra/README.md) for coordinated secrets, rollout and rollback.
 - Agent project (`./app/agent/azure.yaml`): the `microsoft.foundry` provider deploys the hosted agent to the existing Foundry project. Set its `FOUNDRY_PROJECT_ENDPOINT` from the root environment output before deploying; the two azd environments are separate.
 
 Naming note for the App Service stack: the frontend app uses `app-banking-web-<env>` (for example, `app-banking-web-development`) so the web workload name is explicit and distinct from backend services.
+
+Configure these GitHub Variables in the `Development` environment using the physical
+App Service names from Terraform outputs. Terraform does not publish them to GitHub:
+
+| Service       | GitHub Variable                | Terraform output / azd variable |
+| ------------- | ------------------------------ | ------------------------------- |
+| Identity      | `AZURE_IDENTITY_APP_NAME`      | `AZURE_IDENTITY_APP_NAME`       |
+| Account       | `AZURE_ACCOUNT_APP_NAME`       | `AZURE_ACCOUNT_APP_NAME`        |
+| Transaction   | `AZURE_TRANSACTION_APP_NAME`   | `AZURE_TRANSACTION_APP_NAME`    |
+| Responses BFF | `AZURE_RESPONSES_BFF_APP_NAME` | `AZURE_RESPONSES_BFF_APP_NAME`  |
+| Web           | `AZURE_WEB_APP_NAME`           | `AZURE_WEB_APP_NAME`            |
+
+CD exports each GitHub value under the same `_APP_NAME` azd variable used by `resourceName`;
+Python preflight checks the same named app. Tags are metadata, not selectors.
+These names are deployment configuration, not URLs or secrets. Consume actual
+hostname outputs for service URLs. See the [workflow guide](./.github/workflows/README.md#required-github-environment-variables)
+for shared configuration.
 
 Use these commands from the repository root:
 
@@ -233,15 +250,16 @@ azd deploy --cwd app/agent
 
 ### Python dependency artifact for App Service zip deploy
 
-The two Python MCP APIs (`account`, `transaction`) and the Responses BFF are deployed independently from the root `azure.yaml`. For App Service zip deploy, each Python service directory must include its own `requirements.txt` so Oryx can install runtime dependencies. Keep `pyproject.toml` and the `uv` lock files as the development source of truth and regenerate `requirements.txt` before deployment changes.
+Identity, the two Python MCP APIs (`account`, `transaction`), and the Responses BFF are deployed independently from the root `azure.yaml`. For App Service zip deploy, each Python service directory must include its own `requirements.txt` so Oryx can install runtime dependencies. Keep `pyproject.toml` and the `uv` lock files as the development source of truth and regenerate `requirements.txt` before deployment changes.
 
 ```shell
 uv pip compile app/business-api/account/pyproject.toml --no-emit-package banking-shared -o app/business-api/account/requirements.txt
 uv pip compile app/business-api/transaction/pyproject.toml --no-emit-package banking-shared -o app/business-api/transaction/requirements.txt
+uv pip compile app/business-api/identity/pyproject.toml --no-emit-package banking-shared --python-version 3.11 --python-platform x86_64-unknown-linux-gnu -o app/business-api/identity/requirements.txt
 uv export --project app/responses-bff --no-dev --no-hashes --no-emit-project --no-emit-package banking-shared --output-file app/responses-bff/requirements.txt
 ```
 
-Account, Transaction and Identity consume the canonical SQLModel package from `app/business-api/shared`; the BFF does not. Existing business API `azd` packaging hooks copy the shared package into isolated App Service zips and remove temporary copies afterward. Identity deployment/packaging is a separate pending rollout gate. The `--no-emit-package` option keeps machine-local editable paths out of Oryx artifacts.
+Account, Transaction and Identity consume the canonical SQLModel package from `app/business-api/shared`; the database-free BFF still uses shared identity/model code. Root `azd` packaging hooks copy the shared package into isolated App Service zips and remove temporary copies afterward. Identity's [CI/CD workflows](./app/business-api/identity/README.md#cicd) use the root manifest and Linux Python 3.11 `uv pip compile` runtime requirements. Root Terraform declares its dedicated App Service; root azd and standalone CD target its explicit `AZURE_IDENTITY_APP_NAME`, like the other four services. Hosted rollout and full artifact/startup acceptance remain unverified. The `--no-emit-package` option keeps machine-local editable paths out of Oryx artifacts.
 
 Foundry Responses maintains conversation history when requests link turns with a signed user-bound `conversation` value. The BFF rejects conversation identifiers that belong to a different authenticated user. Identity verifies Argon2 credentials and issues short-lived HS256 JWTs; the BFF checks current active identity and version through protected introspection.
 
