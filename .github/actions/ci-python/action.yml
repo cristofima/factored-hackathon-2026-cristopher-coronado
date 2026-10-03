@@ -21,6 +21,10 @@ inputs:
     description: Whether pytest should run when a test directory exists.
     required: false
     default: "true"
+  deployment-requirements:
+    description: Optional project-relative Oryx requirements artifact to verify against pyproject.toml.
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -50,6 +54,27 @@ runs:
           echo "::error::Unable to sync dependencies for ${{ inputs.project-path }}"
           exit 1
         fi
+
+    - name: Verify deployment requirements
+      if: ${{ inputs.deployment-requirements != '' }}
+      shell: bash
+      working-directory: ${{ inputs.project-path }}
+      env:
+        REQUIREMENTS_FILE: ${{ inputs.deployment-requirements }}
+        PYTHON_VERSION: ${{ inputs.python-version }}
+      run: |
+        set -euo pipefail
+        generated="$(mktemp)"
+        trap 'rm -f "$generated"' EXIT
+        uv pip compile pyproject.toml --no-emit-package banking-shared \
+          --python-version "$PYTHON_VERSION" --python-platform x86_64-unknown-linux-gnu \
+          --constraints "$REQUIREMENTS_FILE" --output-file "$generated" > /dev/null
+        if grep -Eq '(^-e[[:space:]]|file:| @ |^\.?\.?/)' "$REQUIREMENTS_FILE" "$generated"; then
+          echo "::error::Deployment requirements must not contain editable or local package paths."
+          exit 1
+        fi
+        diff -u <(sed 's/#.*//; s/[[:space:]]*$//; /^[[:space:]]*$/d' "$REQUIREMENTS_FILE") \
+          <(sed 's/#.*//; s/[[:space:]]*$//; /^[[:space:]]*$/d' "$generated")
 
     - name: Compile check (syntax)
       shell: bash

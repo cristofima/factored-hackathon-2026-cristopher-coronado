@@ -9,6 +9,7 @@ on:
       - "!app/frontend/banking-web/**/*.md"
       - ".github/workflows/cd-frontend.yaml"
       - ".github/actions/cd-azure/**"
+      - "azure.yaml"
   workflow_dispatch:
 
 permissions:
@@ -28,6 +29,8 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
           location: ${{ vars.AZURE_LOCATION }}
           resource-group: ${{ vars.AZURE_RESOURCE_GROUP }}
+          app-service-name: ${{ vars.AZURE_WEB_APP_NAME }}
+          app-service-name-variable: AZURE_WEB_APP_NAME
       - name: Configure frontend build-time environment
         # CI never provisions, so the root azure.yaml postprovision hook (which derives these
         # from Terraform outputs) never runs here; set the same VITE_* keys directly so Vite

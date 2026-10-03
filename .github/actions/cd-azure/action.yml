@@ -17,6 +17,12 @@ inputs:
   resource-group:
     description: Azure resource group name.
     required: true
+  app-service-name:
+    description: Exact existing App Service name; supplied with its manifest variable for root deployments.
+    default: ""
+  app-service-name-variable:
+    description: Root manifest variable receiving the exact App Service name; omit both name inputs for Foundry.
+    default: ""
   working-directory:
     description: Directory containing the azd project.
     required: false
@@ -29,6 +35,40 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Validate Azure deployment inputs
+      shell: bash
+      env:
+        AZD_PROJECT_DIRECTORY: ${{ inputs.working-directory }}
+        AZURE_CLIENT_ID: ${{ inputs.client-id }}
+        AZURE_TENANT_ID: ${{ inputs.tenant-id }}
+        AZURE_SUBSCRIPTION_ID: ${{ inputs.subscription-id }}
+        AZURE_LOCATION: ${{ inputs.location }}
+        AZURE_RESOURCE_GROUP: ${{ inputs.resource-group }}
+        AZD_ENVIRONMENT: ${{ inputs.azd-environment }}
+        APP_SERVICE_NAME: ${{ inputs.app-service-name }}
+        APP_SERVICE_NAME_VARIABLE: ${{ inputs.app-service-name-variable }}
+      run: |
+        set -euo pipefail
+        for variable in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID AZURE_LOCATION AZURE_RESOURCE_GROUP AZD_ENVIRONMENT; do
+          if [[ -z "${!variable//[[:space:]]/}" ]]; then
+            echo "::error::$variable is required for deployment."
+            exit 1
+          fi
+        done
+        if [[ "$AZD_PROJECT_DIRECTORY" == "." && -z "$APP_SERVICE_NAME_VARIABLE" ]]; then
+          echo "::error::Root deployments require an explicit App Service name and manifest variable."
+          exit 1
+        fi
+        if [[ -n "$APP_SERVICE_NAME" || -n "$APP_SERVICE_NAME_VARIABLE" ]]; then
+          case "$APP_SERVICE_NAME_VARIABLE" in
+            AZURE_IDENTITY_APP_NAME|AZURE_ACCOUNT_APP_NAME|AZURE_TRANSACTION_APP_NAME|AZURE_RESPONSES_BFF_APP_NAME|AZURE_WEB_APP_NAME) ;;
+            *) echo "::error::A supported App Service name variable is required."; exit 1 ;;
+          esac
+          if [[ ! "$APP_SERVICE_NAME" =~ ^[a-zA-Z0-9][a-zA-Z0-9-]{0,58}[a-zA-Z0-9]$ ]]; then
+            echo "::error::A valid explicit App Service name is required."
+            exit 1
+          fi
+        fi
     - uses: Azure/setup-azd@v2
     - name: Azure login
       uses: azure/login@v2
@@ -44,8 +84,13 @@ runs:
         AZURE_LOCATION: ${{ inputs.location }}
         AZURE_RESOURCE_GROUP: ${{ inputs.resource-group }}
         AZD_ENVIRONMENT: ${{ inputs.azd-environment }}
+        APP_SERVICE_NAME: ${{ inputs.app-service-name }}
+        APP_SERVICE_NAME_VARIABLE: ${{ inputs.app-service-name-variable }}
       run: |
         set -euo pipefail
         azd config set auth.useAzCliAuth true
         azd env new "$AZD_ENVIRONMENT" --subscription "$AZURE_SUBSCRIPTION_ID" --location "$AZURE_LOCATION" --no-prompt
         azd env set AZURE_RESOURCE_GROUP "$AZURE_RESOURCE_GROUP"
+        if [[ -n "$APP_SERVICE_NAME_VARIABLE" ]]; then
+          azd env set "$APP_SERVICE_NAME_VARIABLE" "$APP_SERVICE_NAME"
+        fi
