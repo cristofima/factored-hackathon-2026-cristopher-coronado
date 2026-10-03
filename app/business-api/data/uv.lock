@@ -128,9 +128,11 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "azure-monitor-opentelemetry", marker = "extra == 'telemetry'", specifier = "==1.8.10" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.3" },
     { name = "sqlmodel", specifier = ">=0.0.37" },
 ]
+provides-extras = ["telemetry"]
 
 [[package]]
 name = "cffi"
