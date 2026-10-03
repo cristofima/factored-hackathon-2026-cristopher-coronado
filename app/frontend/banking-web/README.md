@@ -12,7 +12,7 @@ npm run dev
 
 Node runtime baseline is `>=22` (aligned with `package.json` engines and frontend CI defaults).
 
-Vite normally listens at `http://localhost:5170`. The root `DEV - Full Stack Ordered` VS Code launch starts Account MCP (`8070`), Transaction MCP (`8071`), the local Responses agent (`8088`), the BFF (`8080`), and this frontend.
+Vite normally listens at `http://localhost:5170`. The root `DEV - Full Stack Ordered` VS Code launch starts Identity (`8090`), Account MCP (`8070`), Transaction MCP (`8071`), the local Responses agent (`8088`), the BFF (`8080`), and this frontend in separate terminals.
 
 Account, Transaction, and the BFF are separate origins in every environment, local
 and deployed, so the frontend calls each one by its absolute URL instead of relying
@@ -35,10 +35,35 @@ on a dev-server proxy. Locally those absolute URLs just happen to share the
 | `VITE_RESPONSES_BFF_URL`   | BFF base URL for authentication (`/auth/login`, `/auth/me`) | `http://localhost:8080`           |
 
 Active browser reads call Account and Transaction directly, authenticated with the
-same application JWT the BFF issues at login. Legacy REST client modules remain in
+same application JWT Identity issues through the BFF at login. Legacy REST client modules remain in
 the source tree, but are not used by the in-scope financial screens.
 
-The frontend signs in through the [Responses BFF](../../responses-bff/README.md) at `/auth/login`, keeps the short-lived application JWT in browser storage, and restores verified identity through `/auth/me`. The BFF verifies PostgreSQL-backed Argon2 users and returns the persisted customer name. Navigation uses that name, with an email fallback. The frontend does not create users, fixed bearer tokens, or synthetic profiles.
+The frontend signs in through the [Responses BFF](../../responses-bff/README.md) at `/auth/login`, keeps only the short-lived application JWT in browser storage, and restores verified identity through `/auth/me`. Profiles require a supported role and positive `identity_version`; only customers carry `customer_id`. Navigation uses the persisted name, with an email fallback. The frontend does not create fixed bearer tokens or synthetic profiles.
+
+## Identity Workspaces
+
+- Customers retain the banking routes, direct Account/Transaction reads and BFF chat.
+- Administrators use `/admin/operators` to list operators, activate or deactivate them, and reset their passwords through the BFF's `/admin/operators` endpoints. The protected `/admin/operators/create` page reuses the shared creation form and returns to the list after successful creation or cancellation. Operators/Customers navigation uses primary styling for the active tab and a bordered card background for the inactive tab. Persisted status must be `active` or `inactive`; the required ISO `updated_at` response field is displayed in the administrator's profile locale and browser time zone, with the original timestamp available on hover. Lifecycle fields come from identity responses, not JWT claims. The relocated `app/business-api/identity` service remains behind the BFF; browser endpoints are unchanged. Passwords remain transient and are cleared on submission or dismissal. Operator and customer action confirmations reuse the shared AlertDialog: a portal-backed centered modal with a dark overlay, z-index layering, focus trapping and cancellation autofocus. Errors stay inside the modal; operator creation remains a separate page. Pending operations disable dismissal until the list is refreshed; session unmount aborts pending work.
+  Operator creation uses required, trimmed first/last names (50 characters each),
+  email up to 120 characters and passwords of 12–256 characters. Labels are localized
+  in en/es/pt; invalid payloads are rejected before transport. Existing nullable staff
+  names remain readable without inventing names or a customer association.
+
+- Administrators also use `/admin/customers` to list existing customer users and
+  confirm activation/deactivation of sign-in access through explicit BFF endpoints.
+  The localized list shows customer membership, persisted status and update time,
+  including inactive users. Each change revokes prior sessions; activation requires
+  a fresh sign-in. Banking customer status and financial data remain unchanged.
+  Customer creation, deletion and password reset are unavailable. Loading, empty,
+  retry, safe errors, revoked-session logout and pending-operation cancellation follow
+  the operator workspace patterns. No browser Identity URL is introduced.
+- Operators use `/operator`, which explicitly states that reviewer queues and dispute decisions are unavailable. Neither staff shell mounts financial screens or chat providers.
+
+Direct and nested routes are role-guarded; unknown staff paths return to their workspace. Login destinations cannot redirect to another role's workspace or an external URL. Role guards are UI isolation, not a replacement for server authorization.
+
+Login, logout and cross-tab token changes cancel pending identity work, clear query caches and notifications, and remount the authorized shell to discard local conversation state. Staff and administrator UI uses the profile's en/es/pt locale; logout resets it to English.
+
+Run `npm test`, `npm run lint` and `npm run build` for frontend checks. Administrator client tests resolve request paths against a synthetic base URL so they work both with a configured BFF URL and without local Vite environment files, as in CI. This test base does not change production transport configuration. Identity tests cover contracts, route mount isolation, session reset orchestration and administrator form handlers using the existing Node test environment. These are not browser or live-backend acceptance evidence. Manual checks still include three-role deep links and refresh, lifecycle persistence, expired/revoked sessions, locale display and cross-user logout isolation.
 
 ## Localization
 

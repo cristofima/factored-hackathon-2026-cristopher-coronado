@@ -13,7 +13,7 @@ describe("BFF-only customer user lifecycle API", () => {
     const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify([persisted])));
     vi.stubGlobal("fetch", fetch);
     expect(await listCustomerUsers(signal())).toEqual([persisted]);
-    expect(new URL(fetch.mock.calls[0][0]).pathname).toBe("/admin/customers");
+    expect(new URL(fetch.mock.calls[0][0], "https://bff.example.test").pathname).toBe("/admin/customers");
     expect(fetch.mock.calls[0][0]).not.toContain("8090");
     expect(fetch.mock.calls[0][1]).toMatchObject({ method: "GET", headers: { Authorization: "Bearer test-only-token" } });
     expect(fetch.mock.calls[0][1]).not.toHaveProperty("body");
@@ -30,7 +30,7 @@ describe("BFF-only customer user lifecycle API", () => {
     const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
     vi.stubGlobal("fetch", fetch);
     await changeCustomerUser("customer-id", action, signal());
-    expect(new URL(fetch.mock.calls[0][0]).pathname).toBe(`/admin/customers/customer-id/${action}`);
+    expect(new URL(fetch.mock.calls[0][0], "https://bff.example.test").pathname).toBe(`/admin/customers/customer-id/${action}`);
     expect(fetch.mock.calls[0][1]).toMatchObject({ method: "POST" });
     expect(fetch.mock.calls[0][1]).not.toHaveProperty("body");
   });
