@@ -20,13 +20,14 @@ class Settings(BaseSettings):
     internal_identity_secret: str | None = Field(default=None, min_length=32)
     jwt_issuer: str = "home-banking-api"
     jwt_audience: str = "home-banking-web"
-    jwt_access_token_minutes: int = Field(default=15, ge=1, le=60)
+    auth_users_endpoint: str = "http://127.0.0.1:8090"
+    auth_internal_secret: str | None = None
     azure_client_id: str | None = None
     applicationinsights_connection_string: str | None = None
     allowed_origins: list[str] = ["http://localhost:5170"]
 
     model_config = SettingsConfigDict(
-        env_file=(".env", ".env.dev"),
+        env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
     )
