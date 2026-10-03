@@ -1,0 +1,77 @@
+name: Identity CI
+
+on:
+  push:
+    branches: ["main", "develop", "feature/*", "refactor/*", "fix/*"]
+    paths:
+      - "app/business-api/identity/**"
+      - "!app/business-api/identity/**/*.md"
+      - "app/business-api/shared/**"
+      - "azure.yaml"
+      - ".github/workflows/ci-identity.yml"
+      - ".github/workflows/cd-identity.yaml"
+      - ".github/actions/ci-python/**"
+  pull_request:
+    branches: ["main", "develop"]
+    types: [opened, reopened, synchronize, ready_for_review]
+    paths:
+      - "app/business-api/identity/**"
+      - "!app/business-api/identity/**/*.md"
+      - "app/business-api/shared/**"
+      - "azure.yaml"
+      - ".github/workflows/ci-identity.yml"
+      - ".github/workflows/cd-identity.yaml"
+      - ".github/actions/ci-python/**"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  pull-request:
+    name: Build & Test (identity PR)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: ./.github/actions/ci-python
+        with:
+          project-path: app/business-api/identity
+          artifact-name: identity-test-results
+          run-tests: "true"
+      - name: Verify deployment requirements match the lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv export --project app/business-api/identity --frozen --no-dev --no-hashes \
+            --no-emit-project --no-emit-package banking-shared --no-header \
+            --output-file "$RUNNER_TEMP/identity-requirements.txt" > /dev/null
+          diff -u <(sed '/^#/d' app/business-api/identity/requirements.txt) "$RUNNER_TEMP/identity-requirements.txt"
+
+  build-and-test:
+    name: Build & Test (identity push)
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: ./.github/actions/ci-python
+        with:
+          project-path: app/business-api/identity
+          artifact-name: identity-test-results
+          run-tests: "true"
+      - name: Verify deployment requirements match the lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv export --project app/business-api/identity --frozen --no-dev --no-hashes \
+            --no-emit-project --no-emit-package banking-shared --no-header \
+            --output-file "$RUNNER_TEMP/identity-requirements.txt" > /dev/null
+          diff -u <(sed '/^#/d' app/business-api/identity/requirements.txt) "$RUNNER_TEMP/identity-requirements.txt"
