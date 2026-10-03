@@ -8,11 +8,13 @@ from contextlib import asynccontextmanager
 import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 
 from bff.auth import router as auth_router
 from bff.credentials import create_azure_credential
 from bff.responses import AsyncCredential, router as responses_router
 from bff.settings import Settings
+from bff.tracing import configure_tracing
 from bff.user_repository import SqlModelUserRepository, UserRepository
 
 
@@ -34,6 +36,9 @@ def create_app(
         app.state.settings = app_settings
         app.state.user_repository = app_user_repository
         app.state.http_client = httpx.AsyncClient(timeout=None, transport=transport)
+        HTTPXClientInstrumentor.instrument_client(
+            app.state.http_client, tracer_provider=tracer_provider
+        )
         app.state.azure_credential = (
             credential_factory(app_settings)
             if app_settings.responses_upstream_mode == "foundry"
@@ -47,6 +52,7 @@ def create_app(
                 await app.state.azure_credential.close()
 
     app = FastAPI(title=app_settings.app_name, lifespan=lifespan)
+    tracer_provider = configure_tracing(app, app_settings.applicationinsights_connection_string)
     app.include_router(auth_router, tags=["auth"])
     app.include_router(responses_router, tags=["responses"])
     app.add_middleware(

@@ -66,24 +66,45 @@ agent, and frontend. Restart the BFF after Python edits when running without `--
 
 ## Configuration
 
-| Variable                   | Purpose / default                                                                                 |
-| -------------------------- | ------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`             | Shared SQLModel PostgreSQL connection URL; required for persisted login/profile reads.            |
-| `JWT_SECRET_KEY`           | Application HS256 signing key, at least 32 characters.                                            |
-| `JWT_ISSUER`               | `home-banking-api`                                                                                |
-| `JWT_AUDIENCE`             | `home-banking-web`                                                                                |
-| `JWT_ACCESS_TOKEN_MINUTES` | `15`; supported range `1` to `60`.                                                                |
-| `INTERNAL_IDENTITY_SECRET` | Shared downstream identity signing secret, at least 32 characters.                                |
-| `RESPONSES_UPSTREAM_MODE`  | `foundry` by default; use `local` for local browser validation.                                   |
-| `RESPONSES_AGENT_ENDPOINT` | Local default `http://127.0.0.1:8088/responses`; configure the approved upstream for hosted mode. |
-| `RESPONSES_TOKEN_SCOPE`    | `https://ai.azure.com/.default`                                                                   |
-| `AZURE_CLIENT_ID`          | Optional client ID for server-side Azure credentials.                                             |
-| `ALLOWED_ORIGINS`          | JSON array; defaults to `["http://localhost:5170"]`.                                              |
+| Variable                                | Purpose / default                                                                                 |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                          | Shared SQLModel PostgreSQL connection URL; required for persisted login/profile reads.            |
+| `JWT_SECRET_KEY`                        | Application HS256 signing key, at least 32 characters.                                            |
+| `JWT_ISSUER`                            | `home-banking-api`                                                                                |
+| `JWT_AUDIENCE`                          | `home-banking-web`                                                                                |
+| `JWT_ACCESS_TOKEN_MINUTES`              | `15`; supported range `1` to `60`.                                                                |
+| `INTERNAL_IDENTITY_SECRET`              | Shared downstream identity signing secret, at least 32 characters.                                |
+| `RESPONSES_UPSTREAM_MODE`               | `foundry` by default; use `local` for local browser validation.                                   |
+| `RESPONSES_AGENT_ENDPOINT`              | Local default `http://127.0.0.1:8088/responses`; configure the approved upstream for hosted mode. |
+| `RESPONSES_TOKEN_SCOPE`                 | `https://ai.azure.com/.default`                                                                   |
+| `AZURE_CLIENT_ID`                       | Optional client ID for server-side Azure credentials.                                             |
+| `APPLICATIONINSIGHTS_CONNECTION_STRING` | Optional Azure Monitor trace export; propagation works without it.                                |
+| `ALLOWED_ORIGINS`                       | JSON array; defaults to `["http://localhost:5170"]`.                                              |
 
 Keep secrets in ignored environment files or protected deployment settings. Never log
 passwords, password hashes, JWTs, or Azure credentials. `AUTH_USERS` is not a login
 source. Seed demo identities separately using the [data module guide](../business-api/data/README.md#seed-demo-users).
 The shared models and session factory live in [banking-shared](../business-api/shared).
+
+## Distributed Tracing
+
+The BFF originates W3C trace context when the browser sends no tracing headers.
+FastAPI creates the server span and the BFF's instrumented HTTPX client injects
+`traceparent` into the agent request. Valid incoming context keeps its trace ID and
+`tracestate`; malformed context starts a new trace. A new trace normally has no
+`tracestate`. No frontend instrumentation or extra CORS headers are required.
+
+Trace providers are reused per service without replacing the global provider.
+`APPLICATIONINSIGHTS_CONNECTION_STRING` enables asynchronous Azure Monitor export;
+missing or invalid export configuration does not disable local propagation.
+The service resource is named `banking-assistant-responses-bff`. Instrumentation does
+not enable request-body, response-body, or authentication-header capture. Do not
+enable header capture for Authorization or the signed internal identity headers.
+
+Deterministic tests exercise outbound HTTPX instrumentation, concurrent trace isolation,
+optional export, and Account/Transaction MCP context reception. The agent uses its hosting
+SDK's instrumentation; context preservation through the deployed Foundry gateway and
+correlated Application Insights spans still need a separate hosted validation.
 
 ## Validation and Limits
 
@@ -96,7 +117,7 @@ Tests cover persisted user-repository queries (`find_by_email`, `find_customer_n
 authentication (`/auth/login`, `/auth/me`), and Responses proxy behavior. Account,
 card, and transaction contract tests moved to the
 [business-api suite](../business-api/README.md) along with the endpoints themselves.
-The focused BFF suite passed with 34 tests after the direct-API migration.
+The suite also covers W3C propagation and export configuration.
 
 The frontend keeps conversation IDs only in React state. A reload sends the next
 message without `conversation`; the BFF creates a new opaque ID bound to verified
