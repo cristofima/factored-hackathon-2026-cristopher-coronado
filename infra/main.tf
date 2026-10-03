@@ -181,9 +181,10 @@ resource "azapi_resource" "app" {
         # container; without --proxy-headers/--forwarded-allow-ips, Uvicorn ignores
         # X-Forwarded-Proto and emits http:// redirects (e.g. the mounted MCP app's own
         # trailing-slash redirect), which MCP clients correctly refuse as an HTTPS downgrade.
-        appCommandLine = "python -m uvicorn main:app --host 0.0.0.0 --port 8080 --proxy-headers --forwarded-allow-ips '*'"
+        appCommandLine = "python -m uvicorn main:app --host 0.0.0.0 --port 8080 --proxy-headers"
         appSettings = concat([
           { name = "WEBSITES_PORT", value = "8080" },
+          { name = "FORWARDED_ALLOW_IPS", value = "*" },
           { name = "APPLICATIONINSIGHTS_CONNECTION_STRING", value = azurerm_application_insights.main.connection_string },
           { name = "SCM_DO_BUILD_DURING_DEPLOYMENT", value = "true" },
           { name = "PORT", value = "8080" }

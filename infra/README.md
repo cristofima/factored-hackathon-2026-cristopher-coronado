@@ -2,7 +2,7 @@
 
 The root `azure.yaml` runs `azd provision` against this directory and `azd deploy` for four Linux App Services: account, transaction, the Responses BFF, and the web frontend. The hosted agent has its own `app/agent/azure.yaml` and is not an App Service or a Terraform resource in this stack. Terraform uses an existing resource group and provisions one shared Linux plan, four web sites, Log Analytics, Application Insights, Blob storage, PostgreSQL, and a dedicated Foundry account and project. The separate Foundry azd project deploys the hosted agent; it consumes the project endpoint provisioned here.
 
-This stack intentionally omits Cosmos DB and Document Intelligence. Foundry Responses maintains conversation state when requests link turns with a `conversation` ID or `previous_response_id`; the BFF binds those conversations to the authenticated user. Before production use, verify the hosted agent and BFF identities have only the required Foundry permissions. Do not import role assignments targeting the removed legacy backend App Service identity for a different principal. Blob storage is still provisioned for existing business-service compatibility and remains publicly reachable unless a private endpoint or VNet path is designed separately.
+The BFF binds its opaque conversation tokens to the authenticated user, but only forwards them upstream in local mode. Hosted mode does not yet link turns using platform conversation IDs or `previous_response_id`; see the [BFF conversation guide](../app/responses-bff/README.md#validation-and-limits). Before production use, verify the hosted agent and BFF identities have only the required Foundry permissions. Do not import role assignments targeting the removed legacy backend App Service identity for a different principal. Blob storage is still provisioned for existing business-service compatibility and remains publicly reachable unless a private endpoint or VNet path is designed separately.
 
 ## Prerequisites
 
@@ -59,15 +59,21 @@ Terraform provisions a shared Key Vault (`azurerm_key_vault.secrets`, RBAC-autho
 protection on) and configures `JWT_SECRET_KEY`/`INTERNAL_IDENTITY_SECRET` on the BFF,
 Account, and Transaction App Services as `@Microsoft.KeyVault(SecretUri=...)` app setting
 references, resolved by each service's system-assigned managed identity (granted
-`Key Vault Secrets User` on the vault). Terraform never sets the secret _values_
-themselves (no `azurerm_key_vault_secret` resource); upload each one exactly once, by hand,
+`Key Vault Secrets User` on the vault). Terraform does not manage the values of these
+two identity secrets; upload each one exactly once, by hand,
 with `az keyvault secret set --vault-name <AZURE_KEY_VAULT_NAME> --name jwt-secret-key --value <...>`
-and the same for `internal-identity-secret`, so a raw value never enters `tfstate`.
+and the same for `internal-identity-secret`, so these raw identity secret values never enter `tfstate`.
+Terraform does manage the `database-url` secret through
+`azurerm_key_vault_secret.database_url`, and all three Python services consume it through
+a `DATABASE_URL` Key Vault reference. Its connection string and the PostgreSQL admin
+password are present in Terraform state; protect the remote state accordingly.
 Account and Transaction verify that same
 browser-issued JWT directly for their REST endpoints, so all three services resolve the
 identical `JWT_SECRET_KEY` secret; keep it a single shared value. Terraform sets
 `CORS_ALLOWED_ORIGINS` for Account and Transaction to the deployed web app's origin
-directly (no secret involved), alongside the existing native App Service CORS configuration.
+directly (no secret involved). Native App Service CORS is explicitly cleared on Account,
+Transaction, and the BFF; their Python `CORSMiddleware` implementations are the sole CORS
+owners. The BFF receives its allowed web origin through `ALLOWED_ORIGINS`.
 Foundry hosted agents have no native Key Vault app-setting reference, so
 `cd-hosted-agent.yaml` resolves `internal-identity-secret` itself with `az keyvault secret
 show` before passing it to `azd -C app/agent env set`; see
@@ -76,14 +82,23 @@ receives `Foundry Agent Consumer` and a custom project-scoped role containing
 `Microsoft.CognitiveServices/accounts/agents/UserIdentityImpersonation/action`. Do not send
 Azure credentials or the delegated identity header from the browser.
 
-Important: both App Service resources managing these app settings
-(`azapi_resource.responses_bff`, `azapi_update_resource.api_cors`) already carry
-`lifecycle { ignore_changes = [body.properties.siteConfig.appSettings] }` to stop
-`azd provision`/`terraform apply` from wiping previously patched-in settings on every run.
-That means a brand-new environment picks up the Key Vault reference app settings at
-creation time automatically, but an already-provisioned environment needs them added once,
-by hand, with `az webapp config appsettings set`, since `ignore_changes` prevents a normal
-`terraform apply` from reaching an already-existing resource's `appSettings` array at all.
+Terraform owns the complete app settings arrays through `azapi_resource.app` and
+`azapi_resource.responses_bff`. There is no separate `api_cors` patch resource or
+`ignore_changes` rule for these arrays. Provisioning applies settings to both new and
+existing sites; declare persistent changes in Terraform rather than patching settings
+manually, because a later provision can overwrite those manual changes.
+
+Account and Transaction start with `python -m uvicorn main:app --host 0.0.0.0 --port 8080 --proxy-headers`.
+Uvicorn reads `FORWARDED_ALLOW_IPS=*` from the App Service environment
+to trust the forwarded HTTPS scheme. Keeping the wildcard out of the startup command
+avoids shell expansion by Oryx. This trust setting is scoped to the controlled App Service
+proxy environment. The command imports `main:app`; it does not execute the
+`if __name__ == "__main__"` block used by `python main.py` locally.
+
+Changes to these startup commands or app settings require provisioning, not a service
+code deploy. Code or dependency changes still require deployment. After provisioning,
+verify service startup, HTTPS redirects, and browser CORS preflight responses; successful
+Terraform validation alone does not prove runtime health.
 
 By convention in this repository, the frontend App Service name is `app-banking-web-<env>` (for example, `app-banking-web-development`). Keep this explicit naming when adding environments so the web workload is distinguishable from account/transaction services.
 
