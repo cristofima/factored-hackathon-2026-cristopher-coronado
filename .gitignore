@@ -9,6 +9,7 @@ plan/
 # config snapshot are run-local state, not reviewable source)
 .agent_configs/
 app/agent/evaluators/
+evals/results/
 
 **/.terraform/
 *.tfstate

@@ -46,6 +46,22 @@ Reusable building blocks live in [../actions](../actions):
 | `cd-frontend.yaml`      | Deploy frontend Web App Service         | `app/frontend/banking-web/**`          | repository root  | `azd deploy web --no-prompt`                             |
 | `cd-hosted-agent.yaml`  | Deploy Foundry hosted agent             | `app/agent/**` and `workflow_dispatch` | `app/agent`      | `azd -C app/agent deploy home-banking-agent --no-prompt` |
 
+## Replay smoke on PRs
+
+[ci-hosted-agent.yml](ci-hosted-agent.yml) also validates replay harness changes
+and Account/Transaction MCP tool contracts. After offline tests, same-repository
+PRs run the three synthetic cases with a real model using `azure/login@v2`, OIDC,
+and the `Development` environment. Required variables are `AZURE_CLIENT_ID`,
+`AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `FOUNDRY_PROJECT_ENDPOINT`, and
+`MODEL_DEPLOYMENT_NAME`. The federated identity must be authorized to call the
+model. No Key Vault secret resolution, deployment, or provisioning is performed.
+
+Missing configuration or incomplete/failed evidence fails the smoke job. A sticky
+comment and job summary show protocol statuses; full synthetic evidence remains
+in 14-day artifacts. Fork PRs only receive a non-execution notice. This job is not
+a dispute quality or real authorization gate. Actual PR execution, OIDC access,
+and required-check settings are unverified. See the [evaluation guide](../../evals/README.md#pr-smoke-check).
+
 ## Why two azd project roots exist
 
 This repository uses two independent `azure.yaml` manifests:
