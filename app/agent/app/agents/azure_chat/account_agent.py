@@ -1,6 +1,7 @@
 import logging
 
 from agent_framework import Agent, BaseChatClient, MCPStreamableHTTPTool
+from mcp import ClientSession
 
 from app.common.internal_identity import mcp_header_provider
 from app.helpers.tool_error_middleware import OwnershipErrorMiddleware
@@ -37,10 +38,13 @@ class AccountAgent :
         azure_chat_client: BaseChatClient,
         account_mcp_server_url: str,
         internal_identity_secret: str,
-    ):
+        *,
+        account_mcp_session: ClientSession | None = None,
+    ) -> None:
         self.azure_chat_client = azure_chat_client
         self.account_mcp_server_url = account_mcp_server_url
         self.internal_identity_secret = internal_identity_secret
+        self.account_mcp_session = account_mcp_session
 
 
 
@@ -52,6 +56,7 @@ class AccountAgent :
       account_mcp_server = MCPStreamableHTTPTool(
                 name="Account MCP server client",
                 url=self.account_mcp_server_url,
+                session=self.account_mcp_session,
                 header_provider=mcp_header_provider(self.internal_identity_secret),
       )
       
