@@ -1,0 +1,50 @@
+name: Deploy Transaction API
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "app/business-api/transaction/**"
+      - "!app/business-api/transaction/**/*.md"
+      - "app/business-api/shared/**"
+      - ".github/workflows/cd-transaction.yaml"
+      - ".github/actions/cd-azure/**"
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: Development
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/cd-azure
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          location: ${{ vars.AZURE_LOCATION }}
+          resource-group: ${{ vars.AZURE_RESOURCE_GROUP }}
+      - name: Validate required app settings
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+        run: |
+          set -euo pipefail
+          APP_NAME="$(az resource list --resource-type Microsoft.Web/sites --query "[?resourceGroup=='$AZURE_RESOURCE_GROUP' && contains(name, 'transaction')].name | [0]" --output tsv)"
+          if [ -z "$APP_NAME" ]; then
+            echo "::error::Transaction App Service was not found in $AZURE_RESOURCE_GROUP"
+            exit 1
+          fi
+          for setting in DATABASE_URL CORS_ALLOWED_ORIGINS JWT_SECRET_KEY INTERNAL_IDENTITY_SECRET; do
+            existing_value="$(az webapp config appsettings list --resource-group "$AZURE_RESOURCE_GROUP" --name "$APP_NAME" --query "[?name=='$setting'].value | [0]" --output tsv)"
+            if [ -z "$existing_value" ]; then
+              echo "::error::$setting app setting is missing on $APP_NAME. Run 'azd provision' (Terraform) before deploying."
+              exit 1
+            fi
+          done
+      - name: Deploy transaction
+        run: azd deploy transaction --no-prompt
