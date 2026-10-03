@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { listSupportCases } from "@/api/disputeClient";
+import { startDisputePolling } from "@/api/disputePolling";
 import { errorTranslationKey } from "@/api/errors";
 import type { SupportCase } from "@/models/SupportCase";
 import { useAuth } from "@/context/AuthContext";
@@ -19,22 +20,31 @@ export default function SupportCases() {
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    const controller = new AbortController();
+    setCases([]);
     setLoading(true);
+  }, [user?.id]);
+
+  useEffect(() => {
     setError(null);
-    listSupportCases(controller.signal)
-      .then((result) => {
-        if (!controller.signal.aborted) setCases(result);
-      })
-      .catch((cause: unknown) => {
-        if (!controller.signal.aborted) {
-          setError(errorTranslationKey(cause, "Support cases are unavailable"));
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-    return () => controller.abort();
+    return startDisputePolling((signal) =>
+      listSupportCases(signal)
+        .then((result) => {
+          if (!signal.aborted) {
+            setCases(result);
+            setError(null);
+          }
+        })
+        .catch((cause: unknown) => {
+          if (!signal.aborted) {
+            setError(
+              errorTranslationKey(cause, "Support cases are unavailable"),
+            );
+          }
+        })
+        .finally(() => {
+          if (!signal.aborted) setLoading(false);
+        }),
+    );
   }, [user?.id, attempt]);
 
   return (
@@ -63,7 +73,7 @@ export default function SupportCases() {
       {!loading && !error && cases.length === 0 && (
         <output className="block">{t("No support cases yet.")}</output>
       )}
-      {!loading && !error && cases.length > 0 && (
+      {cases.length > 0 && (
         <div className="space-y-3">
           {cases.map((item) => (
             <Link key={item.caseId} to={`/support-cases/${item.caseId}`}>
