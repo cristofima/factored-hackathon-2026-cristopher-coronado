@@ -5,6 +5,9 @@ description = "Shared SQLModel schema and database helpers for the banking servi
 requires-python = ">=3.11"
 dependencies = ["psycopg[binary]>=3.3.3", "sqlmodel>=0.0.37"]
 
+[project.optional-dependencies]
+telemetry = ["azure-monitor-opentelemetry==1.8.10"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
