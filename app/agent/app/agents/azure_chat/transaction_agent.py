@@ -70,14 +70,16 @@ class TransactionHistoryAgent :
           name="Account MCP server client",
           url=self.account_mcp_server_url,
           session=self.account_mcp_session,
-          header_provider=mcp_header_provider(self.internal_identity_secret),
+          header_provider=(mcp_header_provider(self.internal_identity_secret)
+                           if self.account_mcp_session is None else None),
        )
       
       transaction_mcp_server = MCPStreamableHTTPTool(
           name="Transaction MCP server client",
           url=self.transaction_mcp_server_url,
           session=self.transaction_mcp_session,
-          header_provider=mcp_header_provider(self.internal_identity_secret),
+          header_provider=(mcp_header_provider(self.internal_identity_secret)
+                           if self.transaction_mcp_session is None else None),
      )  
       
       return Agent(
