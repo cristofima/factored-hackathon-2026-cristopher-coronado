@@ -5,6 +5,8 @@ from logging_config import configure_logging
 from mcp_tools import mcp
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from banking_shared.tracing import create_tracer_provider
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from routers import router as account_routers
 import uvicorn
 
@@ -20,6 +22,12 @@ def create_app() -> FastAPI:
     mcp_app = mcp.http_app(path='/')
     app = FastAPI(title="Account API and MCP server", lifespan=mcp_app.lifespan)
     app.mount("/mcp", mcp_app)
+    FastAPIInstrumentor.instrument_app(
+        app,
+        tracer_provider=create_tracer_provider(
+            "banking-assistant-account", os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING")
+        ),
+    )
 
     # Include the transaction router
     app.include_router(account_routers, prefix="/api", tags=["accounts"]) 
@@ -47,5 +55,7 @@ if __name__ == "__main__":
     profile = os.environ.get("PROFILE", "prod")
     port = 8070 if profile == "dev" else 8080
     logger.info(f"Starting account service server with profile: {profile}, port: {port}")
-    #run app as uvicorn server
-    uvicorn.run("main:app", host="0.0.0.0", port=port)
+    # App Service terminates TLS at its own front end and forwards plain HTTP to
+    # the container, so Uvicorn must trust X-Forwarded-Proto to avoid generating
+    # http:// redirects (e.g. the mounted MCP app's trailing-slash redirect).
+    uvicorn.run("main:app", host="0.0.0.0", port=port, proxy_headers=True, forwarded_allow_ips="*")

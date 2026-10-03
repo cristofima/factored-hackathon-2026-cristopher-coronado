@@ -119,7 +119,17 @@ async def create_response(
     settings: Settings = request.app.state.settings
     conversation = requested_conversation or _conversation_token(user.sub, settings)
     _validate_conversation(conversation, user.sub, settings)
-    upstream_payload = {**payload, "conversation": conversation}
+
+    # The hosted Foundry Responses gateway validates "conversation" against its own
+    # platform-managed Conversation object ids (e.g. "conv_..."); our opaque, BFF-signed
+    # token can never match that format and upstream rejects it as a malformed identifier.
+    # Only the local agent host (which treats "conversation" as an arbitrary state-store
+    # key) can accept it, so omit the field entirely in foundry mode.
+    upstream_payload = dict(payload)
+    if settings.responses_upstream_mode == "local":
+        upstream_payload["conversation"] = conversation
+    else:
+        upstream_payload.pop("conversation", None)
 
     client: httpx.AsyncClient = request.app.state.http_client
     upstream_request = client.build_request(
