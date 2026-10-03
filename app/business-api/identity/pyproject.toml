@@ -1,0 +1,32 @@
+[project]
+name = "banking-identity"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+  "banking-shared",
+  "fastapi==0.141.1",
+  "uvicorn==0.54.0",
+  "pyjwt==2.10.1",
+  "pwdlib[argon2]>=0.2,<1",
+  "pydantic-settings>=2,<3",
+  "psycopg[binary]>=3.2,<4",
+]
+
+[project.scripts]
+banking-bootstrap-admin = "identity.bootstrap:main"
+
+[dependency-groups]
+dev = ["pytest>=8,<10", "httpx==0.28.1"]
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["identity*"]
+
+[tool.uv.sources]
+banking-shared = { path = "../shared", editable = true }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
