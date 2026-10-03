@@ -8,12 +8,12 @@ Data Hackathon 2026, extending the public
 coherent workflow: Account/Transaction inquiries through a conversational agent, with
 a single persisted support-case layer on top for transaction disputes.
 
-The system has four moving parts that talk to each other in a fixed order: a React
-frontend, a Responses BFF that owns the browser trust boundary, a Responses agent
-(Microsoft Agent Framework `HandoffBuilder`, served through Foundry Responses) that
-does triage and conversation, and two FastMCP business services (Account,
-Transaction) that own the data and the business rules. PostgreSQL is the only
-operational data store; Terraform provisions the Azure App Service stack.
+The system combines a React frontend, a database-free Responses BFF that owns the
+browser trust boundary, dedicated Identity for credentials and lifecycle, a Responses
+agent (Microsoft Agent Framework `HandoffBuilder`, served through Foundry Responses)
+for triage and conversation, and two FastMCP business services (Account, Transaction)
+for financial data and business rules. PostgreSQL is the only operational data store;
+Terraform defines the five-site App Service stack separately from the hosted agent.
 
 The one deliberate architectural split to internalize before changing anything: the
 BFF is scoped to identity and chat-proxying only. The browser calls Account and
@@ -93,11 +93,14 @@ dispute triage threshold. Alembic migrations live alongside the SQLModel schema.
 
 ### `infra/`
 
-Terraform only (no Bicep in this repo). One Linux App Service plan, four App
-Services (`account`, `transaction`, Responses BFF, `web`), Log Analytics,
-Application Insights, and a Foundry account/project. Identity is implemented
-locally but its additional cloud service, database grants and rollout remain pending;
-the existing Terraform topology is not deployment evidence for this extraction.
+Terraform only (no Bicep in this repo). One Linux App Service plan, five App
+Services (`identity`, `account`, `transaction`, Responses BFF, `web`), Log Analytics,
+Application Insights, and a Foundry account/project. Identity has a dedicated resource
+and database-secret reference; consumers use its computed HTTPS hostname. Managed
+identities receive secret-scoped access; BFF has no database setting/grant. Root azd
+uses service-tag discovery, while standalone Identity CD uses its name output.
+Provisioning, remote DB grants, migrations and coordinated rollout remain separate
+acceptance gates; Terraform declarations are not deployed-isolation evidence.
 
 ### `app/agent/azure.yaml` vs root `azure.yaml`
 

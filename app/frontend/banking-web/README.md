@@ -40,6 +40,22 @@ the source tree, but are not used by the in-scope financial screens.
 
 The frontend signs in through the [Responses BFF](../../responses-bff/README.md) at `/auth/login`, keeps only the short-lived application JWT in browser storage, and restores verified identity through `/auth/me`. Profiles require a supported role and positive `identity_version`; only customers carry `customer_id`. Navigation uses the persisted name, with an email fallback. The frontend does not create fixed bearer tokens or synthetic profiles.
 
+## App Service Deployment
+
+[Frontend CD](../../../.github/workflows/cd-frontend.yaml) requires GitHub
+`Development` Variable `AZURE_WEB_APP_NAME`, manually populated from Terraform
+output `AZURE_WEB_APP_NAME`. Shared setup exports it as azd `AZURE_WEB_APP_NAME`; the root
+[manifest](../../../azure.yaml) targets that app through `resourceName`, not tags.
+The provisioned naming convention remains `app-banking-web-<env>`.
+
+The `VITE_*` settings above are build-time configuration, separate from the
+App Service name. Use actual service hostname outputs for those URLs. Browser
+authentication and chat stay behind the BFF; financial reads go directly to
+Account and Transaction. No direct Identity or Foundry browser URL is needed.
+See the [workflow guide](../../../.github/workflows/README.md#frontend-variables-cd-frontendyaml)
+and [infrastructure guide](../../../infra/README.md). A successful build or deploy
+alone does not establish browser or deployed financial acceptance.
+
 ## Identity Workspaces
 
 - Customers retain the banking routes, direct Account/Transaction reads and BFF chat.
