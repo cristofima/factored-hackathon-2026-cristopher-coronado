@@ -112,7 +112,9 @@ The implemented dispute workflow and its evaluation evidence are separate:
 - The [isolated MCP replay](evals/README.md#isolated-mcp-replay) uses the production
   workflow with synthetic tools and a real model when executed. Its three current
   cases are Account/Transaction smoke checks, not dispute workflow evaluations;
-  real-model execution and the PR quality gate remain pending.
+  real-model execution remains unverified. A [PR protocol smoke check](evals/README.md#pr-smoke-check)
+  is configured with a persistent comment and transcript artifacts; dispute quality
+  and baseline comparison remain pending.
 
 The next priority is dispute-specific evaluation of intake, customer approval,
 fast-track versus escalation, safe refusals, and grounded status explanations.

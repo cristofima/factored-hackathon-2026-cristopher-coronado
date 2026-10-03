@@ -129,10 +129,32 @@ Existing remote objects and the native azd evaluation recipe are unchanged.
 
 ### Verification Status
 
-Eight offline replay tests passed in the implementation session. The CLI help
-path was checked without model authentication. A real-model replay run and manual
-behavioral review remain pending; offline tests do not establish measured agent
-quality. PR execution of real-model replay is not yet configured in this repo.
+Twenty offline replay/report tests passed in the CI implementation session. A
+real-model run and manual behavioral review remain pending; offline tests do not
+establish measured agent quality.
+
+### PR Smoke Check
+
+[Hosted Agent CI](../.github/workflows/ci-hosted-agent.yml) runs the three committed
+smoke cases after offline tests for same-repository PRs targeting `main` or
+`develop`. Changes to the replay harness and MCP tool contracts also trigger it.
+It uses Azure OIDC in the `Development` environment, with `AZURE_CLIENT_ID`,
+`AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `FOUNDRY_PROJECT_ENDPOINT`, and
+`MODEL_DEPLOYMENT_NAME`. The federated identity needs access to the model; no
+production identity secrets, BFF, database, or real MCP service are used.
+
+[The report gate](replay_summary.py) rejects missing/invalid reports, empty or
+duplicate datasets, partial case execution, protocol errors, unused replies, and
+missing answer/transcript evidence. CI writes a job summary, updates one marked
+PR comment, and retains synthetic transcripts and reports as artifacts for 14
+days. The comment contains controlled statuses, not model answers or raw errors.
+The job has a 15-minute limit; superseded PR runs are cancelled. Fork PRs receive
+an explicit non-execution notice, without Azure credentials or write permissions.
+
+This is a protocol smoke check, not `eval-quality` or `eval-authz`. Branch protection,
+OIDC/model access, comment publication, and an actual PR run still require runtime
+verification. The workflow does not submit Foundry evaluation runs or measure
+dispute quality or baseline improvement.
 
 ## Held-Out Status
 

@@ -111,8 +111,11 @@ The [evaluation guide](../../evals/README.md) separates three evidence levels:
 The replay's three current cases cover balance lookup, canned denial, and empty
 transactions, not disputes. Offline tests validate the harness; real-model
 execution is pending. `protocol_passed` checks calls and completion, not grounding,
-locale, approval correctness, or dispute success. Behavioral review is pending,
-and the existing CI workflow does not run a real-model replay quality gate.
+locale, approval correctness, or dispute success. Behavioral review is pending.
+[Hosted Agent CI](../../.github/workflows/ci-hosted-agent.yml) now configures a
+same-repository PR-only real-model protocol smoke check, sticky PR report, and
+synthetic transcript artifacts. Actual PR/OIDC/model execution remains unverified;
+this is not a dispute quality gate. See the [replay guide](../../evals/README.md#pr-smoke-check).
 
 Next coverage must prioritize dispute identification, clarification, approval and
 decline across turns, low/high/missing-score tool outcomes, safe refusals, and
@@ -122,7 +125,7 @@ service/integration checks. Generic MCP consent is not the business approval gat
 
 Replay reports use `home-banking-agent-mcp-replay-eval` and
 `home-banking-agent-mcp-replay-eval run` as display names. Reports are currently
-local and `foundry_submission: not_submitted`; they do not create remote runs.
+local/CI artifacts and `foundry_submission: not_submitted`; they do not create remote runs.
 Native hosted evaluation is blocked by the required signed request identity, even
 for prompts that need no tools. Hosted deployment success does not close that gate.
 
