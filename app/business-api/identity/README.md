@@ -138,6 +138,45 @@ the existing `run_pipeline.py` only if the approved customer data needs loading,
 then separately seed selected customer users and bootstrap the first administrator.
 Ingestion never provisions users or an administrator automatically.
 
+## CI/CD
+
+[Identity CI](../../../.github/workflows/ci-identity.yml) runs Python 3.11 dependency
+sync, syntax checks and synthetic tests on matching pushes and pull requests. It
+uploads JUnit evidence and rejects stale deployment requirements through the shared
+`ci-python` action's optional `deployment-requirements: requirements.txt` input.
+[Identity CD](../../../.github/workflows/cd-identity.yaml) repeats validation before
+OIDC-authenticated deployment to an existing App Service in `Development`. It only
+deploys `main`; OpenAPI exposure and runtime readiness checks are deferred.
+
+The root [azd manifest](../../../azure.yaml) targets Identity through the
+explicit `resourceName: ${AZURE_IDENTITY_APP_NAME}`, matching the other services, and copies
+`banking_shared` into its deployment package. [Terraform](../../../infra/main.tf)
+defines the fifth App Service and exports `AZURE_IDENTITY_APP_NAME`
+plus `IDENTITY_URI` from its actual hostname. CI/CD requires the app-name
+output as a GitHub Development variable: deployment and preflight target that
+exact name, just like the other services. Identity reuses Terraform's existing `database-url` secret with
+secret-scoped managed-identity access and coordinated consumer settings; the BFF
+has no database setting. This shared PostgreSQL administrator credential is an
+approved prototype tradeoff, not least-privilege database isolation. See the
+[infrastructure guide](../../../infra/README.md) for authorized rollout and rollback.
+Provisioning, approved migrations, network/database grants, secret configuration
+and deployed acceptance remain separate gates; neither workflow creates users or
+bootstraps administrators.
+See [workflow configuration](../../../.github/workflows/README.md#identity-deployment-cd-identityyaml)
+for all GitHub variables and App Service settings, including the factory startup command.
+
+Regenerate the Oryx runtime artifact from the dependency manifest for Linux Python 3.11
+when dependencies change, using the repository's `uv pip compile` convention:
+
+```powershell
+uv pip compile app\business-api\identity\pyproject.toml --no-emit-package banking-shared --python-version 3.11 --python-platform x86_64-unknown-linux-gnu -o app\business-api\identity\requirements.txt
+```
+
+The excluded shared distribution is supplied as source by the packaging hooks;
+its transitive runtime dependencies remain in the compiled requirements. Successful
+CI, metadata preflight or deployment does not establish startup, hosted login or
+PostgreSQL acceptance.
+
 ## Verification boundaries
 
 ```powershell

@@ -32,19 +32,21 @@ Reusable building blocks live in [../actions](../actions):
 
 ## Workflow inventory
 
-| Workflow file           | Purpose                                 | Trigger path                           | azd project root | Main command                                             |
-| ----------------------- | --------------------------------------- | -------------------------------------- | ---------------- | -------------------------------------------------------- |
-| `ci-account.yml`        | Validate Account API Python build/tests | `app/business-api/account/**`          | n/a              | Shared action (`ci-python`)                              |
-| `ci-transaction.yml`    | Validate Transaction API build/tests    | `app/business-api/transaction/**`      | n/a              | Shared action (`ci-python`)                              |
-| `ci-responses-bff.yml`  | Validate Responses BFF build/tests      | `app/responses-bff/**`                 | n/a              | Shared action (`ci-python`)                              |
-| `ci-hosted-agent.yml`   | Validate hosted-agent build/tests       | `app/agent/**`                         | n/a              | Shared action (`ci-python`)                              |
-| `ci-data.yml`           | Validate data module build/tests        | `app/business-api/data/**`             | n/a              | Shared action (`ci-python`)                              |
-| `ci-frontend.yml`       | Validate frontend lint/tests/build      | `app/frontend/banking-web/**`          | n/a              | Shared action (`ci-node`)                                |
-| `cd-account.yaml`       | Deploy Account API App Service          | `app/business-api/account/**`          | repository root  | `azd deploy account --no-prompt`                         |
-| `cd-transaction.yaml`   | Deploy Transaction API App Service      | `app/business-api/transaction/**`      | repository root  | `azd deploy transaction --no-prompt`                     |
-| `cd-responses-bff.yaml` | Deploy JWT-protected Responses BFF      | `app/responses-bff/**`                 | repository root  | `azd deploy responses-bff --no-prompt`                   |
-| `cd-frontend.yaml`      | Deploy frontend Web App Service         | `app/frontend/banking-web/**`          | repository root  | `azd deploy web --no-prompt`                             |
-| `cd-hosted-agent.yaml`  | Deploy Foundry hosted agent             | `app/agent/**` and `workflow_dispatch` | `app/agent`      | `azd -C app/agent deploy home-banking-agent --no-prompt` |
+| Workflow file           | Purpose                                                   | Trigger path                           | azd project root | Main command                                             |
+| ----------------------- | --------------------------------------------------------- | -------------------------------------- | ---------------- | -------------------------------------------------------- |
+| `ci-identity.yml`       | Validate Identity build/tests and deployment requirements | `app/business-api/identity/**`         | n/a              | Shared action (`ci-python`)                              |
+| `cd-identity.yaml`      | Test and deploy existing Identity App Service             | `app/business-api/identity/**`         | repository root  | `azd deploy identity --no-prompt`                        |
+| `ci-account.yml`        | Validate Account API Python build/tests                   | `app/business-api/account/**`          | n/a              | Shared action (`ci-python`)                              |
+| `ci-transaction.yml`    | Validate Transaction API build/tests                      | `app/business-api/transaction/**`      | n/a              | Shared action (`ci-python`)                              |
+| `ci-responses-bff.yml`  | Validate Responses BFF build/tests                        | `app/responses-bff/**`                 | n/a              | Shared action (`ci-python`)                              |
+| `ci-hosted-agent.yml`   | Validate hosted-agent build/tests                         | `app/agent/**`                         | n/a              | Shared action (`ci-python`)                              |
+| `ci-data.yml`           | Validate data module build/tests                          | `app/business-api/data/**`             | n/a              | Shared action (`ci-python`)                              |
+| `ci-frontend.yml`       | Validate frontend lint/tests/build                        | `app/frontend/banking-web/**`          | n/a              | Shared action (`ci-node`)                                |
+| `cd-account.yaml`       | Deploy Account API App Service                            | `app/business-api/account/**`          | repository root  | `azd deploy account --no-prompt`                         |
+| `cd-transaction.yaml`   | Deploy Transaction API App Service                        | `app/business-api/transaction/**`      | repository root  | `azd deploy transaction --no-prompt`                     |
+| `cd-responses-bff.yaml` | Deploy JWT-protected Responses BFF                        | `app/responses-bff/**`                 | repository root  | `azd deploy responses-bff --no-prompt`                   |
+| `cd-frontend.yaml`      | Deploy frontend Web App Service                           | `app/frontend/banking-web/**`          | repository root  | `azd deploy web --no-prompt`                             |
+| `cd-hosted-agent.yaml`  | Deploy Foundry hosted agent                               | `app/agent/**` and `workflow_dispatch` | `app/agent`      | `azd -C app/agent deploy home-banking-agent --no-prompt` |
 
 ## Replay smoke on PRs
 
@@ -66,7 +68,7 @@ and required-check settings are unverified. See the [evaluation guide](../../eva
 
 This repository uses two independent `azure.yaml` manifests:
 
-1. Root [azure.yaml](../../azure.yaml): App Service stack (`account`, `transaction`, `responses-bff`, `web`).
+1. Root [azure.yaml](../../azure.yaml): App Service deployments (`identity`, `account`, `transaction`, `responses-bff`, `web`), provisioned through root Terraform. Each CD workflow requires its explicit App Service name variable, exported into azd and bound by the manifest’s `resourceName`. Python preflight looks up that exact name; tags do not select deployment targets.
 2. Agent [azure.yaml](../../app/agent/azure.yaml): Foundry hosted-agent stack (`home-banking-agent`).
 
 For that reason, `cd-hosted-agent.yaml` always uses `azd -C app/agent ...` so it resolves the agent manifest explicitly and never the root manifest.
@@ -83,21 +85,44 @@ Set these in **Settings > Environments > Development > Variables**.
 - `AZURE_LOCATION`
 - `AZURE_RESOURCE_GROUP`
 
+Root CD also requires a GitHub `Development` variable whose value matches its
+service’s Terraform name output. Terraform outputs, azd variables, root manifest
+bindings and GitHub Variables all use the same `_APP_NAME` names:
+
+| Service       | Required GitHub variable       | Terraform output / azd variable |
+| ------------- | ------------------------------ | ------------------------------- |
+| Identity      | `AZURE_IDENTITY_APP_NAME`      | `AZURE_IDENTITY_APP_NAME`       |
+| Account       | `AZURE_ACCOUNT_APP_NAME`       | `AZURE_ACCOUNT_APP_NAME`        |
+| Transaction   | `AZURE_TRANSACTION_APP_NAME`   | `AZURE_TRANSACTION_APP_NAME`    |
+| Responses BFF | `AZURE_RESPONSES_BFF_APP_NAME` | `AZURE_RESPONSES_BFF_APP_NAME`  |
+| Web           | `AZURE_WEB_APP_NAME`           | `AZURE_WEB_APP_NAME`            |
+
+Shared Azure setup validates the GitHub value and exports it under the same
+azd variable with `azd env set`. Terraform outputs are not automatically published
+to GitHub Variables.
+Missing/invalid names fail before authentication. The separate Foundry agent
+project omits both App Service name inputs.
+
 ### Shared secrets Key Vault (`cd-responses-bff.yaml`, `cd-account.yaml`, `cd-transaction.yaml`, `cd-hosted-agent.yaml`)
 
-`JWT_SECRET_KEY` (the application JWT signing key, at least 32 characters) and
-`INTERNAL_IDENTITY_SECRET` (the BFF-to-agent signed identity secret, at least 32
-characters) live once in the shared Key Vault Terraform provisions
+`JWT_SECRET_KEY` (application JWT), `AUTH_INTERNAL_SECRET` (Identity introspection),
+and `INTERNAL_IDENTITY_SECRET` (agent transport) are distinct secrets, each at least
+32 characters, stored in the shared Key Vault Terraform provisions
 (`azurerm_key_vault.secrets` in `infra/main.tf`), not as GitHub Environment Secrets.
+Preflights inspect reference syntax and App Service `Resolved` metadata only;
+they never retrieve resolved secret values or prove their length.
 
-- Account, Transaction, and the Responses BFF App Services reference both secrets as
-  `@Microsoft.KeyVault(SecretUri=...)` app settings, declared directly in `infra/main.tf`
-  and resolved by each App Service's system-assigned managed identity (granted
-  `Key Vault Secrets User` on the vault). No workflow writes these values anymore;
-  `cd-account.yaml`/`cd-transaction.yaml`/`cd-responses-bff.yaml` only validate that
-  `JWT_SECRET_KEY`/`INTERNAL_IDENTITY_SECRET` (plus `DATABASE_URL`/`CORS_ALLOWED_ORIGINS`
-  for Account/Transaction) are already present on the target App Service before deploying,
-  failing fast with an `azd provision` hint if Terraform hasn't run yet.
+- Python App Services use versionless `@Microsoft.KeyVault(SecretUri=...)` references,
+  resolved by their system-assigned managed identities (`Key Vault Secrets User`).
+  The shared `appservice-preflight` action requires `Resolved` reference status for
+  JWT/introspection secrets and database URLs; consumers also require the agent
+  transport secret. Account/Transaction require `CORS_ALLOWED_ORIGINS`.
+- Consumers require remote HTTPS `AUTH_USERS_ENDPOINT` without loopback/IP literals,
+  credentials, query or fragment, and explicit nonempty `JWT_ISSUER`/`JWT_AUDIENCE`.
+  The DB-free Responses BFF rejects any `DATABASE_URL` app setting, including an empty one.
+  These are configuration gates, not connectivity, login or matching-secret evidence.
+  OIDC needs App Service configuration/reference-metadata read and deployment permissions,
+  not permission to retrieve vault values for these preflights.
 - Foundry hosted agents have no native Key Vault app-setting reference, so
   `cd-hosted-agent.yaml` resolves `internal-identity-secret` itself with
   `az keyvault secret show`, masks it with `::add-mask::`, and exports it through
@@ -109,9 +134,64 @@ characters) live once in the shared Key Vault Terraform provisions
   run the `cd-hosted-agent.yaml` resolve step; grant it via Terraform's
   `github_actions_principal_id` variable (the service principal's object ID, not its
   client/app ID) or with `az role assignment create` directly.
-- Terraform never writes the secret _values_ themselves (`azurerm_key_vault_secret` is
-  deliberately not used); they're uploaded once, by hand, with `az keyvault secret set`,
-  so a raw value never enters `tfstate`.
+- Authentication secret values are supplied separately, not managed as Terraform
+  secret resources. Terraform does manage `database-url` using its generated
+  PostgreSQL administrator credential, shared by Identity, Account and Transaction.
+  That URL/password enters sensitive Terraform state; restrict backend and saved-plan
+  access. Sensitive marking does not remove values from state.
+
+### Identity deployment (`cd-identity.yaml`)
+
+Identity uses the five shared Azure variables plus `AZURE_IDENTITY_APP_NAME` in
+`Development`, like the other App Service workflows. Root azd deployment
+and preflight target that exact physical name. The OIDC identity needs
+permission to read app configuration and deploy that app. No Identity passwords or
+JWT/introspection secrets belong in GitHub variables or workflow logs.
+
+Identity CI uses Python 3.11, synthetic pytest tests and JUnit artifacts. Both CI and
+CD opt into the shared `ci-python` action's `deployment-requirements: requirements.txt`
+check to run `uv pip compile` against `pyproject.toml`
+for Linux (`x86_64-unknown-linux-gnu`), Python 3.11, excluding `banking-shared`.
+The artifact generator uses:
+
+```bash
+uv pip compile app/business-api/identity/pyproject.toml --no-emit-package banking-shared --python-version 3.11 --python-platform x86_64-unknown-linux-gnu -o app/business-api/identity/requirements.txt
+```
+
+Existing `requirements.txt` pins constrain recompilation to avoid upstream version drift;
+comparison ignores comments/blank lines and rejects local/editable package paths.
+The App Service action also runs synthetic configuration/target-selection regressions
+(`node --test .github/actions/appservice-preflight/preflight.test.cjs`) before preflight.
+The frozen lockfile still governs CI installation/tests, not the Oryx runtime artifact.
+CD repeats checks before Azure authentication; manual Identity deployments are restricted
+to `main`. Deployments are serialized and never cancel an in-progress deployment.
+
+Provision the root Terraform stack and configure approved secrets before running CD.
+Preflight requires the existing app named by `AZURE_IDENTITY_APP_NAME` in
+`AZURE_RESOURCE_GROUP`, independently of tags. Required
+App Service configuration:
+
+- Linux runtime `PYTHON|3.11`.
+- Startup command `python -m uvicorn identity.main:create_app --factory --host 0.0.0.0 --port 8000`.
+- Nonempty `DATABASE_URL`, `JWT_SECRET_KEY`, `JWT_ISSUER`, `JWT_AUDIENCE`, and
+  `AUTH_INTERNAL_SECRET`; database/JWT/introspection settings must be versionless
+  Key Vault references with `Resolved` metadata, and issuer/audience explicit values.
+- `SCM_DO_BUILD_DURING_DEPLOYMENT=true` for Oryx dependency installation.
+- Optional `ACCESS_TOKEN_MINUTES` (default 15, valid range 1–60).
+
+Use approved secret storage/Key Vault references and database network/grant configuration.
+`AUTH_INTERNAL_SECRET` is the shared introspection secret, not the agent transport
+secret `INTERNAL_IDENTITY_SECRET`. Configure BFF, Account and Transaction with the
+Identity URL in `AUTH_USERS_ENDPOINT` and matching JWT/introspection settings through
+root Terraform. Rollout remains gated: provision/configure references, deploy Identity,
+perform separately approved Identity acceptance checks, then deploy consumers. Independent
+workflows do not enforce cross-workflow ordering or prove acceptance.
+
+CD does not probe `/openapi.json`; endpoint exposure and a safe readiness contract
+are deferred. Configuration preflight checks reference metadata before deployment,
+not secret contents, startup, PostgreSQL connectivity, login or end-to-end authorization.
+CI/CD never applies migrations, seeds users, bootstraps administrators or provisions
+infrastructure. See the [Identity guide](../../app/business-api/identity/README.md#cicd).
 
 ### Hosted-agent variables (`cd-hosted-agent.yaml`)
 
@@ -195,14 +275,16 @@ Oryx to detect; `infra/main.tf` was updated to match (`appCommandLine` serves
 `cd-responses-bff.yaml` performs these steps:
 
 1. Authenticates with Azure via OIDC and selects the root `development` azd environment.
-2. Validates that `JWT_SECRET_KEY`/`INTERNAL_IDENTITY_SECRET` are already present on the
-   provisioned BFF App Service (Key Vault references set by Terraform) without printing them.
+2. Looks up the explicitly named app and validates resolved JWT/introspection/agent
+   Key Vault references, explicit issuer/audience, a remote HTTPS Identity endpoint,
+   and absence of `DATABASE_URL`, without printing setting values.
 3. Deploys only `responses-bff`.
 
 The BFF App Service uses its system-assigned managed identity to call Foundry. Terraform grants that identity the built-in `Foundry Agent Consumer` role and the project-scoped delegated user identity action required by the Responses endpoint.
 
-The workflows configure the shared internal identity secret, but successful local signed
-identity propagation does not prove that hosted delegated-user headers reach the agent.
+Terraform configures the shared agent-transport secret, and consumer deployment preflights
+check its Key Vault reference metadata; successful local signed identity propagation does
+not prove that hosted delegated-user headers reach the agent.
 Treat hosted identity transport as unverified until an end-to-end deployment test passes.
 Toolbox and business-specific HITL policy also remain pending decisions; their settings
 must not be read as evidence that either feature is active.

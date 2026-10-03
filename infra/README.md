@@ -1,6 +1,6 @@
 # Terraform provisioning
 
-The root `azure.yaml` runs `azd provision` against this directory and `azd deploy` for four Linux App Services: account, transaction, the Responses BFF, and the web frontend. The hosted agent has its own `app/agent/azure.yaml` and is not an App Service or a Terraform resource in this stack. Terraform uses an existing resource group and provisions one shared Linux plan, four web sites, Log Analytics, Application Insights, Blob storage, PostgreSQL, and a dedicated Foundry account and project. The separate Foundry azd project deploys the hosted agent; it consumes the project endpoint provisioned here.
+The root `azure.yaml` runs `azd provision` against this directory and `azd deploy` for five Linux App Services: Identity, Account, Transaction, the Responses BFF, and the web frontend. The hosted agent has its own `app/agent/azure.yaml` and is not an App Service or a Terraform resource in this stack. Terraform uses an existing resource group and provisions one shared Linux plan, five web sites, Log Analytics, Application Insights, Blob storage, PostgreSQL, and a dedicated Foundry account and project. The separate Foundry azd project deploys the hosted agent; it consumes the project endpoint provisioned here.
 
 The BFF binds its opaque conversation tokens to the authenticated user, but only forwards them upstream in local mode. Hosted mode does not yet link turns using platform conversation IDs or `previous_response_id`; see the [BFF conversation guide](../app/responses-bff/README.md#validation-and-limits). Before production use, verify the hosted agent and BFF identities have only the required Foundry permissions. Do not import role assignments targeting the removed legacy backend App Service identity for a different principal. Blob storage is still provisioned for existing business-service compatibility and remains publicly reachable unless a private endpoint or VNet path is designed separately.
 
@@ -45,7 +45,7 @@ or remove this value (and reprovision) whenever the allowed IP changes.
 
 Before enabling `azd provision` against an existing Bicep deployment, inspect the actual resource IDs and names. Set `app_names` and the storage name override for existing resources; set `hostname_scope = null` when importing sites created without a unique hostname. Azure only accepts the unique hostname scope on site creation; changing it on an existing site requires replacing that site. Back up the existing deployment and Terraform state before any cutover. Import each managed resource (the plan, existing sites, monitoring, storage account, and container) with `terraform import -var-file=<local.tfvars> <address> <resource-id>` after initializing remote state. Example Terraform addresses: `azurerm_service_plan.main`, `azapi_resource.app["account"]`, `azurerm_log_analytics_workspace.main`, `azurerm_application_insights.main`, `azurerm_storage_account.content`, and `azurerm_storage_container.content`. The Responses BFF is a new dedicated resource at `azapi_resource.responses_bff`; do not import an unrelated backend site at that address. Terraform does not automatically import Bicep-managed resources. Review `terraform plan` for **zero unexpected deletes or replacements** before running `azd provision`. Do not run Bicep and Terraform provisioning concurrently on the same resources.
 
-The app names, derived web URLs, and infrastructure settings are emitted as Terraform outputs for azd. Do not derive a web URL from the site name when unique hostnames are enabled; consume the `defaultHostName` output. The root environment also receives `AZURE_OPENAI_ENDPOINT`, `FOUNDRY_PROJECT_ENDPOINT`, `AZURE_RESPONSES_BFF_NAME`, and `RESPONSES_BFF_URI`. `azd deploy --cwd app/agent` is the separate hosted-agent deploy path; plain root `azd deploy` targets only the four App Services.
+The app names, derived web URLs, and infrastructure settings are emitted as Terraform outputs for azd. Do not derive a web URL from the site name when unique hostnames are enabled; consume the `defaultHostName` output. The root environment also receives `AZURE_OPENAI_ENDPOINT`, `FOUNDRY_PROJECT_ENDPOINT`, `AZURE_RESPONSES_BFF_APP_NAME`, `RESPONSES_BFF_URI`, `AZURE_IDENTITY_APP_NAME`, and `IDENTITY_URI`. Root azd binds every service through `resourceName` to its corresponding `_APP_NAME` Terraform output. Standalone CD exports that same name into its azd environment; tags remain metadata, not deployment selectors. Identity uses dedicated address `azapi_resource.identity` and defaults to `app-identity-<environment>`; adopt/import an existing site deliberately before provisioning. `azd deploy --cwd app/agent` is the separate hosted-agent deploy path; plain root `azd deploy` targets only the five App Services.
 
 Terraform deliberately does **not** set `VITE_*` App Service application settings for the
 web frontend: Vite bakes those values into the bundle at build time, before `azd deploy web`
@@ -55,21 +55,38 @@ bundle. `.github/workflows/cd-frontend.yaml` injects `VITE_ACCOUNT_API_URL`,
 `azd env set` immediately before that build step instead; see
 [../.github/workflows/README.md](../.github/workflows/README.md#frontend-variables-cd-frontendyaml).
 
-Terraform provisions a shared Key Vault (`azurerm_key_vault.secrets`, RBAC-authorized, purge
-protection on) and configures `JWT_SECRET_KEY`/`INTERNAL_IDENTITY_SECRET` on the BFF,
-Account, and Transaction App Services as `@Microsoft.KeyVault(SecretUri=...)` app setting
-references, resolved by each service's system-assigned managed identity (granted
-`Key Vault Secrets User` on the vault). Terraform does not manage the values of these
-two identity secrets; upload each one exactly once, by hand,
-with `az keyvault secret set --vault-name <AZURE_KEY_VAULT_NAME> --name jwt-secret-key --value <...>`
-and the same for `internal-identity-secret`, so these raw identity secret values never enter `tfstate`.
-Terraform does manage the `database-url` secret through
-`azurerm_key_vault_secret.database_url`, and all three Python services consume it through
-a `DATABASE_URL` Key Vault reference. Its connection string and the PostgreSQL admin
-password are present in Terraform state; protect the remote state accordingly.
-Account and Transaction verify that same
-browser-issued JWT directly for their REST endpoints, so all three services resolve the
-identical `JWT_SECRET_KEY` secret; keep it a single shared value. Terraform sets
+Terraform provisions a shared RBAC-authorized, purge-protected Key Vault and uses
+versionless `@Microsoft.KeyVault(SecretUri=...)` app settings. System-assigned
+identities receive `Key Vault Secrets User` at individual secret scopes:
+
+| Service               | Permitted secrets                                                                    |
+| --------------------- | ------------------------------------------------------------------------------------ |
+| Identity              | `database-url`, `jwt-secret-key`, `auth-internal-secret`                             |
+| Account / Transaction | `database-url`, `jwt-secret-key`, `auth-internal-secret`, `internal-identity-secret` |
+| Responses BFF         | `jwt-secret-key`, `auth-internal-secret`, `internal-identity-secret`                 |
+
+Supply the three authentication secrets through approved private secret-entry
+operations, never command arguments, source, logs or Terraform secret-value data sources.
+Identity reuses the same Terraform-managed `database-url` reference as Account and
+Transaction; no second database secret or credential copy is required. Neither this
+infrastructure nor deployment bootstraps users or runs migrations. Identity does not
+consume the agent-only `internal-identity-secret`.
+
+Terraform manages `database-url` for Identity, Account and Transaction using the PostgreSQL
+administrator credential. Sharing that administrator principal is an explicitly approved
+prototype tradeoff, not least-privilege database isolation. That URL/password resides in sensitive state; restrict backend
+and saved-plan access. Sensitive marking does not remove data from state. The BFF has no
+`DATABASE_URL` or database-secret assignment. Applying this change replaces existing
+vault-wide consumer grants with secret-scoped grants; inspect the approved preview for
+unexpected changes and audit inherited/manual RBAC and PostgreSQL grants separately.
+These declarations alone do not prove deployed isolation or least-privilege DB access.
+
+All three consumers receive HTTPS `AUTH_USERS_ENDPOINT` from Identity's actual hostname
+and the same explicit `JWT_ISSUER`/`JWT_AUDIENCE` (defaults `home-banking-api` and
+`home-banking-web`), JWT key and introspection secret. Identity's
+`ACCESS_TOKEN_MINUTES` defaults to 15 and must be an integer from 1–60. JWT and
+introspection secrets must each satisfy the runtime's 32-character minimum. Account
+and Transaction continue verifying browser JWTs independently of agent-only transport. Terraform sets
 `CORS_ALLOWED_ORIGINS` for Account and Transaction to the deployed web app's origin
 directly (no secret involved). Native App Service CORS is explicitly cleared on Account,
 Transaction, and the BFF; their Python `CORSMiddleware` implementations are the sole CORS
@@ -82,8 +99,8 @@ receives `Foundry Agent Consumer` and a custom project-scoped role containing
 `Microsoft.CognitiveServices/accounts/agents/UserIdentityImpersonation/action`. Do not send
 Azure credentials or the delegated identity header from the browser.
 
-Terraform owns the complete app settings arrays through `azapi_resource.app` and
-`azapi_resource.responses_bff`. There is no separate `api_cors` patch resource or
+Terraform owns the complete app settings arrays through `azapi_resource.app`,
+`azapi_resource.identity`, and `azapi_resource.responses_bff`. There is no separate `api_cors` patch resource or
 `ignore_changes` rule for these arrays. Provisioning applies settings to both new and
 existing sites; declare persistent changes in Terraform rather than patching settings
 manually, because a later provision can overwrite those manual changes.
@@ -101,6 +118,40 @@ verify service startup, HTTPS redirects, and browser CORS preflight responses; s
 Terraform validation alone does not prove runtime health.
 
 By convention in this repository, the frontend App Service name is `app-banking-web-<env>` (for example, `app-banking-web-development`). Keep this explicit naming when adding environments so the web workload is distinguishable from account/transaction services.
+
+Identity starts with `python -m uvicorn identity.main:create_app --factory --host 0.0.0.0 --port 8000`
+on Python 3.11 with Oryx enabled. Apply forward Identity migrations through the approved
+head with a separate authorized principal before admitting traffic; never migrate at
+startup. Provisioning changes consumers' settings, so use an approved maintenance window:
+preview first, migrate, provision, deploy Identity, verify resolved references and bounded
+DB/schema readiness, then deploy compatible consumers and require fresh login. CD does
+not probe OpenAPI; endpoint exposure and a readiness contract are deferred. Metadata
+preflight and deployment success do not prove startup, database access or login.
+
+All root services deploy by explicit App Service name in the configured resource
+group. Set GitHub `Development` Variables manually from the identically named
+Terraform outputs: `AZURE_IDENTITY_APP_NAME`, `AZURE_ACCOUNT_APP_NAME`,
+`AZURE_TRANSACTION_APP_NAME`, `AZURE_RESPONSES_BFF_APP_NAME`, and
+`AZURE_WEB_APP_NAME`. Terraform does not publish these GitHub Variables automatically.
+The root manifest uses those same `_APP_NAME` azd variables in `resourceName`;
+shared CD validates each GitHub value and exports it under that same name before
+deployment. Python-service preflight reads that exact app with `az webapp show`,
+never tag-based discovery.
+
+The existing secret-scoped Identity `database-url` grant is reconciled with
+`azurerm_role_assignment.identity_key_vault_secrets_user["database-url"]` in the
+approved remote Terraform state. Its targeted plan reported no changes, and the
+subsequent `azd provision` was confirmed successful. If provisioning reports
+`409 RoleAssignmentExists` for a pre-existing grant, verify its principal, role and
+secret scope, then import its full role-assignment resource ID at the matching
+Terraform address in the correct backend and workspace. Review the plan before
+provisioning; do not delete or recreate the existing permission to resolve a state
+mismatch. Resolved references and successful provisioning do not prove runtime readiness.
+
+Retain compatible artifacts/configuration references before rollout. Rollback must preserve
+the forward schema, current JWT contracts and introspection; never restore BFF database
+access or bypass Identity. If Identity is unavailable, keep consumers fail-closed and repair
+it. A database restore or schema downgrade requires separate approval.
 
 ## Checks
 
