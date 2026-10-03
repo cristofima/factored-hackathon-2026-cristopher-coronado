@@ -1,10 +1,12 @@
 # Responses BFF
 
-FastAPI browser trust boundary for the banking assistant. It has exactly two jobs:
-authenticate PostgreSQL users and issue/verify the application JWT (`/auth/login`,
-`/auth/me`), and front the Responses agent. The browser never receives Azure
-credentials. It does not read account, card, or transaction data; the frontend calls
-Account and Transaction directly, authenticated with the same application JWT.
+FastAPI database-free browser trust boundary for the banking assistant. It fronts
+[Identity](../business-api/identity/README.md) through allowlisted authentication and
+admin-operator routes, verifies application JWTs against current identity state, and
+fronts the Responses agent. Identity alone verifies passwords and issues tokens.
+The browser never receives Azure credentials. Financial reads go directly to Account
+and Transaction with the same application JWT; staff roles cannot use those reads
+or customer chat.
 
 ## Request Flow
 
@@ -13,7 +15,8 @@ flowchart LR
     Browser[Banking web] -->|Application JWT| BFF[Responses BFF]
     Browser -->|Application JWT| Account[Account API]
     Browser -->|Application JWT| Transaction[Transaction API]
-    BFF -->|SQLModel| DB[(PostgreSQL users)]
+    BFF -->|Allowlisted HTTP and current-state checks| Identity[Identity REST]
+    Identity -->|SQLModel| DB[(PostgreSQL identity)]
     BFF -->|Signed verified identity| Agent[Responses agent]
     Agent -->|Short-lived bearer| MCP[Account and Transaction MCP]
 ```
@@ -33,9 +36,25 @@ ownership checks.
 | GET    | `/auth/me`    | Return verified identity and persisted customer name. Requires bearer JWT.                       |
 | POST   | `/responses`  | Proxy Responses events with verified identity and user-bound conversations. Requires bearer JWT. |
 
-JWT identity includes `sub`, `customer_id`, `email`, and `locale`, with `iss`, `aud`,
-`iat`, and `exp` metadata. The display `name` is profile response data, not a JWT claim.
-Missing customer names return `null`. Account/card/transaction response shapes,
+JWT identity includes `sub`, `email`, `locale`, fixed `role`, and `identity_version`,
+with `iss`, `aud`, `iat`, and `exp`; only customers have `customer_id`. Profile-only
+`name`, `status`, and ISO `updated_at` are not JWT claims. Missing names return `null`.
+Admin-only GET/POST `/admin/operators` and POST lifecycle routes (`activate`,
+`deactivate`, `reset-password`) forward to Identity; the BFF never mutates a database.
+Operator creation requires trimmed `first_name` and `last_name` (1–50 characters
+each), email up to 120 characters, and a 12–256-character password. The legacy
+creation `name` field is rejected. Password resets use the same password bounds.
+The operator list preserves optional structured names for legacy profiles.
+Admin-only GET `/admin/customers` and POST `/admin/customers/{user_id}/activate`
+and `/deactivate` are explicit, body-free Identity forwards, checked against
+uncached administrator identity on every request. They list existing customer users
+and change sign-in access only, not banking customer status or financial data.
+Customer creation, password reset, deletion, and generic Identity proxying are not
+exposed. All browser authentication and administration stays behind this BFF.
+An uncached, three-second Identity client validates active status and token version
+for protected requests. Inactive/stale tokens return 401, wrong roles 403, and
+Identity outages 503. Already admitted Responses streams are not cancelled, and
+use a separate streaming client without that identity-request timeout. Account/card/transaction response shapes,
 pagination, masking, and ownership rules are documented in the
 [business-api README](../business-api/README.md) now that those reads live there
 instead of in the BFF.
@@ -52,12 +71,16 @@ unchanged.
 
 ## Local Development
 
-Run from the repository root using the ignored root `.env.dev`:
+Run from the repository root using the ignored service `.env`:
 
 ```powershell
-uv sync --project app/responses-bff
-uv run --project app/responses-bff --env-file .env.dev uvicorn bff.main:app --app-dir app/responses-bff --port 8080
+uv sync --project "app\responses-bff"
+uv run --project "app\responses-bff" --env-file "app\responses-bff\.env" uvicorn bff.main:app --app-dir "app\responses-bff" --port 8080
 ```
+
+Keep `JWT_SECRET_KEY`, `JWT_ISSUER`, `JWT_AUDIENCE`, and
+`AUTH_INTERNAL_SECRET` synchronized with Identity, Account, and Transaction.
+Do not place `DATABASE_URL` or legacy `AUTH_USERS` credentials in the BFF environment.
 
 Set `PROFILE=dev`, `RESPONSES_UPSTREAM_MODE=local`, and
 `RESPONSES_AGENT_ENDPOINT=http://127.0.0.1:8088/responses` in that environment.
@@ -68,11 +91,11 @@ agent, and frontend. Restart the BFF after Python edits when running without `--
 
 | Variable                                | Purpose / default                                                                                 |
 | --------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`                          | Shared SQLModel PostgreSQL connection URL; required for persisted login/profile reads.            |
+| `AUTH_USERS_ENDPOINT`                   | Compatibility name for Identity endpoint; default `http://127.0.0.1:8090`.                        |
+| `AUTH_INTERNAL_SECRET`                  | Protected Identity introspection key; distinct from downstream HMAC secret.                       |
 | `JWT_SECRET_KEY`                        | Application HS256 signing key, at least 32 characters.                                            |
 | `JWT_ISSUER`                            | `home-banking-api`                                                                                |
 | `JWT_AUDIENCE`                          | `home-banking-web`                                                                                |
-| `JWT_ACCESS_TOKEN_MINUTES`              | `15`; supported range `1` to `60`.                                                                |
 | `INTERNAL_IDENTITY_SECRET`              | Shared downstream identity signing secret, at least 32 characters.                                |
 | `RESPONSES_UPSTREAM_MODE`               | `foundry` by default; use `local` for local browser validation.                                   |
 | `RESPONSES_AGENT_ENDPOINT`              | Local default `http://127.0.0.1:8088/responses`; configure the approved upstream for hosted mode. |
@@ -83,8 +106,14 @@ agent, and frontend. Restart the BFF after Python edits when running without `--
 
 Keep secrets in ignored environment files or protected deployment settings. Never log
 passwords, password hashes, JWTs, or Azure credentials. `AUTH_USERS` is not a login
-source. Seed demo identities separately using the [data module guide](../business-api/data/README.md#seed-demo-users).
-The shared models and session factory live in [banking-shared](../business-api/shared).
+source. Identity owns credentials, persisted profiles, associations and audit; the BFF
+has no ORM repository, database configuration or password hashing. Explicit first-admin
+bootstrap requires separate database-write authority; see the [Identity guide](../business-api/identity/README.md).
+
+The legacy [real-data verifier](scripts/verify_real_data.py) returns exit code 2 with
+`LEGACY_BFF_VERIFIER_RETIRED`, without database access. Pure expectation helpers remain
+tested, but do not establish live parity. Separately authorized Identity HTTP and
+direct Account/Transaction REST checks remain required.
 
 ## Distributed Tracing
 
@@ -113,8 +142,9 @@ cd app/responses-bff
 uv run python -m pytest tests -q
 ```
 
-Tests cover persisted user-repository queries (`find_by_email`, `find_customer_name`),
-authentication (`/auth/login`, `/auth/me`), and Responses proxy behavior. Account,
+Tests cover the database-free boundary, allowlisted Identity adapters, current-state
+revocation and role isolation, authentication (`/auth/login`, `/auth/me`), and Responses
+proxy behavior. Account,
 card, and transaction contract tests moved to the
 [business-api suite](../business-api/README.md) along with the endpoints themselves.
 The suite also covers W3C propagation and export configuration.
@@ -135,8 +165,10 @@ real multi-turn continuity for hosted mode (via the platform's own Conversations
 API or `previous_response_id` chaining) remains open.
 
 Hosted identity transport and deployed parity still require separate validation.
-Registration, password reset, MFA, revocation, and production identity lifecycle
-controls are not implemented.
+Public registration, self-service password reset, MFA, production database grants,
+and real reviewer permissions remain unavailable. Admin operator password reset,
+active/inactive status and token-version revocation are implemented in Identity;
+synthetic coverage does not establish deployed acceptance.
 
 For zip packaging and dependency export, follow the
 [root deployment artifact guide](../../README.md#python-dependency-artifact-for-app-service-zip-deploy).

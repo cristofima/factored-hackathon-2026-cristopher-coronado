@@ -1,8 +1,8 @@
 # ADR 0005: Frontend calls Account and Transaction directly; BFF trimmed to identity and agent proxy
 
-| Status   | Date       | Proposed by | Approved by |
-| -------- | ---------- | ----------- | ----------- |
-| Accepted | 2026-10-01 | cristofima  | cristofima  |
+| Status     | Date       | Proposed by | Approved by | Superseded by                                                                                       |
+| ---------- | ---------- | ----------- | ----------- | --------------------------------------------------------------------------------------------------- |
+| Superseded | 2026-10-01 | cristofima  | cristofima  | [0006-dedicated-auth-users-and-staff-identities](0006-dedicated-auth-users-and-staff-identities.md) |
 
 ---
 

@@ -3,9 +3,14 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from uuid import uuid4
+from typing import Literal
 
-from sqlalchemy import Column, DateTime, Index, Numeric, UniqueConstraint
+from sqlalchemy import CheckConstraint, Column, DateTime, Index, Numeric, String
 from sqlmodel import Field, SQLModel
+
+from banking_shared.identity_models import (
+    CustomerUser, IdentityAudit, Operator, Role, User, UserRole,
+)
 
 BRANCH_ID_FOREIGN_KEY = "branches.branch_id"
 CUSTOMER_ID_FOREIGN_KEY = "customers.customer_id"
@@ -28,12 +33,26 @@ class Branch(SQLModel, table=True):
 
 class Customer(SQLModel, table=True):
     __tablename__ = "customers"
+    __table_args__ = (
+        CheckConstraint(
+            "customer_status IN ('Active', 'Inactive', 'Suspended', 'Closed')",
+            name="ck_customers_status",
+        ),
+        CheckConstraint("length(email) <= 120", name="ck_customers_email_length"),
+        CheckConstraint("length(first_name) <= 50", name="ck_customers_first_name_length"),
+        CheckConstraint("length(last_name) <= 50", name="ck_customers_last_name_length"),
+        CheckConstraint("length(country) <= 100", name="ck_customers_country_length"),
+        Index("ix_customers_first_name", "first_name"),
+        Index("ix_customers_last_name", "last_name"),
+        Index("ix_customers_country", "country"),
+        Index("ix_customers_customer_status", "customer_status"),
+    )
 
     customer_id: str = Field(primary_key=True, max_length=64)
-    email: str = Field(index=True, max_length=320)
-    first_name: str | None = Field(default=None, max_length=120)
-    last_name: str | None = Field(default=None, max_length=120)
-    country: str | None = Field(default=None, max_length=120)
+    email: str = Field(index=True, max_length=120)
+    first_name: str | None = Field(default=None, max_length=50)
+    last_name: str | None = Field(default=None, max_length=50)
+    country: str | None = Field(default=None, max_length=100)
     detected_accent: str | None = Field(default=None, max_length=32)
     segment: str | None = Field(default=None, max_length=64)
     registration_date: date | None = None
@@ -42,7 +61,9 @@ class Customer(SQLModel, table=True):
         foreign_key=BRANCH_ID_FOREIGN_KEY,
         max_length=64,
     )
-    customer_status: str | None = Field(default=None, max_length=64)
+    customer_status: Literal["Active", "Inactive", "Suspended", "Closed"] | None = Field(
+        default=None, sa_column=Column(String(64), nullable=True),
+    )
 
 
 class ServiceAgent(SQLModel, table=True):
@@ -147,21 +168,6 @@ class TransactionRecord(SQLModel, table=True):
     response_code: str | None = Field(default=None, max_length=32)
     is_fraud: bool | None = Field(default=None)
     fraud_score: Decimal | None = Field(default=None, sa_column=Column(Numeric(6, 4)))
-
-
-class User(SQLModel, table=True):
-    __tablename__ = "users"
-    __table_args__ = (UniqueConstraint("customer_id", name="uq_users_customer_id"),)
-
-    id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True, max_length=36)
-    customer_id: str = Field(foreign_key=CUSTOMER_ID_FOREIGN_KEY, max_length=64)
-    email: str = Field(unique=True, index=True, max_length=320)
-    password_hash: str = Field(max_length=500)
-    locale: str = Field(max_length=8)
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(DateTime(timezone=True), nullable=False),
-    )
 
 
 # Valid support_cases.status values, in required transition order.

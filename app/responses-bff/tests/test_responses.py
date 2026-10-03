@@ -10,6 +10,8 @@ import json
 from datetime import datetime, timedelta, timezone
 import re
 from types import SimpleNamespace
+from typing import Any
+from fastapi import FastAPI
 
 import httpx
 import httpcore
@@ -20,8 +22,20 @@ from httpx import ASGITransport, AsyncClient
 
 from bff.auth import AuthenticatedUser
 from bff.internal_identity import create_internal_identity
-from bff.main import create_app
+from bff.main import create_app as _create_app
 from bff.settings import Settings
+
+
+def create_app(settings: Settings, **kwargs: Any) -> FastAPI:
+    def introspect(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/internal/introspect"
+        assert request.headers["Authorization"] == "Bearer synthetic-internal-secret"
+        claims = jwt.decode(json.loads(request.content)["token"], TEST_SECRET,
+                            algorithms=["HS256"], audience=settings.jwt_audience,
+                            issuer=settings.jwt_issuer)
+        return httpx.Response(200, json={key: claims[key] for key in
+            ("sub", "customer_id", "email", "locale", "role", "identity_version")})
+    return _create_app(settings, auth_transport=httpx.MockTransport(introspect), **kwargs)
 
 
 TEST_SECRET = "test-secret-key-with-at-least-32-bytes"
@@ -31,7 +45,7 @@ TEST_SECRET = "test-secret-key-with-at-least-32-bytes"
 def test_internal_identity_signs_verified_email_without_browser_credentials(locale: str) -> None:
     user = _authenticated_user("user-a")
     user = AuthenticatedUser(sub=user.sub, customer_id=user.customer_id,
-                             email=user.email, locale=locale)
+                             email=user.email, locale=locale, role="customer", identity_version=1)
 
     identity = create_internal_identity(user, TEST_SECRET)
 
@@ -70,6 +84,7 @@ class SseStream(httpx.AsyncByteStream):
 
 def _settings(mode: str) -> Settings:
     return Settings(
+        _env_file=None, auth_internal_secret="synthetic-internal-secret",
         responses_upstream_mode=mode,
         responses_agent_endpoint="http://agent.test/responses",
         jwt_secret_key=TEST_SECRET,
@@ -81,6 +96,7 @@ def _token(user_id: str, settings: Settings) -> str:
     return jwt.encode(
         {
             "sub": user_id,
+            "role": "customer", "identity_version": 1,
             "customer_id": f"customer-{user_id}",
             "email": f"{user_id}@example.com",
             "locale": "en-US",
@@ -168,7 +184,7 @@ async def test_foundry_mode_uses_managed_credential_and_delegated_identity() -> 
 
 def _authenticated_user(user_id: str) -> AuthenticatedUser:
     return AuthenticatedUser(
-        sub=user_id,
+        sub=user_id, role="customer", identity_version=1,
         customer_id=f"customer-{user_id}",
         email=f"{user_id}@example.com",
         locale="en-US",

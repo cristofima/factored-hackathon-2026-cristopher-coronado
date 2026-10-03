@@ -25,8 +25,8 @@ Each service runs as an independent FastMCP server exposing banking tools throug
 > [!NOTE]
 > Account and Transaction require `DATABASE_URL`, `INTERNAL_IDENTITY_SECRET` (MCP),
 > and `JWT_SECRET_KEY` (browser REST) to start without a `503`. `CORS_ALLOWED_ORIGINS`
-> defaults to `http://localhost:5170` if unset. The root `.env.dev` already sets all
-> of these for local development; see [Configuration](#configuration) below.
+> defaults to `http://localhost:5170` if unset. Configure each service's own `.env`
+> using its `.env.example`; see [Configuration](#configuration) below.
 
 > [!NOTE]
 > Docker deployment paths were removed along with the per-service Dockerfiles. Run the servers directly with Python or package them using the shared App Service workflow.
@@ -96,8 +96,10 @@ Each service exposes two parallel surfaces that never share an auth mechanism:
   fresh per request from the BFF-verified identity the agent receives.
 - **REST endpoints** (`routers.py`, `dispute_routers.py`), mounted at `/api`, called
   directly by the browser. They authenticate with `jwt_identity.py`'s
-  `get_jwt_customer_id`, which validates the same application JWT the BFF issues at
-  login (HS256, `JWT_SECRET_KEY`/`JWT_ISSUER`/`JWT_AUDIENCE`). CORS is enabled via
+  `get_jwt_customer_id`, which validates the application JWT Identity issues through
+  the BFF at login (HS256, `JWT_SECRET_KEY`/`JWT_ISSUER`/`JWT_AUDIENCE`) and verifies
+  active customer status and the current identity version through protected Identity
+  introspection. CORS is enabled via
   `CORS_ALLOWED_ORIGINS` (defaults to `http://localhost:5170`).
 
 ### Account Service (Port 8070)
@@ -193,7 +195,7 @@ service-name/
 The Banking Assistant Copilot connects to these services via MCP URLs configured in its environment:
 
 ```env
-# MCP Server URLs (from app/agent/.env.dev)
+# MCP Server URLs (from app/agent/.env)
 ACCOUNT_MCP_URL=http://localhost:8070
 TRANSACTION_MCP_URL=http://localhost:8071
 ```
