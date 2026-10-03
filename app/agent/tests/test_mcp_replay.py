@@ -213,3 +213,35 @@ def test_replay_fixtures_match_public_tool_arguments() -> None:
             contracts = {tool.name: tool.inputSchema for tool in load_contracts(server)}
             for reply in case.get(server, []):
                 assert set(reply["arguments"]) == set(contracts[reply["tool"]]["properties"])
+
+
+async def test_multi_turn_runner_reuses_session_and_isolates_cases() -> None:
+    from unittest.mock import AsyncMock
+
+    sessions = []
+    agents = []
+
+    def build_workflow(*args: object, **kwargs: object) -> MagicMock:
+        workflow = MagicMock()
+        agent = workflow.as_agent.return_value
+        session = object()
+        sessions.append(session)
+        agents.append(agent)
+        agent.create_session.return_value = session
+        response = MagicMock(text="Synthetic response")
+        response.to_dict.return_value = {"messages": [{"text": response.text}]}
+        agent.run.return_value.get_final_response = AsyncMock(return_value=response)
+        return workflow
+
+    case = {"id": "continuation", "query": "first", "turns": ["first", "approve"],
+            "expected_behavior": "test"}
+    with patch("evals.run_mcp_replay.build_hosted_workflow", side_effect=build_workflow):
+        first = await run_case(MagicMock(), case)
+        second = await run_case(MagicMock(), case)
+    assert first["protocol_passed"] and second["protocol_passed"]
+    assert sessions[0] is not sessions[1]
+    for agent, session in zip(agents, sessions, strict=True):
+        assert [call.args[0] for call in agent.run.call_args_list] == case["turns"]
+        assert all(call.kwargs["session"] is session for call in agent.run.call_args_list)
+    assert [turn["turn"] for turn in first["turns"]] == [0, 1]
+    assert all(turn["latency_seconds"] >= 0 for turn in first["turns"])
