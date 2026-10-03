@@ -102,11 +102,40 @@ uv run --project app/business-api/data --env-file app/business-api/data/.env pyt
 - Keep agent instructions and tool schemas in English. The profile provider uses signed per-request `locale` (`es`, `pt`, `en`, otherwise `en`) for response language. Do not infer it from messages or checkpoint state.
 - Preserve the separate root App Service and `app/agent` hosted-agent azd projects.
 
+## Evaluation Boundaries
+
+- [MCP replay](evals/README.md#isolated-mcp-replay) injects in-memory synthetic MCP
+  sessions into the production workflow and uses a real model when executed. Its
+  three cases cover balance lookup, canned denial, and empty transactions, not
+  the transaction-dispute workflow. Never add a production fake mode or treat
+  synthetic identity and denial fixtures as proof of service authorization.
+- [Hosted Agent CI](.github/workflows/ci-hosted-agent.yml) configures real-model
+  protocol smoke after offline tests for same-repository PRs targeting `main` or
+  `develop`. It uses Development OIDC, a persistent PR comment, and 14-day evidence
+  artifacts. Fork replay is explicitly not executed. Configuration and reporting
+  rules are documented in the [PR smoke guide](evals/README.md#pr-smoke-check).
+- Missing configuration, incomplete cases, protocol failures, and missing
+  answer/transcript evidence must fail the smoke check. PR comments contain
+  controlled statuses, never model answers or raw exceptions.
+- Offline tests and workflow configuration are verified; actual PR/OIDC/model
+  execution remains unverified. Protocol smoke is not `eval-quality` or
+  `eval-authz`, and does not establish grounding, locale correctness, customer
+  approval, dispute resolution, or baseline improvement.
+- Keep dispute-specific multi-turn evaluation, real BFF/JWT/service ownership
+  checks, and an independent executable baseline comparison as separate gates.
+  The 18 held-out scenario definitions are not observed results. Replay display
+  names follow the [naming convention](evals/README.md#isolated-mcp-replay), but
+  `foundry_submission: not_submitted` means no remote Foundry run was created.
+- Do not run billable replay, inspect credentials, start the stack, or perform
+  cloud operations without explicit session authorization.
+
 ## Focused Checks
 
 ```powershell
 cd app/agent
-uv run pytest tests/test_hosted_workflow.py tests/test_settings.py -q
+$env:PYTHONPATH = (Resolve-Path ../..).Path
+$env:OTEL_SDK_DISABLED = "true"
+uv run python -m pytest tests -q
 
 cd ../responses-bff
 uv run pytest -q
