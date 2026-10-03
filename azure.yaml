@@ -9,7 +9,28 @@ requiredVersions:
 
 name: home-banking-assistant-python
 services:
+  identity:
+    resourceName: ${AZURE_IDENTITY_APP_NAME}
+    project: ./app/business-api/identity
+    language: python
+    host: appservice
+    hooks:
+      prepackage:
+        windows:
+          shell: pwsh
+          run: Copy-Item -Recurse -Force ../shared/banking_shared ./banking_shared
+        posix:
+          shell: sh
+          run: cp -R ../shared/banking_shared ./banking_shared
+      postpackage:
+        windows:
+          shell: pwsh
+          run: Remove-Item -Recurse -Force ./banking_shared
+        posix:
+          shell: sh
+          run: rm -rf ./banking_shared
   account:
+    resourceName: ${AZURE_ACCOUNT_APP_NAME}
     project: ./app/business-api/account
     language: python
     host: appservice
@@ -29,6 +50,7 @@ services:
           shell: sh
           run: rm -rf ./banking_shared
   transaction:
+    resourceName: ${AZURE_TRANSACTION_APP_NAME}
     project: ./app/business-api/transaction
     language: python
     host: appservice
@@ -48,6 +70,7 @@ services:
           shell: sh
           run: rm -rf ./banking_shared
   responses-bff:
+    resourceName: ${AZURE_RESPONSES_BFF_APP_NAME}
     project: ./app/responses-bff
     language: python
     host: appservice
@@ -67,6 +90,7 @@ services:
           shell: sh
           run: rm -rf ./banking_shared
   web:
+    resourceName: ${AZURE_WEB_APP_NAME}
     project: ./app/frontend/banking-web
     dist: dist
     language: js

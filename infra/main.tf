@@ -21,6 +21,7 @@ locals {
   foundry_project_name     = coalesce(var.foundry_project_name, "foundry-${var.environment_name}")
   foundry_project_endpoint = "https://${local.foundry_account_name}.services.ai.azure.com/api/projects/${local.foundry_project_name}"
   responses_bff_name       = lookup(var.app_names, "responses-bff", "app-responses-bff-${var.environment_name}")
+  identity_name            = lookup(var.app_names, "identity", "app-identity-${var.environment_name}")
   postgres_server_name     = coalesce(var.postgres_server_name, "pg-${var.environment_name}")
   postgres_database_url    = "postgresql+psycopg://${urlencode(var.postgres_admin_username)}:${urlencode(var.postgres_admin_password)}@${azapi_resource.postgres_server.output.properties.fullyQualifiedDomainName}:5432/${urlencode(var.postgres_database_name)}?sslmode=require"
   key_vault_name           = coalesce(var.key_vault_name, "kv${substr(local.token, 0, 15)}${substr(sha1(var.subscription_id), 0, 6)}")
@@ -31,6 +32,7 @@ locals {
   jwt_secret_key_reference           = "@Microsoft.KeyVault(SecretUri=${azurerm_key_vault.secrets.vault_uri}secrets/jwt-secret-key/)"
   internal_identity_secret_reference = "@Microsoft.KeyVault(SecretUri=${azurerm_key_vault.secrets.vault_uri}secrets/internal-identity-secret/)"
   database_url_reference             = "@Microsoft.KeyVault(SecretUri=${azurerm_key_vault.secrets.vault_uri}secrets/database-url/)"
+  auth_internal_secret_reference     = "@Microsoft.KeyVault(SecretUri=${azurerm_key_vault.secrets.vault_uri}secrets/auth-internal-secret/)"
 }
 
 resource "azurerm_key_vault" "secrets" {
@@ -45,21 +47,33 @@ resource "azurerm_key_vault" "secrets" {
 }
 
 resource "azurerm_role_assignment" "account_key_vault_secrets_user" {
-  scope                = azurerm_key_vault.secrets.id
+  for_each             = toset(["database-url", "jwt-secret-key", "auth-internal-secret", "internal-identity-secret"])
+  scope                = "${azurerm_key_vault.secrets.id}/secrets/${each.key}"
   role_definition_name = "Key Vault Secrets User"
   principal_id         = azapi_resource.app["account"].output.identity.principalId
 }
 
 resource "azurerm_role_assignment" "transaction_key_vault_secrets_user" {
-  scope                = azurerm_key_vault.secrets.id
+  for_each             = toset(["database-url", "jwt-secret-key", "auth-internal-secret", "internal-identity-secret"])
+  scope                = "${azurerm_key_vault.secrets.id}/secrets/${each.key}"
   role_definition_name = "Key Vault Secrets User"
   principal_id         = azapi_resource.app["transaction"].output.identity.principalId
 }
 
+# Secret-level scopes keep the DB-free BFF from resolving the shared database credential.
+# Applying this replaces the previous vault-wide BFF assignment; audit inherited grants separately.
 resource "azurerm_role_assignment" "responses_bff_key_vault_secrets_user" {
-  scope                = azurerm_key_vault.secrets.id
+  for_each             = toset(["jwt-secret-key", "auth-internal-secret", "internal-identity-secret"])
+  scope                = "${azurerm_key_vault.secrets.id}/secrets/${each.key}"
   role_definition_name = "Key Vault Secrets User"
   principal_id         = azapi_resource.responses_bff.output.identity.principalId
+}
+
+resource "azurerm_role_assignment" "identity_key_vault_secrets_user" {
+  for_each             = toset(["database-url", "jwt-secret-key", "auth-internal-secret"])
+  scope                = "${azurerm_key_vault.secrets.id}/secrets/${each.key}"
+  role_definition_name = "Key Vault Secrets User"
+  principal_id         = azapi_resource.identity.output.identity.principalId
 }
 
 # Grants the GitHub Actions federated identity read access so cd-hosted-agent.yaml can resolve
@@ -191,6 +205,10 @@ resource "azapi_resource" "app" {
           ], contains(["account", "transaction"], each.key) ? [
           { name = "DATABASE_URL", value = local.database_url_reference },
           { name = "CORS_ALLOWED_ORIGINS", value = "https://${azapi_resource.web.output.properties.defaultHostName}" },
+          { name = "AUTH_USERS_ENDPOINT", value = "https://${azapi_resource.identity.output.properties.defaultHostName}" },
+          { name = "AUTH_INTERNAL_SECRET", value = local.auth_internal_secret_reference },
+          { name = "JWT_ISSUER", value = var.jwt_issuer },
+          { name = "JWT_AUDIENCE", value = var.jwt_audience },
           { name = "JWT_SECRET_KEY", value = local.jwt_secret_key_reference },
           { name = "INTERNAL_IDENTITY_SECRET", value = local.internal_identity_secret_reference }
         ] : [])
@@ -217,6 +235,50 @@ resource "azapi_resource" "app" {
   # the full appSettings array and no ignore_changes/manual az webapp config appsettings set is needed;
   # see plan/tmp/KEY_VAULT_SECRETS_MIGRATION_PLAN.md.
   depends_on = [azurerm_key_vault_secret.database_url]
+}
+
+resource "azapi_resource" "identity" {
+  type      = "Microsoft.Web/sites@2024-11-01"
+  name      = local.identity_name
+  location  = data.azurerm_resource_group.main.location
+  parent_id = data.azurerm_resource_group.main.id
+  tags      = merge(local.tags, { "azd-service-name" = "identity" })
+
+  identity {
+    type = "SystemAssigned"
+  }
+  body = {
+    kind = "app,linux"
+    properties = merge({
+      serverFarmId = local.service_plan_id
+      httpsOnly    = true
+      siteConfig = {
+        linuxFxVersion = "PYTHON|3.11"
+        alwaysOn       = var.plan_sku != "F1"
+        appCommandLine = "python -m uvicorn identity.main:create_app --factory --host 0.0.0.0 --port 8000"
+        cors = {
+          allowedOrigins     = []
+          supportCredentials = false
+        }
+        appSettings = [
+          { name = "WEBSITES_PORT", value = "8000" },
+          { name = "PORT", value = "8000" },
+          { name = "APPLICATIONINSIGHTS_CONNECTION_STRING", value = azurerm_application_insights.main.connection_string },
+          { name = "SCM_DO_BUILD_DURING_DEPLOYMENT", value = "true" },
+          { name = "DATABASE_URL", value = local.database_url_reference },
+          { name = "JWT_SECRET_KEY", value = local.jwt_secret_key_reference },
+          { name = "JWT_ISSUER", value = var.jwt_issuer },
+          { name = "JWT_AUDIENCE", value = var.jwt_audience },
+          { name = "AUTH_INTERNAL_SECRET", value = local.auth_internal_secret_reference },
+          { name = "ACCESS_TOKEN_MINUTES", value = tostring(var.access_token_minutes) }
+        ]
+      }
+      }, var.hostname_scope == null ? {} : {
+      autoGeneratedDomainNameLabelScope = var.hostname_scope
+    })
+  }
+  response_export_values = ["properties.defaultHostName", "identity.principalId"]
+  depends_on             = [azurerm_key_vault_secret.database_url]
 }
 
 resource "azapi_resource" "responses_bff" {
@@ -262,7 +324,10 @@ resource "azapi_resource" "responses_bff" {
           # (unlike the generic Azure OpenAI /openai/v1/responses surface, where it's optional);
           # see evals/run_held_out_eval.py, which already hardcodes the same value.
           { name = "RESPONSES_AGENT_ENDPOINT", value = "${local.foundry_project_endpoint}/agents/home-banking-agent/endpoint/protocols/openai/responses?api-version=v1" },
-          { name = "DATABASE_URL", value = local.database_url_reference },
+          { name = "AUTH_USERS_ENDPOINT", value = "https://${azapi_resource.identity.output.properties.defaultHostName}" },
+          { name = "AUTH_INTERNAL_SECRET", value = local.auth_internal_secret_reference },
+          { name = "JWT_ISSUER", value = var.jwt_issuer },
+          { name = "JWT_AUDIENCE", value = var.jwt_audience },
           { name = "ALLOWED_ORIGINS", value = jsonencode(["https://${azapi_resource.web.output.properties.defaultHostName}"]) },
           { name = "JWT_SECRET_KEY", value = local.jwt_secret_key_reference },
           { name = "INTERNAL_IDENTITY_SECRET", value = local.internal_identity_secret_reference }
@@ -274,10 +339,8 @@ resource "azapi_resource" "responses_bff" {
   }
   response_export_values = ["properties.defaultHostName", "identity.principalId"]
 
-  # JWT_SECRET_KEY/INTERNAL_IDENTITY_SECRET/DATABASE_URL are Key Vault references declared directly
-  # here (see plan/tmp/KEY_VAULT_SECRETS_MIGRATION_PLAN.md); this is the single owner of this site's
-  # appSettings, so no ignore_changes/manual az webapp config appsettings set is needed.
-  depends_on = [azurerm_key_vault_secret.database_url]
+  # This resource owns the full settings array, including removal of the legacy DATABASE_URL.
+  # Runtime references resolve with secret-scoped MI grants; the BFF has no database dependency.
 }
 
 
