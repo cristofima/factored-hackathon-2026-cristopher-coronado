@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 
 dependencies = [
-    "banking-shared",
+    "banking-shared[telemetry]",
     "fastmcp==3.4.7",
     "pydantic==2.13.5",
     "fastapi[all]==0.141.1",
