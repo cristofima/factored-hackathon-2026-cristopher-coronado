@@ -18,6 +18,15 @@ export function calendarDate(value: Date): string {
     return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
 }
 
+export function canReportDispute(record: FinancialTransaction, now = Date.now()): boolean {
+    const timestamp = record.date;
+    const normalized = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$/.test(timestamp)
+        ? `${timestamp}Z` : timestamp;
+    const transactionTime = Date.parse(normalized);
+    return record.status === "Approved" && Number.isFinite(transactionTime)
+        && transactionTime >= now - 365 * 24 * 60 * 60 * 1000;
+}
+
 export function summarizeTransactions(records: FinancialTransaction[]) {
     const currencies = new Map<string, { inflow: bigint; outflow: bigint; count: number }>();
     let excluded = 0;
