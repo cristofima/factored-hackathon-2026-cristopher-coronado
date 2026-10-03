@@ -1,6 +1,7 @@
 import { FormEvent, useState } from "react";
 import { LoaderCircle, LockKeyhole } from "lucide-react";
-import { Navigate, useLocation, useNavigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
+import { loginDestination } from "@/api/roleRoutes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,7 +10,8 @@ import { ApiError } from "@/api/errors";
 
 const Login = () => {
   const { user, login } = useAuth();
-  const navigate = useNavigate();
+  const destination = (locationState: unknown): string | undefined =>
+    (locationState as { from?: { pathname?: string } } | null)?.from?.pathname;
   const location = useLocation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -17,19 +19,17 @@ const Login = () => {
   const [submitting, setSubmitting] = useState(false);
 
   if (user) {
-    return <Navigate to="/" replace />;
+    return <Navigate to={loginDestination(user.role, destination(location.state))} replace />;
   }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
     setSubmitting(true);
+    const secret = password;
+    setPassword("");
     try {
-      await login(email, password);
-      const destination = (
-        location.state as { from?: { pathname?: string } } | null
-      )?.from?.pathname;
-      navigate(destination || "/", { replace: true });
+      await login(email, secret);
     } catch (loginError) {
       setError(
         loginError instanceof ApiError &&
@@ -38,6 +38,7 @@ const Login = () => {
           : "Sign in is unavailable",
       );
     } finally {
+      setPassword("");
       setSubmitting(false);
     }
   };
