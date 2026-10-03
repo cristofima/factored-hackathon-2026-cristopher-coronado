@@ -28,6 +28,11 @@ import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { AgentResponseProvider } from "@/context/AgentResponseContext";
 import { UiLocaleProvider } from "@/context/UiLocaleProvider";
 import { useTranslation } from "react-i18next";
+import type { UserRole } from "@/api/authClient";
+import { roleHome } from "@/api/roleRoutes";
+import StaffShell, { OperatorUnavailable } from "@/components/StaffShell";
+import OperatorManagement, { OperatorCreate } from "@/pages/OperatorManagement";
+import CustomerUserManagement from "@/pages/CustomerUserManagement";
 
 const queryClient = new QueryClient();
 
@@ -46,9 +51,9 @@ const ProtectedShell = () => (
   </AgentResponseProvider>
 );
 
-const RequireAuth = ({ children }: { children: ReactNode }) => {
+export const RequireRole = ({ children, role }: { children: ReactNode; role: UserRole }) => {
   const { t } = useTranslation();
-  const { user, loading } = useAuth();
+  const { user, loading, sessionKey } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -65,7 +70,8 @@ const RequireAuth = ({ children }: { children: ReactNode }) => {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  return <>{children}</>;
+  if (user.role !== role) return <Navigate to={roleHome(user.role)} replace />;
+  return <div key={`${sessionKey}:${user.id}:${user.role}:${user.identityVersion}`}>{children}</div>;
 };
 
 const App = () => (
@@ -76,34 +82,49 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <UiLocaleProvider>
-            <Routes>
-              <Route path="/login" element={<Login />} />
-              <Route
-                element={
-                  <RequireAuth>
-                    <ProtectedShell />
-                  </RequireAuth>
-                }
-              >
-                <Route index element={<Dashboard />} />
-                <Route path="credit-cards" element={<CreditCardManagement />} />
-                <Route path="portfolio" element={<InvestmentPortfolio />} />
-                <Route path="analytics" element={<TransactionAnalytics />} />
-                <Route path="account" element={<Account />} />
-                <Route path="support" element={<Support />} />
-                <Route path="support-cases" element={<SupportCases />} />
-                <Route
-                  path="support-cases/:caseId"
-                  element={<SupportCaseDetail />}
-                />
-                <Route path="*" element={<NotFound />} />
-              </Route>
-            </Routes>
+            <AppRoutes />
           </UiLocaleProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
+);
+
+export const AppRoutes = () => (
+  <Routes>
+    <Route path="/login" element={<Login />} />
+    <Route path="/admin" element={<RequireRole role="admin"><StaffShell /></RequireRole>}>
+      <Route index element={<Navigate to="operators" replace />} />
+      <Route path="operators" element={<OperatorManagement />} />
+      <Route path="operators/create" element={<OperatorCreate />} />
+      <Route path="customers" element={<CustomerUserManagement />} />
+      <Route path="*" element={<Navigate to="/admin/operators" replace />} />
+    </Route>
+    <Route path="/operator" element={<RequireRole role="operator"><StaffShell /></RequireRole>}>
+      <Route index element={<OperatorUnavailable />} />
+      <Route path="*" element={<Navigate to="/operator" replace />} />
+    </Route>
+    <Route
+      element={
+        <RequireRole role="customer">
+          <ProtectedShell />
+        </RequireRole>
+      }
+    >
+      <Route index element={<Dashboard />} />
+      <Route path="credit-cards" element={<CreditCardManagement />} />
+      <Route path="portfolio" element={<InvestmentPortfolio />} />
+      <Route path="analytics" element={<TransactionAnalytics />} />
+      <Route path="account" element={<Account />} />
+      <Route path="support" element={<Support />} />
+      <Route path="support-cases" element={<SupportCases />} />
+      <Route
+        path="support-cases/:caseId"
+        element={<SupportCaseDetail />}
+      />
+      <Route path="*" element={<NotFound />} />
+    </Route>
+  </Routes>
 );
 
 export default App;
