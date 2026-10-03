@@ -11,9 +11,32 @@
       "problemMatcher": []
     },
     {
+      "label": "run identity dev",
+      "type": "shell",
+      "command": "uv run --env-file .env uvicorn identity.main:create_app --factory --port 8090",
+      "options": {
+        "cwd": "${workspaceFolder}/app/business-api/identity"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "identity",
+        "clear": true
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": [{ "regexp": "." }],
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".*",
+          "endsPattern": ".*Uvicorn running on http://127\\.0\\.0\\.1:8090.*"
+        }
+      }
+    },
+    {
       "label": "run account mcp dev",
       "type": "shell",
-      "command": "uv run --env-file ../../../.env.dev python main.py",
+      "command": "uv run --env-file .env python main.py",
       "options": {
         "cwd": "${workspaceFolder}/app/business-api/account",
         "env": {
@@ -43,7 +66,7 @@
     {
       "label": "run transaction mcp dev",
       "type": "shell",
-      "command": "uv run --env-file ../../../.env.dev python main.py",
+      "command": "uv run --env-file .env python main.py",
       "options": {
         "cwd": "${workspaceFolder}/app/business-api/transaction",
         "env": {
@@ -73,7 +96,7 @@
     {
       "label": "run responses agent dev",
       "type": "shell",
-      "command": "uv run --env-file ../../.env.dev python -m app.main_responses_host",
+      "command": "uv run --env-file .env python -m app.main_responses_host",
       "options": {
         "cwd": "${workspaceFolder}/app/agent",
         "env": {
@@ -104,7 +127,7 @@
     {
       "label": "run responses bff dev",
       "type": "shell",
-      "command": "uv run --env-file ../../.env.dev uvicorn bff.main:app --port 8080",
+      "command": "uv run --env-file .env uvicorn bff.main:app --port 8080",
       "options": {
         "cwd": "${workspaceFolder}/app/responses-bff",
         "env": {
@@ -166,6 +189,7 @@
       "command": "echo Full stack ready",
       "problemMatcher": [],
       "dependsOn": [
+        "run identity dev",
         "run account mcp dev",
         "run transaction mcp dev",
         "run responses agent dev",

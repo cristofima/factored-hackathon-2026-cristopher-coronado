@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from banking_shared.product_types import normalize_product_type
+from banking_shared.customer_status import normalize_customer_status
 from sqlalchemy.dialects.postgresql import insert
 from sqlmodel import Session, SQLModel
 
@@ -62,7 +63,7 @@ def map_branch(row: dict[str, str]) -> Row:
 
 
 def map_customer(row: dict[str, str]) -> Row:
-    return {
+    mapped = {
         "customer_id": row["customer_id"],
         "email": row["email"].strip().lower(),
         "first_name": optional(row["first_name"]),
@@ -72,8 +73,10 @@ def map_customer(row: dict[str, str]) -> Row:
         "segment": optional(row["segment"]),
         "registration_date": parse_date(row["registration_date"]),
         "registration_branch_id": optional(row["registration_branch_id"]),
-        "customer_status": optional(row["customer_status"]),
+        "customer_status": normalize_customer_status(row["customer_status"]),
     }
+    Customer.model_validate(mapped)
+    return mapped
 
 
 def sanitize_customers_registration_branch(

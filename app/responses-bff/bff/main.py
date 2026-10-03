@@ -15,7 +15,7 @@ from bff.credentials import create_azure_credential
 from bff.responses import AsyncCredential, router as responses_router
 from bff.settings import Settings
 from bff.tracing import configure_tracing
-from bff.user_repository import SqlModelUserRepository, UserRepository
+from bff.admin import customer_router, router as admin_router
 
 
 CredentialFactory = Callable[[Settings], AsyncCredential]
@@ -25,28 +25,29 @@ def create_app(
     settings: Settings | None = None,
     transport: httpx.AsyncBaseTransport | None = None,
     credential_factory: CredentialFactory = create_azure_credential,
-    user_repository: UserRepository | None = None,
+    auth_transport: httpx.AsyncBaseTransport | None = None,
 ) -> FastAPI:
     """Create the BFF with application-lifetime upstream resources."""
     app_settings = settings or Settings()
-    app_user_repository = user_repository or SqlModelUserRepository()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.settings = app_settings
-        app.state.user_repository = app_user_repository
+        app.state.auth_client = httpx.AsyncClient(
+            base_url=app_settings.auth_users_endpoint,
+            timeout=3.0, transport=auth_transport, follow_redirects=False,
+        )
         app.state.http_client = httpx.AsyncClient(timeout=None, transport=transport)
         HTTPXClientInstrumentor.instrument_client(
             app.state.http_client, tracer_provider=tracer_provider
         )
-        app.state.azure_credential = (
-            credential_factory(app_settings)
-            if app_settings.responses_upstream_mode == "foundry"
-            else None
-        )
+        app.state.azure_credential = None
         try:
+            if app_settings.responses_upstream_mode == "foundry":
+                app.state.azure_credential = credential_factory(app_settings)
             yield
         finally:
+            await app.state.auth_client.aclose()
             await app.state.http_client.aclose()
             if app.state.azure_credential is not None:
                 await app.state.azure_credential.close()
@@ -54,6 +55,8 @@ def create_app(
     app = FastAPI(title=app_settings.app_name, lifespan=lifespan)
     tracer_provider = configure_tracing(app, app_settings.applicationinsights_connection_string)
     app.include_router(auth_router, tags=["auth"])
+    app.include_router(admin_router, tags=["admin"])
+    app.include_router(customer_router, tags=["admin"])
     app.include_router(responses_router, tags=["responses"])
     app.add_middleware(
         CORSMiddleware,

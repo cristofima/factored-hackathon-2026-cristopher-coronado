@@ -12,6 +12,7 @@ decisions produced; read these records for _why_, not _how it works today_.
 | [0003](0003-postgresql-as-the-operational-data-store.md)            | PostgreSQL as the operational data store for the live tool-calling path                              |
 | [0004](0004-custom-jwt-authentication-over-entra-id.md)             | Custom email/password JWT authentication instead of Microsoft Entra ID                               |
 | [0005](0005-frontend-calls-account-and-transaction-directly.md)     | Frontend calls Account and Transaction directly; BFF trimmed to identity and agent proxy             |
+| [0006](0006-dedicated-auth-users-and-staff-identities.md)           | Dedicated Identity, DB-free BFF, independent staff identities and per-request revocation             |
 
 Once a record's `Status` is `Accepted`, its Context/Decision/Consequences are
 immutable. A changed decision gets a new ADR that supersedes the old one; the old

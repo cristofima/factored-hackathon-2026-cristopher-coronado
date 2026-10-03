@@ -48,7 +48,7 @@ as-is:
 | Area           | Upstream sample                                                         | This fork                                                                                                       |
 | -------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
 | Data           | In-memory/dummy fixtures, no database                                   | Azure Database for PostgreSQL Flexible Server via a shared SQLModel package, with a real CSV ingestion pipeline |
-| Users          | None; RBAC-gated Container App, no end-user auth                        | Persisted Argon2-hashed users, custom JWT issued by a dedicated Responses BFF                                   |
+| Users          | None; RBAC-gated Container App, no end-user auth                        | Dedicated Identity, Argon2 credentials, role/lifecycle-aware JWTs, DB-free Responses BFF                        |
 | Agent hosting  | Supervisor + 3 agents co-located on Container Apps                      | Account/Transaction handoff workflow deployed as a separately hosted Foundry agent, with its own `azd` project  |
 | Protocol       | OpenAI ChatKit (client-managed widgets)                                 | OpenAI Responses API, proxied through the BFF                                                                   |
 | Infra          | Bicep, Container Apps                                                   | Terraform, App Service                                                                                          |
@@ -77,7 +77,7 @@ Even if specific to banking scenarios, this sample can be used for other busines
 
 <div align="center">
   
-[**BUSINESS SCENARIO**](#business-scenario)  \| [**SOLUTION OVERVIEW**](#solution-overview)  \| [**QUICK DEPLOY**](#quick-deploy)  \| [**SUPPORTING DOCUMENTATION**](#supporting-documentation)
+[**BUSINESS SCENARIO**](#business-scenario)  \| [**SOLUTION OVERVIEW**](#solution-overview) \| [**SUPPORTING DOCUMENTATION**](#supporting-documentation)
 
 </div>
 <br/>
@@ -104,7 +104,7 @@ recommendation with an explicit opt-out after case resolution. See the
 [frontend guide](app/frontend/banking-web/README.md#transaction-disputes) and
 [business API guide](app/business-api/README.md) for the implementation.
 
-The Account and Transaction APIs read banking data from PostgreSQL through a shared SQLModel package and enforce ownership in their service layer. The [Responses BFF](./app/responses-bff/README.md) authenticates persisted users with Argon2, returns customer names, and fronts the Responses agent; the frontend calls Account and Transaction directly, with the same application JWT, for account, card, and transaction reads.
+The Account and Transaction APIs read PostgreSQL through shared SQLModel and enforce resource ownership. [Identity](./app/business-api/identity/README.md) owns credentials, profiles, customer/operator/admin roles and identity lifecycle. The database-free [Responses BFF](./app/responses-bff/README.md) fronts allowlisted identity/admin operations and customer Responses chat. Financial REST calls remain direct, with the same application JWT and per-request current-identity checks. Staff cannot access customer financial REST or chat. See [ADR 0006](./docs/adr/0006-dedicated-auth-users-and-staff-identities.md); live migration, provisioning and browser validation remain separate gates.
 
 ### Evaluation Status
 
@@ -189,15 +189,6 @@ The home banking assistant uses a handoff workflow whose agents specialize in ac
 
 <br /><br />
 
-<h2><img src="./docs/assets/quick-deploy.png" width="48" />
-Quick Deploy 
-</h2>
-
-| [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/Azure-Samples/agent-openai-python-banking-assistant) | [![Open in Dev Containers](https://img.shields.io/static/v1?style=for-the-badge&label=Dev%20Containers&message=Open&color=blue&logo=visualstudiocode)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/Azure-Samples/agent-openai-python-banking-assistant) |
-| --------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-
-<br/>
-
 ### Prerequisites
 
 - [Python >= 3.11](https://www.python.org/downloads/release/python-31113/)
@@ -250,9 +241,9 @@ uv pip compile app/business-api/transaction/pyproject.toml --no-emit-package ban
 uv export --project app/responses-bff --no-dev --no-hashes --no-emit-project --no-emit-package banking-shared --output-file app/responses-bff/requirements.txt
 ```
 
-Account, Transaction, and the BFF consume the canonical SQLModel package from `app/business-api/shared` during development. Their `azd` prepackage hooks copy that importable package into each isolated App Service zip, and postpackage hooks remove the temporary copies. The `--no-emit-package` option keeps machine-local editable paths out of the Oryx dependency artifact.
+Account, Transaction and Identity consume the canonical SQLModel package from `app/business-api/shared`; the BFF does not. Existing business API `azd` packaging hooks copy the shared package into isolated App Service zips and remove temporary copies afterward. Identity deployment/packaging is a separate pending rollout gate. The `--no-emit-package` option keeps machine-local editable paths out of Oryx artifacts.
 
-Foundry Responses maintains conversation history when requests link turns with a signed user-bound `conversation` value. The BFF rejects conversation identifiers that belong to a different authenticated user. It verifies PostgreSQL-backed Argon2 identities and issues short-lived HS256 JWTs.
+Foundry Responses maintains conversation history when requests link turns with a signed user-bound `conversation` value. The BFF rejects conversation identifiers that belong to a different authenticated user. Identity verifies Argon2 credentials and issues short-lived HS256 JWTs; the BFF checks current active identity and version through protected introspection.
 
 The local Responses host creates an independent workflow per request and restores the
 matching conversation checkpoint when present. The installed hosting SDK persists
@@ -279,9 +270,23 @@ Do not run `azd down` against an existing shared resource group as a rollback st
 
 ### Local development (VS Code)
 
-Start the Account MCP service (8070), Transaction MCP service (8071), local Responses agent (8088), Responses BFF (8080), and Vite frontend (5170). The BFF uses `RESPONSES_UPSTREAM_MODE=local`, so browser requests never call Foundry directly during local validation. Account and Transaction verify the browser's application JWT directly for their REST endpoints; set a shared `JWT_SECRET_KEY` alongside `DATABASE_URL` in the ignored root `.env.dev` so all three services agree on it.
+Start Identity (8090), Account MCP (8070), Transaction MCP (8071), local Responses agent (8088), Responses BFF (8080) and Vite (5170). Configure `AUTH_USERS_ENDPOINT=http://127.0.0.1:8090`, a separate `AUTH_INTERNAL_SECRET`, and shared JWT secret/issuer/audience for Auth, BFF and financial REST callers. Auth, Account and Transaction need the approved PostgreSQL configuration; the BFF must not receive database configuration or permissions. Local BFF uses `RESPONSES_UPSTREAM_MODE=local`; browser chat never calls Foundry directly.
 
-In VS Code, press `F5` with `DEV - Full Stack Ordered` to start all five services and open the frontend at `http://localhost:5170/`. The frontend task waits for Vite to report that URL; port `5170` must be available for this launch configuration. Set `DATABASE_URL` in the ignored root `.env.dev` so Account, Transaction, and the BFF use the seeded PostgreSQL database.
+Each service owns its ignored `.env` and credential-free `.env.example`; there is no root dotenv configuration. BFF, Account and Transaction use `AUTH_USERS_ENDPOINT` to reach Identity. The frontend uses the BFF URL for authentication and administration and does not need a direct Identity URL.
+
+In VS Code, `F5` with `DEV - Full Stack Ordered` starts all six services in separate terminals and opens `http://localhost:5170/`. The user confirmed this local startup works. Approved migrations and administrator bootstrap were executed during local setup; startup itself never seeds an administrator. This evidence does not establish hosted rollout or the complete authorization matrix.
+
+### Administrator workspace
+
+Administrators manage operators at `/admin/operators` and create them on the protected `/admin/operators/create` page. `/admin/customers` lists existing customer identities and allows activation/deactivation; it does not load customer data or create public registrations. Both lists display persisted `active`/`inactive` status and `updated_at`. Status changes revoke existing tokens through identity-version checks.
+
+The workspace reuses the customer frontend's shared components and styles, with contrasting navigation tabs and centered AlertDialog confirmation modals. Operator creation remains a separate page. The user confirmed local UI validation; focused administrator/routing tests passed (51 tests), lint had zero errors and 14 existing warnings, and the frontend build passed. Real reviewer queues and dispute decisions remain disabled in the `/operator` placeholder. See the [Identity guide](./app/business-api/identity/README.md) and [frontend guide](./app/frontend/banking-web/README.md).
+
+### Customer identity provisioning
+
+The [data pipeline](./app/business-api/data/README.md) loads banking customers, products and transactions, not login identities. The separate [demo user seeder](./app/business-api/data/README.md#seed-demo-users) creates or refreshes selected customer identities as active, rotating credentials and identity version on refresh. Normal ingestion does not change login status.
+
+Explicit customer seeding copies Customer `first_name`/`last_name` into User `name` on creation and refresh, trimming each component and joining nonempty components with one space. If both are absent or blank, the stored name is null and the frontend uses its email fallback. This producer fix does not backfill existing identities: live database writes require separate authorization, and refresh also rotates credentials, activates selected users, and revokes existing tokens.
 
 The BFF exposes the protected Responses endpoint at `http://localhost:8080/responses`; the local agent listens at `http://localhost:8088/responses`.
 
@@ -308,7 +313,7 @@ Current limitations to keep explicit:
 - Signed stored-locale context and profile-bound frontend i18n support exact `es`, `pt`, and `en`, with English fallback. Static JSON catalogs translate UI and transaction labels; controlled BFF failures use localized UI messages, while login stays English. Product queries use canonical English labels and ingestion normalizes Spanish source values. Automated coverage does not establish authenticated browser localization, multilingual agent conversations, or hosted parity. See the [localization guide](app/frontend/banking-web/README.md#localization).
 - On 2026-09-30, user-supplied local browser evidence confirmed an owned-account answer with full bank number and masked card output, and a foreign-account lookup returning `ACCESS_DENIED` followed by a visible assistant response. This closes the reported blank-response failure, not the full authorization or hosted matrix; the complete real-data verification checklist is tracked internally, not in this public repository.
 - MCP and internal API authorization must be enforced in service code (`customer_id` ownership checks), not inferred from prompts.
-- The frontend must not call Foundry or agent endpoints directly; browser traffic for the chat path must go through the Responses BFF. Account and Transaction reads are the one scoped exception: the frontend calls those two services directly, authenticated with the same application JWT the BFF issues.
+- The frontend must not call Foundry or agent endpoints directly; browser traffic for the chat path must go through the Responses BFF. Account and Transaction reads are the one scoped exception: the frontend calls those two services directly, authenticated with the same application JWT Identity issues.
 - The BFF validates application identity and proxies upstream requests, but this does not replace per-resource authorization in business services.
 - The previous ChatKit-style direct browser-to-agent pattern is no longer the target architecture.
 - HITL approval widgets back a real business workflow for transaction disputes (case
@@ -337,7 +342,7 @@ In short: the intended secure pattern is `frontend -> BFF -> hosted agent -> aut
 
 The sample does not cover the following aspects, essential to the security of the solution:
 
-- **Prototype identity lifecycle**: The BFF verifies PostgreSQL-backed Argon2 users and issues short-lived JWTs. Registration, password reset, MFA, and revocation are not implemented.
+- **Identity rollout pending**: Identity implements Argon2 login, fixed staff roles, operator password/status changes and per-request version revocation. Public registration and MFA are not implemented. Synthetic tests do not prove live migrations, least-privilege grants, browser isolation or deployed rollback; existing role-less tokens require fresh login.
 - **Local identity chain only**: Signed BFF-to-agent identity and 60-second agent-to-MCP bearers are validated locally. Hosted delegated-identity transport remains unverified.
 - **Persisted ownership checks**: Account and Transaction service methods enforce `customer_id` ownership through PostgreSQL product relationships and transaction-row filters. Hosted transport and full browser scenario validation remain pending.
 - **Conversation binding is application-scoped**: The BFF binds conversation identifiers to verified JWT subjects, but production persistence, lifecycle, and hosted isolation still require validation.

@@ -188,4 +188,10 @@ function useToast() {
   }
 }
 
+export function resetToasts() {
+  toastTimeouts.forEach(clearTimeout)
+  toastTimeouts.clear()
+  dispatch({ type: "REMOVE_TOAST" })
+}
+
 export { useToast, toast }

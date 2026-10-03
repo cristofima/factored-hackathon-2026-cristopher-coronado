@@ -1,0 +1,15 @@
+"""Explicit service configuration; no credential-file loading."""
+from __future__ import annotations
+
+from pydantic import Field, SecretStr
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=None, extra="ignore", hide_input_in_errors=True)
+    database_url: SecretStr
+    jwt_secret_key: SecretStr = Field(min_length=32)
+    jwt_issuer: str = Field(min_length=1)
+    jwt_audience: str = Field(min_length=1)
+    auth_internal_secret: SecretStr = Field(min_length=32)
+    access_token_minutes: int = Field(default=15, ge=1, le=60)
