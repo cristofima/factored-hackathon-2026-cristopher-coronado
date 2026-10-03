@@ -12,7 +12,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import Response, StreamingResponse
 
-from bff.auth import AuthenticatedUser, get_authenticated_user
+from bff.auth import AuthenticatedUser, get_customer_user
 from bff.internal_identity import create_internal_identity
 from bff.settings import Settings
 
@@ -100,7 +100,7 @@ async def _stream_response(response: httpx.Response) -> AsyncIterator[bytes]:
 async def create_response(
     payload: dict[str, Any],
     request: Request,
-    user: Annotated[AuthenticatedUser, Depends(get_authenticated_user)],
+    user: Annotated[AuthenticatedUser, Depends(get_customer_user)],
 ) -> Response:
     """Forward a Responses request to the configured trusted upstream."""
     if payload.get("previous_response_id"):
