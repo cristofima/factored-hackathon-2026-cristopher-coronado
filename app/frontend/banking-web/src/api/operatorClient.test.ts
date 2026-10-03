@@ -13,7 +13,7 @@ describe("allowlisted operator identity API", () => {
     const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify([persisted])));
     vi.stubGlobal("fetch", fetch);
     expect(await listOperators(signal())).toEqual([persisted]);
-    expect(new URL(fetch.mock.calls[0][0]).pathname).toBe("/admin/operators");
+    expect(new URL(fetch.mock.calls[0][0], "https://bff.example.test").pathname).toBe("/admin/operators");
     expect(fetch.mock.calls[0][1]).toMatchObject({ method: "GET" });
     expect(fetch.mock.calls[0][1]).not.toHaveProperty("body");
   });
@@ -33,7 +33,7 @@ describe("allowlisted operator identity API", () => {
     const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 201 }));
     vi.stubGlobal("fetch", fetch);
     await createOperator(input, signal());
-    expect(new URL(fetch.mock.calls[0][0]).pathname).toBe("/admin/operators");
+    expect(new URL(fetch.mock.calls[0][0], "https://bff.example.test").pathname).toBe("/admin/operators");
     expect(fetch.mock.calls[0][1].method).toBe("POST");
     expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ ...input, email: input.email.toLowerCase() });
   });
@@ -41,7 +41,7 @@ describe("allowlisted operator identity API", () => {
     const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
     vi.stubGlobal("fetch", fetch);
     await changeOperator("operator-id", action, signal());
-    expect(new URL(fetch.mock.calls[0][0]).pathname).toBe(`/admin/operators/operator-id/${action}`);
+    expect(new URL(fetch.mock.calls[0][0], "https://bff.example.test").pathname).toBe(`/admin/operators/operator-id/${action}`);
     expect(fetch.mock.calls[0][1].method).toBe("POST");
     expect(fetch.mock.calls[0][1]).not.toHaveProperty("body");
     expect(fetch.mock.calls[0][1].headers).not.toHaveProperty("Content-Type");
@@ -50,7 +50,7 @@ describe("allowlisted operator identity API", () => {
     const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
     vi.stubGlobal("fetch", fetch);
     await changeOperator("operator-id", "reset-password", signal(), input.password);
-    expect(new URL(fetch.mock.calls[0][0]).pathname).toBe("/admin/operators/operator-id/reset-password");
+    expect(new URL(fetch.mock.calls[0][0], "https://bff.example.test").pathname).toBe("/admin/operators/operator-id/reset-password");
     expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ password: input.password });
   });
   it("trims structured names and accepts exact length boundaries", () => {
