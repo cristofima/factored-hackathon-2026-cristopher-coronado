@@ -107,6 +107,8 @@ async def main_async(args: argparse.Namespace) -> int:
         cases = [case for case in cases if case["id"] in args.case]
         if {case["id"] for case in cases} != set(args.case):
             raise ValueError("Unknown replay case ID")
+    if not cases or len({case["id"] for case in cases}) != len(cases):
+        raise ValueError("Replay requires a nonempty dataset with unique case IDs")
     async with AzureCliCredential() as credential:
         client = FoundryChatClient(
             project_endpoint=args.project_endpoint, model=args.model, credential=credential,
