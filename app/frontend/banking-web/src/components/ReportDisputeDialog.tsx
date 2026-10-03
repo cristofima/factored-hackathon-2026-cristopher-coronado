@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { MessageSquareWarning } from "lucide-react";
@@ -24,9 +24,11 @@ export default function ReportDisputeDialog({
   const [reason, setReason] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const submitting = useRef(false);
 
   const submit = async () => {
-    if (!reason.trim()) return;
+    if (!reason.trim() || submitting.current) return;
+    submitting.current = true;
     setPending(true);
     setError(null);
     try {
@@ -37,6 +39,7 @@ export default function ReportDisputeDialog({
     } catch (cause) {
       setError(errorTranslationKey(cause, "Could not open the dispute"));
     } finally {
+      submitting.current = false;
       setPending(false);
     }
   };
