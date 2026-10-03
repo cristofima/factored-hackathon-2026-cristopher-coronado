@@ -6,6 +6,10 @@ on:
     paths:
       - "app/agent/**"
       - "!app/agent/**/*.md"
+      - "evals/*.py"
+      - "evals/replay_cases.json"
+      - "app/business-api/account/mcp_tools.py"
+      - "app/business-api/transaction/mcp_tools.py"
       - ".github/workflows/ci-hosted-agent.yml"
       - ".github/actions/ci-python/**"
   pull_request:
@@ -14,6 +18,10 @@ on:
     paths:
       - "app/agent/**"
       - "!app/agent/**/*.md"
+      - "evals/*.py"
+      - "evals/replay_cases.json"
+      - "app/business-api/account/mcp_tools.py"
+      - "app/business-api/transaction/mcp_tools.py"
       - ".github/workflows/ci-hosted-agent.yml"
       - ".github/actions/ci-python/**"
 
@@ -27,6 +35,9 @@ jobs:
   build-and-test:
     name: Build & Test (Hosted Agent)
     runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      OTEL_SDK_DISABLED: "true"
     permissions:
       contents: read
     steps:
@@ -36,3 +47,102 @@ jobs:
           project-path: app/agent
           artifact-name: agent-test-results
           run-tests: "true"
+
+  replay-smoke:
+    name: MCP Replay Smoke (protocol only)
+    needs: build-and-test
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: Development
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    env:
+      OTEL_SDK_DISABLED: "true"
+      FOUNDRY_PROJECT_ENDPOINT: ${{ vars.FOUNDRY_PROJECT_ENDPOINT }}
+      MODEL_DEPLOYMENT_NAME: ${{ vars.MODEL_DEPLOYMENT_NAME }}
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v8.3.2
+        with:
+          python-version: "3.11"
+          enable-cache: true
+      - name: Validate model configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          for key in FOUNDRY_PROJECT_ENDPOINT MODEL_DEPLOYMENT_NAME AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID; do
+            if [ -z "${!key}" ]; then
+              echo "::error::Missing Development variable: $key"
+              exit 1
+            fi
+          done
+      - name: Install agent dependencies
+        run: uv sync --project app/agent --dev --frozen
+      - name: Azure model login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Run real-model replay
+        shell: bash
+        run: |
+          uv run --project app/agent --frozen --no-sync python evals/run_mcp_replay.py \
+            --project-endpoint "$FOUNDRY_PROJECT_ENDPOINT" --model "$MODEL_DEPLOYMENT_NAME" \
+            --output evals/results/mcp-replay.json
+      - name: Validate and render protocol report
+        if: always()
+        shell: bash
+        run: |
+          status=0
+          python evals/replay_summary.py --report evals/results/mcp-replay.json \
+            --dataset evals/replay_cases.json --output evals/results/replay-summary.md || status=$?
+          cat evals/results/replay-summary.md >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+      - name: Upload synthetic replay evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: mcp-replay-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evals/results/
+          retention-days: 14
+          if-no-files-found: error
+      - name: Update PR smoke report
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- banking-mcp-replay-smoke -->';
+            const path = 'evals/results/replay-summary.md';
+            const summary = fs.existsSync(path) ? fs.readFileSync(path, 'utf8') : '## MCP Replay Smoke\n\nFAILED: no report; execution is not verified.';
+            const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = `${marker}\n${summary}\n[Run and evidence artifacts](${run})\n\nCommit: ${context.payload.pull_request.head.sha}`;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              ...context.repo, issue_number: context.issue.number, per_page: 100
+            });
+            const existing = comments.find(comment => comment.user.type === 'Bot' && comment.body.startsWith(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({...context.repo, comment_id: existing.id, body});
+            } else {
+              await github.rest.issues.createComment({...context.repo, issue_number: context.issue.number, body});
+            }
+
+  replay-fork-notice:
+    name: MCP Replay Smoke unavailable (fork)
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Report unverified fork replay
+        run: echo "MCP replay was NOT EXECUTED for this fork PR. No Azure credentials or PR write token are exposed. This is not evaluation evidence." >> "$GITHUB_STEP_SUMMARY"
