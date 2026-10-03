@@ -26,7 +26,7 @@ Requirements:
 
 - Python 3.11 or newer
 - `uv`
-- Azure OpenAI access configured in `.env.dev`
+- Azure OpenAI access configured in `.env` (copy `.env.example`)
 - Account MCP on port `8070`
 - Transaction MCP on port `8071`
 
@@ -72,7 +72,7 @@ For hosted provisioning with `azd`, make sure the agent environment includes at 
 - `ACCOUNT_MCP_URL`
 - `TRANSACTION_MCP_URL`
 
-Local execution reads both `.env` and `.env.dev` when `PROFILE=dev` and uses the developer's Azure credential. Keep common MCP URLs in `.env` and environment-specific Foundry values in `.env.dev` so later files do not silently replace shared values.
+Local tasks load the agent's own `.env` and use the developer's Azure credential. Keep MCP URLs, Foundry settings, and the shared transport identity secret in that file; use `.env.example` as the credential-free template.
 
 Hosted deployment is owned by [`azure.yaml`](azure.yaml) and uses managed identity. Foundry injects `FOUNDRY_PROJECT_ENDPOINT` into the hosted container; `MODEL_DEPLOYMENT_NAME=gpt-4.1-mini` is an application-defined declaration in the manifest. Neither manifest provisions the model deployment, and hosted deployment has not been verified by the local test suite.
 
