@@ -11,7 +11,8 @@ second policy set. Use [ARCHITECTURE.md](ARCHITECTURE.md) for the code map and
 
 ```mermaid
 flowchart LR
-    Browser[React banking web] -->|chat| BFF[Responses BFF]
+    Browser[React banking web] -->|auth, admin, customer chat| BFF[Responses BFF]
+    BFF -->|auth, admin, introspection| Identity[Identity service]
     BFF --> Agent[Responses agent]
     Agent --> Account[Account MCP]
     Agent --> Transaction[Transaction MCP]
@@ -20,9 +21,11 @@ flowchart LR
 ```
 
 - `app/agent`: Account/Transaction handoff workflow and Responses host.
-- `app/responses-bff`: application JWT boundary and Responses proxy, scoped to identity
-  (`/auth/login`, `/auth/me`) and fronting the agent only; it does not read account, card,
-  or transaction data.
+- `app/business-api/identity`: persisted credentials, profiles, fixed roles, lifecycle,
+  JWT issuance, audited administrator operations and explicit bootstrap.
+- `app/responses-bff`: database-free browser boundary for allowlisted Identity facades
+  and customer Responses chat. It checks current identity through introspection;
+  it does not verify passwords or read banking data.
 - `app/business-api/account`: Account REST and MCP service. Its REST endpoints verify the
   browser's application JWT directly (`jwt_identity.py`); its MCP tools verify a separate
   short-lived agent-only bearer (`internal_identity.py`).
@@ -33,7 +36,10 @@ flowchart LR
   for financial data and the Responses stream through the BFF for chat. Includes the
   transaction-dispute support-case pages (`/support-cases`, `/support-cases/:caseId`,
   `ReportDisputeDialog`), calling Transaction's `/api/support-cases` directly with the
-  same application JWT, never through the BFF.
+  same application JWT, never through the BFF. Administrator pages use
+  `/admin/operators`, `/admin/operators/create` and `/admin/customers`, with shared
+  customer UI components and centered action-confirmation modals. `/operator`
+  remains a placeholder; real reviewer queues and decisions are not enabled.
 - `infra`: Terraform for the App Service stack and Foundry resources.
 - `app/agent/azure.yaml`: separate azd root for the hosted Foundry agent.
 
@@ -48,8 +54,13 @@ The root `.vscode` configuration owns local orchestration. `DEV - Full Stack Ord
 | `8088` | Local Responses agent |
 | `8070` | Account MCP           |
 | `8071` | Transaction MCP       |
+| `8090` | Identity              |
 
-Use the browser through this topology for local validation. Hosted Foundry deployment is a later, separate validation target.
+F5 starts all six services in separate terminals. Each service owns its ignored
+`.env` and documented `.env.example`; there is no root dotenv configuration.
+Frontend authentication and administration use the BFF URL, not a direct Identity URL.
+Use this topology for user-run browser validation; do not start it implicitly.
+Hosted Identity deployment and Foundry validation remain separate rollout gates.
 
 ## Task Guides
 
@@ -59,7 +70,8 @@ Use the browser through this topology for local validation. Hosted Foundry deplo
 | Data ingestion and manifest verification   | [Data module guide](app/business-api/data/README.md)                                                               |
 | Replay and held-out evaluation             | [Evaluation guide](evals/README.md)                                                                                |
 | Evaluation policy and verified CI evidence | [Evaluation requirements](.github/copilot-instructions.md#evaluation-requirements)                                 |
-| BFF identity and Responses proxy           | [BFF guide](app/responses-bff/README.md)                                                                           |
+| Identity, bootstrap and administrator APIs | [Identity guide](app/business-api/identity/README.md)                                                              |
+| BFF identity facades and Responses proxy   | [BFF guide](app/responses-bff/README.md)                                                                           |
 | Infrastructure                             | [Infrastructure guide](infra/README.md)                                                                            |
 
 ## Focused Checks
@@ -73,7 +85,10 @@ uv run python -m pytest tests -q
 cd ../responses-bff
 uv run pytest -q
 
-cd ../business-api/account
+cd ../business-api/identity
+uv run pytest tests -q
+
+cd ../account
 uv run --directory . python -m pytest tests -q
 
 cd ../transaction
