@@ -66,6 +66,13 @@ transaction, submit a dispute with explicit approval, and understand the case's
 progress. The agent gathers context and explains service outcomes; deterministic
 business logic routes the case, and the AI never decides dispute legitimacy.
 
+The case lifecycle is persisted, but its financial actions are not yet implemented:
+the provisional-credit outcome does not create a transaction or update a balance,
+and approval does not block a card. These labels are prototype workflow results,
+not evidence of a refund or card protection. The backend rejects an existing active
+case, but the transaction table does not hide reporting for that case, concurrent
+creation is not database-protected, and resolved transactions can be disputed again.
+
 Even if specific to banking scenarios, this sample can be used for other business use cases as technical reference architecture concerning customer support chatbots or virtual assistants using Microsoft Agent Framework to implement supervisor based orchestration for multiple domains agents that need to integrate with business domains API through MCP. AI-powered assistants in other domains by adapting the agents tools and backend services to your specific business needs.
 
 <div align="center">
@@ -112,11 +119,15 @@ The implemented dispute workflow and its evaluation evidence are separate:
 - The [isolated MCP replay](evals/README.md#isolated-mcp-replay) uses the production
   workflow with synthetic tools and a real model when executed. Its three current
   cases are Account/Transaction smoke checks, not dispute workflow evaluations;
-  real-model execution remains unverified. A [PR protocol smoke check](evals/README.md#pr-smoke-check)
-  is configured with a persistent comment and transcript artifacts; dispute quality
+  [CI run 37089481802](https://github.com/cristofima/factored-hackathon-2026-cristopher-coronado/actions/runs/37089481802)
+  verified 3/3 protocol cases with real-model execution, OIDC and artifacts.
+  The [PR protocol smoke check](evals/README.md#pr-smoke-check)
+  has a persistent comment and transcript artifacts; dispute quality
   and baseline comparison remain pending.
 
-The next priority is dispute-specific evaluation of intake, customer approval,
+The next functional priority is making claimed dispute actions effective and
+auditable, with an approved credit/blocking policy and duplicate protection.
+Dispute-specific evaluation remains a separate priority for intake, customer approval,
 fast-track versus escalation, safe refusals, and grounded status explanations.
 Service authorization and persisted timelines require independent integration
 checks. See the [evaluation guide](evals/README.md) for coverage and limitations.
@@ -128,10 +139,11 @@ cost assumptions, which are not established by transaction activity alone.
 
 The hackathon also requires baseline-versus-proposed comparison on the same
 held-out workload and baseline evidence for a learned component. The current
-label-derived policy simulation is not an executed comparator. A frozen,
-executable rules-based dispute intake/routing baseline and the pretrained agent
-must be evaluated with shared fixtures and outcome checks before claiming an
-improvement. Fraud-score threshold analysis is separate from that comparison.
+label-derived policy simulation is not an executed comparator. A separate executable
+rules-based comparator passes 25 development-exposed synthetic cases, with multi-turn
+scoring and saved-report comparison. A paired real-model run on a shared frozen
+workload remains pending; no improvement is claimed. Fraud-score threshold analysis
+is separate from that comparison.
 
 ### Key Features
 
@@ -301,7 +313,7 @@ Current limitations to keep explicit:
 - The previous ChatKit-style direct browser-to-agent pattern is no longer the target architecture.
 - HITL approval widgets back a real business workflow for transaction disputes (case
   creation, customer approval gate, triage, simulated reviewer assignment, and a
-  single post-resolution recommendation with opt-out), but the 90-day dispute window
+  single post-resolution recommendation with opt-out), but the 365-day dispute window
   is a mock policy evaluated against the real system clock and will reject opening new
   disputes once the loaded dataset's transactions fall outside it.
 - Prompt-injection resilience is bounded by deterministic authorization checks and does not rely on model instruction following alone.
