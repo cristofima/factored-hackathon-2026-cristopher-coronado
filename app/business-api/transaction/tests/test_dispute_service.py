@@ -105,7 +105,7 @@ def session_factory() -> Callable[[], Session]:
                 ),
                 TransactionRecord(
                     transaction_id="tx-too-old",
-                    transaction_date=NOW - timedelta(days=200),
+                    transaction_date=NOW - timedelta(days=366),
                     process_date=date(2025, 1, 1),
                     product_id="card-owned",
                     customer_id="customer-owned",
@@ -213,6 +213,23 @@ def test_declined_transactions_cannot_be_disputed(session_factory: Callable[[], 
         SupportCaseService(session_factory).open_transaction_dispute(
             "tx-declined", "customer-owned", "No reconozco"
         )
+
+
+def test_transactions_within_one_year_can_be_disputed(
+    session_factory: Callable[[], Session],
+) -> None:
+    with session_factory() as session:
+        transaction = session.get(TransactionRecord, "tx-low-risk")
+        assert transaction is not None
+        transaction.transaction_date = NOW - timedelta(days=364)
+        session.add(transaction)
+        session.commit()
+
+    opened = SupportCaseService(session_factory).open_transaction_dispute(
+        "tx-low-risk", "customer-owned", "Unrecognized charge"
+    )
+
+    assert opened.status == "WAITING_USER_APPROVAL"
 
 
 def test_transactions_outside_the_dispute_window_are_rejected(
