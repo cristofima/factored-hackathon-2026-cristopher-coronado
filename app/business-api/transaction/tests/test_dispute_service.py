@@ -342,3 +342,63 @@ def test_foreign_customer_cannot_dismiss_another_customers_recommendation(
 
     with pytest.raises(PermissionError, match="authenticated customer"):
         service.dismiss_recommendation(resolved.caseId, "customer-foreign")
+
+
+@pytest.mark.parametrize("score,outcome", [
+    (Decimal("31.9999"), "fast_track"), (Decimal("32"), "escalated"),
+])
+def test_triage_threshold_boundary(
+    session_factory: Callable[[], Session], score: Decimal, outcome: str,
+) -> None:
+    with session_factory() as session:
+        transaction = session.get(TransactionRecord, "tx-low-risk")
+        assert transaction is not None
+        transaction.fraud_score = score
+        session.add(transaction)
+        session.commit()
+    service = SupportCaseService(session_factory)
+    opened = service.open_transaction_dispute("tx-low-risk", "customer-owned", "Unrecognized charge")
+    result = service.respond_to_approval(opened.caseId, "customer-owned", approved=True)
+    assert result.triageOutcome == outcome
+
+
+@pytest.mark.parametrize("transaction_id", ["tx-low-risk", "tx-high-risk"])
+@pytest.mark.parametrize("approved", [True, False])
+def test_repeated_approval_cannot_mutate_resolved_or_review_case(
+    session_factory: Callable[[], Session], transaction_id: str, approved: bool,
+) -> None:
+    service = SupportCaseService(session_factory)
+    opened = service.open_transaction_dispute(transaction_id, "customer-owned", "Unrecognized charge")
+    original = service.respond_to_approval(opened.caseId, "customer-owned", approved=True)
+    events = service.get_case_timeline(opened.caseId, "customer-owned")
+    with pytest.raises(ValueError, match="not awaiting approval"):
+        service.respond_to_approval(opened.caseId, "customer-owned", approved=approved)
+    assert service.get_case(opened.caseId, "customer-owned") == original
+    assert service.get_case_timeline(opened.caseId, "customer-owned") == events
+
+
+def test_foreign_timeline_and_resolution_are_denied_without_mutation(
+    session_factory: Callable[[], Session],
+) -> None:
+    service = SupportCaseService(session_factory)
+    opened = service.open_transaction_dispute("tx-high-risk", "customer-owned", "Unrecognized charge")
+    original = service.respond_to_approval(opened.caseId, "customer-owned", approved=True)
+    with pytest.raises(PermissionError, match="authenticated customer"):
+        service.get_case_timeline(opened.caseId, "customer-foreign")
+    with pytest.raises(PermissionError, match="authenticated customer"):
+        service.resolve_case(opened.caseId, "customer-foreign", "fraud_confirmed_refund_issued")
+    assert service.get_case(opened.caseId, "customer-owned") == original
+
+
+def test_resolution_and_optout_timeline_matches_service_transitions(
+    session_factory: Callable[[], Session],
+) -> None:
+    service = SupportCaseService(session_factory)
+    opened = service.open_transaction_dispute("tx-high-risk", "customer-owned", "Unrecognized charge")
+    service.respond_to_approval(opened.caseId, "customer-owned", approved=True)
+    service.resolve_case(opened.caseId, "customer-owned", "fraud_confirmed_refund_issued")
+    service.dismiss_recommendation(opened.caseId, "customer-owned")
+    assert [event.eventType for event in service.get_case_timeline(opened.caseId, "customer-owned")] == [
+        "CASE_OPENED", "APPROVAL_REQUESTED", "APPROVAL_GRANTED", "ESCALATED_TO_REVIEW",
+        "RESOLVED", "RECOMMENDATION_DISMISSED",
+    ]
