@@ -1,7 +1,31 @@
 import { describe, expect, it } from "vitest";
 import { createUiI18n, english, resolveUiLocale, translations } from "./i18n";
+import { supportCaseEventMessageKey } from "./models/SupportCase";
 
 describe("profile UI locale", () => {
+    it.each(["en", "es", "pt"])("localizes dispute messages and recommendations in %s", (locale) => {
+        const instance = createUiI18n(locale);
+        const catalog = (locale === "en" ? english : translations[locale as "es" | "pt"])["support-cases"];
+        expect(Object.keys(catalog.messages).sort()).toEqual(Object.keys(english["support-cases"].messages).sort());
+        expect(Object.keys(catalog.recommendations)).toEqual(Object.keys(english["support-cases"].recommendations));
+        for (const eventType of Object.keys(english["support-cases"].events)) {
+            const key = supportCaseEventMessageKey({ eventType, message: "stored audit text", actor: "system", createdAt: "" });
+            const message = instance.t(key, { keySeparator: ".", transactionId: "TX-DEMO" });
+            expect(message).not.toBe(key);
+            expect(message).not.toContain("{{");
+            if (eventType === "CASE_OPENED") expect(message).toContain("TX-DEMO");
+        }
+        for (const [message, suffix] of [
+            ["Provisional credit issued; case resolved without manual review", "PROVISIONAL_CREDIT"],
+            ["Case closed: withdrawn by customer", "WITHDRAWN"],
+            ["No fraud score available for this transaction; routed to manual review (no agent available)", "INSUFFICIENT_SIGNAL"],
+        ]) {
+            const key = supportCaseEventMessageKey({ eventType: suffix === "INSUFFICIENT_SIGNAL" ? "ESCALATED_TO_REVIEW" : "RESOLVED", message, actor: "system", createdAt: "" });
+            expect(key).toBe(`support-cases.messages.${suffix}`);
+            expect(instance.t(key, { keySeparator: "." })).toBe(catalog.messages[suffix as keyof typeof catalog.messages]);
+        }
+        expect(instance.t("support-cases.recommendations.transaction_alerts", { keySeparator: "." })).toBe(catalog.recommendations.transaction_alerts);
+    });
     it.each([["es", "Resumen"], ["pt", "Resumo"], ["en", "Dashboard"], ["fr", "Dashboard"], [undefined, "Dashboard"]])(
         "selects %s without browser detection", (locale, label) => {
             expect(createUiI18n(locale).t("Dashboard")).toBe(label);
