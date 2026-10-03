@@ -14,27 +14,27 @@ import { errorTranslationKey } from "@/api/errors";
 import { startDisputePolling } from "@/api/disputePolling";
 import { useAuth } from "@/context/AuthContext";
 import type { SupportCase, SupportCaseEvent } from "@/models/SupportCase";
+import { supportCaseEventMessageKey } from "@/models/SupportCase";
 
 export default function SupportCaseDetail() {
   const { t } = useTranslation();
   const { caseId } = useParams<{ caseId: string }>();
-  const [supportCase, setSupportCase] = useState<SupportCase | null>(null);
   const { user } = useAuth();
+  const [supportCase, setSupportCase] = useState<SupportCase | null>(null);
   const [timeline, setTimeline] = useState<SupportCaseEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionPending, setActionPending] = useState(false);
   const [attempt, setAttempt] = useState(0);
-
   const actionInFlight = useRef(false);
   const stopPolling = useRef<(() => void) | null>(null);
   const actionScope = useRef(0);
+
   useEffect(() => {
     setSupportCase(null);
     setTimeline([]);
     setLoading(true);
-    setError(null);
     setActionError(null);
     setActionPending(false);
     actionInFlight.current = false;
@@ -45,6 +45,7 @@ export default function SupportCaseDetail() {
 
   useEffect(() => {
     if (!caseId || actionPending) return;
+    setError(null);
     const stop = startDisputePolling((signal) =>
       getSupportCaseDetail(caseId, signal)
         .then(([caseResult, timelineResult]) => {
@@ -76,8 +77,8 @@ export default function SupportCaseDetail() {
     setActionError(null);
     try {
       const updated = await respondToSupportCaseApproval(caseId, approved);
-      setSupportCase(updated);
       if (scope !== actionScope.current) return;
+      setSupportCase(updated);
     } catch (cause) {
       if (scope === actionScope.current)
         setActionError(
@@ -122,8 +123,8 @@ export default function SupportCaseDetail() {
         </h1>
         <Button
           variant="outline"
-          onClick={() => setAttempt((value) => value + 1)}
           disabled={actionPending}
+          onClick={() => setAttempt((value) => value + 1)}
         >
           <RefreshCw className="mr-2 h-4 w-4" aria-hidden="true" />
           {t("Refresh")}
@@ -220,7 +221,13 @@ export default function SupportCaseDetail() {
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <p className="text-sm">
-                    {supportCase.recommendationRationale}
+                    {t(
+                      `support-cases.recommendations.${supportCase.recommendationType}`,
+                      {
+                        keySeparator: ".",
+                        defaultValue: t("Not available"),
+                      },
+                    )}
                   </p>
                   {actionError && <div role="alert">{t(actionError)}</div>}
                   <Button
@@ -252,7 +259,13 @@ export default function SupportCaseDetail() {
                       })}
                     </p>
                     {event.message && (
-                      <p className="text-muted-foreground">{event.message}</p>
+                      <p className="text-muted-foreground">
+                        {t(supportCaseEventMessageKey(event), {
+                          keySeparator: ".",
+                          transactionId: supportCase.transactionId,
+                          defaultValue: t("Not available"),
+                        })}
+                      </p>
                     )}
                     <p className="text-xs text-muted-foreground">
                       {event.createdAt.slice(0, 19).replace("T", " ")}
