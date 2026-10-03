@@ -12,6 +12,7 @@ import hmac
 import json
 from pathlib import Path
 import sys
+from time import perf_counter
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -64,6 +65,7 @@ async def run_case(
         "model_execution": "caller-supplied", "expected_behavior": case["expected_behavior"],
         "query": case["query"], "locale": claims["locale"],
         "protocol_passed": False,
+        "turns": [],
     }
     try:
         async with asyncio.timeout(timeout_seconds), AsyncExitStack() as stack:
@@ -76,11 +78,22 @@ async def run_case(
                 account_mcp_session=sessions["account"],
                 transaction_mcp_session=sessions["transaction"],
             )
-            response = await workflow.as_agent(name="home_banking_agent").run(
-                case["query"], stream=True,
-            ).get_final_response()
-            result["response"] = response.to_dict()
-            result["final_answer"] = response.text
+            agent = workflow.as_agent(name="home_banking_agent")
+            conversation = agent.create_session() if "turns" in case else None
+            for turn, message in enumerate(case.get("turns", [case["query"]])):
+                for server in servers.values():
+                    server.turn = turn
+                started = perf_counter()
+                options = {"session": conversation} if conversation is not None else {}
+                response = await agent.run(message, stream=True, **options).get_final_response()
+                result["response"] = response.to_dict()
+                result["final_answer"] = response.text
+                result["turns"].append({
+                    "turn": turn, "query": message, "response": response.to_dict(),
+                    "final_answer": response.text, "latency_seconds": perf_counter() - started,
+                })
+                if not response.text.strip():
+                    raise AssertionError("Workflow returned an empty final answer")
             for server in servers.values():
                 server.assert_complete()
             if not response.text.strip():
@@ -137,7 +150,10 @@ def main() -> int:
     parser.add_argument("--output", type=Path, default=ROOT / "evals" / "results" / "mcp-replay.json")
     parser.add_argument("--case", action="append")
     parser.add_argument("--timeout-seconds", type=float, default=120)
-    return asyncio.run(main_async(parser.parse_args()))
+    args = parser.parse_args()
+    if args.timeout_seconds <= 0:
+        parser.error("--timeout-seconds must be positive")
+    return asyncio.run(main_async(args))
 
 
 if __name__ == "__main__":

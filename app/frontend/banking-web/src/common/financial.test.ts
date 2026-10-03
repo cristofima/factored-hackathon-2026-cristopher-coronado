@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FinancialTransaction } from "../api/financialClient";
-import { decimalString, decimalUnits, summarizeTransactions } from "./financial";
+import { canReportDispute, decimalString, decimalUnits, summarizeTransactions } from "./financial";
 
 function transaction(overrides: Partial<FinancialTransaction> = {}): FinancialTransaction {
     return {
@@ -11,6 +11,17 @@ function transaction(overrides: Partial<FinancialTransaction> = {}): FinancialTr
 }
 
 describe("financial movement policy", () => {
+    it("shows dispute eligibility only for approved transactions within 365 days", () => {
+        const now = Date.parse("2026-10-02T12:00:00Z");
+        const cutoff = now - 365 * 24 * 60 * 60 * 1000;
+        expect(canReportDispute(transaction({ date: new Date(cutoff).toISOString() }), now)).toBe(true);
+        expect(canReportDispute(transaction({ date: new Date(cutoff - 1).toISOString() }), now)).toBe(false);
+        expect(canReportDispute(transaction({ date: "2026-06-17T12:00:00", status: "Declined" }), now)).toBe(false);
+        expect(canReportDispute(transaction({ date: "2026-06-17T12:00:00" }), now)).toBe(true);
+        expect(canReportDispute(transaction({ date: "" }), now)).toBe(false);
+        expect(canReportDispute(transaction({ date: "invalid" }), now)).toBe(false);
+    });
+
     it.each(["0.0000", "-0.0001", "9999999999999999.9999"])("preserves exact decimal %s", (value) => {
         expect(decimalString(decimalUnits(value))).toBe(value);
     });

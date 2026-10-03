@@ -197,6 +197,22 @@
       "fraud_confirmed_refund_issued": "Fraud confirmed: refund issued",
       "withdrawn_by_customer": "Withdrawn by you"
     },
+    "recommendations": {
+      "transaction_alerts": "This dispute involved an unrecognized charge. Enabling instant transaction alerts can help you spot similar charges sooner."
+    },
+    "messages": {
+      "CASE_OPENED": "Dispute opened for transaction {{transactionId}}.",
+      "APPROVAL_REQUESTED": "Your confirmation is required to proceed with the dispute and card block.",
+      "APPROVAL_GRANTED": "You approved the dispute and card block.",
+      "APPROVAL_DECLINED": "You declined to proceed with the dispute.",
+      "FAST_TRACKED": "Low fraud-risk score; routed to automatic resolution without manual review.",
+      "ESCALATED_TO_REVIEW": "Elevated fraud-risk score; routed to manual review.",
+      "INSUFFICIENT_SIGNAL": "No fraud score is available for this transaction; routed to manual review.",
+      "PROVISIONAL_CREDIT": "Provisional credit issued; case resolved without manual review.",
+      "WITHDRAWN": "Case closed: withdrawn by you.",
+      "RESOLVED": "The case resolution was recorded.",
+      "RECOMMENDATION_DISMISSED": "You dismissed the post-resolution recommendation."
+    },
     "events": {
       "CASE_OPENED": "Dispute opened",
       "APPROVAL_REQUESTED": "Approval requested",

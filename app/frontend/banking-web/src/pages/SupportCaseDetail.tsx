@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { RefreshCw } from "lucide-react";
@@ -7,16 +7,19 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   dismissSupportCaseRecommendation,
-  getSupportCase,
-  getSupportCaseTimeline,
+  getSupportCaseDetail,
   respondToSupportCaseApproval,
 } from "@/api/disputeClient";
 import { errorTranslationKey } from "@/api/errors";
+import { startDisputePolling } from "@/api/disputePolling";
+import { useAuth } from "@/context/AuthContext";
 import type { SupportCase, SupportCaseEvent } from "@/models/SupportCase";
+import { supportCaseEventMessageKey } from "@/models/SupportCase";
 
 export default function SupportCaseDetail() {
   const { t } = useTranslation();
   const { caseId } = useParams<{ caseId: string }>();
+  const { user } = useAuth();
   const [supportCase, setSupportCase] = useState<SupportCase | null>(null);
   const [timeline, setTimeline] = useState<SupportCaseEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -24,62 +27,91 @@ export default function SupportCaseDetail() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionPending, setActionPending] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const actionInFlight = useRef(false);
+  const stopPolling = useRef<(() => void) | null>(null);
+  const actionScope = useRef(0);
 
   useEffect(() => {
-    if (!caseId) return;
-    const controller = new AbortController();
+    setSupportCase(null);
+    setTimeline([]);
     setLoading(true);
+    setActionError(null);
+    setActionPending(false);
+    actionInFlight.current = false;
+    return () => {
+      actionScope.current += 1;
+    };
+  }, [caseId, user?.id]);
+
+  useEffect(() => {
+    if (!caseId || actionPending) return;
     setError(null);
-    Promise.all([
-      getSupportCase(caseId, controller.signal),
-      getSupportCaseTimeline(caseId, controller.signal),
-    ])
-      .then(([caseResult, timelineResult]) => {
-        if (!controller.signal.aborted) {
-          setSupportCase(caseResult);
-          setTimeline(timelineResult);
-        }
-      })
-      .catch((cause: unknown) => {
-        if (!controller.signal.aborted) {
-          setError(errorTranslationKey(cause, "Support case is unavailable"));
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-    return () => controller.abort();
-  }, [caseId, attempt]);
+    const stop = startDisputePolling((signal) =>
+      getSupportCaseDetail(caseId, signal)
+        .then(([caseResult, timelineResult]) => {
+          if (!signal.aborted) {
+            setSupportCase(caseResult);
+            setTimeline(timelineResult);
+            setError(null);
+          }
+        })
+        .catch((cause: unknown) => {
+          if (!signal.aborted) {
+            setError(errorTranslationKey(cause, "Support case is unavailable"));
+          }
+        })
+        .finally(() => {
+          if (!signal.aborted) setLoading(false);
+        }),
+    );
+    stopPolling.current = stop;
+    return stop;
+  }, [caseId, user?.id, attempt, actionPending]);
 
   const respond = async (approved: boolean) => {
-    if (!caseId) return;
+    if (!caseId || actionInFlight.current) return;
+    actionInFlight.current = true;
+    stopPolling.current?.();
+    const scope = actionScope.current;
     setActionPending(true);
     setActionError(null);
     try {
       const updated = await respondToSupportCaseApproval(caseId, approved);
+      if (scope !== actionScope.current) return;
       setSupportCase(updated);
-      setTimeline(await getSupportCaseTimeline(caseId));
     } catch (cause) {
-      setActionError(
-        errorTranslationKey(cause, "Could not record your response"),
-      );
+      if (scope === actionScope.current)
+        setActionError(
+          errorTranslationKey(cause, "Could not record your response"),
+        );
     } finally {
-      setActionPending(false);
+      if (scope === actionScope.current) {
+        actionInFlight.current = false;
+        setActionPending(false);
+      }
     }
   };
 
   const dismissRecommendation = async () => {
-    if (!caseId) return;
+    if (!caseId || actionInFlight.current) return;
+    actionInFlight.current = true;
+    stopPolling.current?.();
+    const scope = actionScope.current;
     setActionPending(true);
     setActionError(null);
     try {
-      setSupportCase(await dismissSupportCaseRecommendation(caseId));
+      const updated = await dismissSupportCaseRecommendation(caseId);
+      if (scope === actionScope.current) setSupportCase(updated);
     } catch (cause) {
-      setActionError(
-        errorTranslationKey(cause, "Could not dismiss the recommendation"),
-      );
+      if (scope === actionScope.current)
+        setActionError(
+          errorTranslationKey(cause, "Could not dismiss the recommendation"),
+        );
     } finally {
-      setActionPending(false);
+      if (scope === actionScope.current) {
+        actionInFlight.current = false;
+        setActionPending(false);
+      }
     }
   };
 
@@ -91,6 +123,7 @@ export default function SupportCaseDetail() {
         </h1>
         <Button
           variant="outline"
+          disabled={actionPending}
           onClick={() => setAttempt((value) => value + 1)}
         >
           <RefreshCw className="mr-2 h-4 w-4" aria-hidden="true" />
@@ -101,7 +134,7 @@ export default function SupportCaseDetail() {
         <output className="block">{t("Loading support case...")}</output>
       )}
       {error && <div role="alert">{t(error)}</div>}
-      {!loading && !error && supportCase && (
+      {supportCase && (
         <>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0">
@@ -188,7 +221,13 @@ export default function SupportCaseDetail() {
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <p className="text-sm">
-                    {supportCase.recommendationRationale}
+                    {t(
+                      `support-cases.recommendations.${supportCase.recommendationType}`,
+                      {
+                        keySeparator: ".",
+                        defaultValue: t("Not available"),
+                      },
+                    )}
                   </p>
                   {actionError && <div role="alert">{t(actionError)}</div>}
                   <Button
@@ -220,7 +259,13 @@ export default function SupportCaseDetail() {
                       })}
                     </p>
                     {event.message && (
-                      <p className="text-muted-foreground">{event.message}</p>
+                      <p className="text-muted-foreground">
+                        {t(supportCaseEventMessageKey(event), {
+                          keySeparator: ".",
+                          transactionId: supportCase.transactionId,
+                          defaultValue: t("Not available"),
+                        })}
+                      </p>
                     )}
                     <p className="text-xs text-muted-foreground">
                       {event.createdAt.slice(0, 19).replace("T", " ")}

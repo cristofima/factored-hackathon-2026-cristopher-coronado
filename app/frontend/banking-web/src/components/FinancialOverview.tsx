@@ -5,6 +5,7 @@ import { AccountSummary, getAccounts } from "@/api/authClient";
 import { FinancialTransaction, getTransactions } from "@/api/financialClient";
 import { errorTranslationKey } from "@/api/errors";
 import {
+  canReportDispute,
   calendarDate,
   decimalString,
   summarizeTransactions,
@@ -333,7 +334,7 @@ export default function FinancialOverview({
                           </td>
                           {analytics && (
                             <td className="p-3 whitespace-nowrap">
-                              {record.status === "Approved" && (
+                              {canReportDispute(record) && (
                                 <ReportDisputeDialog
                                   transactionId={record.id}
                                 />

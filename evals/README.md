@@ -15,7 +15,7 @@ at least one learned component against an appropriate baseline; training a new
 model is not mandatory. For this project, the pretrained agent's dispute intent,
 tool selection, and workflow behavior are the learned-component evaluation target.
 
-The current `run_baseline` is a policy simulation derived from each scenario's
+The legacy `run_held_out_eval.py` baseline is a policy simulation derived from each scenario's
 `expected_outcome`, with safe denials inherited and unsafe outcomes set to false.
 It is not an independently executed baseline and cannot establish measured safety,
 latency, cost, or improvement over customer support. Implement and freeze an
@@ -56,6 +56,71 @@ for live runs. Model cost and verified workflow-state metrics remain pending.
   running services needed) and, when the local stack is up, sends proposed-system
   turns through the Responses BFF. Hosted mode is an unverified direct diagnostic
   path, not evidence of browser-to-BFF end-to-end behavior.
+
+## Dispute Replay
+
+[The dispute dataset](dispute_cases.json) contains 25 synthetic, development-exposed
+cases mapping all 18 original scenario IDs without replacing
+[the original scenarios](scenarios.json). It covers intake, explicit confirmation
+and consent, decline, triage outcomes, pre-checks, ownership denials, mixed-language
+input, service failure, status/timeline, and recommendation opt-out.
+
+[The comparator and runner](run_dispute_replay.py) execute a finite-state intake
+using customer turns and MCP replies, not outcome labels. Account number, merchant,
+and dollar amount identify a transaction; a separate confirmation precedes opening,
+and explicit approval or decline precedes the approval tool. Both paths use the same
+synthetic tool contracts and replies. The comparator uses a narrow English/Spanish/
+Portuguese grammar, requires a dollar-prefixed amount, and does not provide the
+agent's general language understanding or Account-tool routing. These limitations,
+the exposed case set, and exact reason/call matching prevent an unseen-quality claim.
+Reserve untouched confirmation cases before tuning or claiming generalization.
+
+Run these credential-free commands from the repository root:
+
+```powershell
+uv run --project app/agent python -m pytest app/agent/tests/test_dispute_replay.py app/agent/tests/test_mcp_replay.py -q
+uv run --project app/agent python evals/run_dispute_replay.py --system baseline --timeout-seconds 10
+uv run --project app/agent python evals/run_dispute_replay.py --rescore evals/results/dispute-baseline.json
+```
+
+The last verified offline run passed all 25 structured cases. Local regressions
+passed 32 replay checks and 27 Transaction service/contract checks. SQLite service
+tests independently exercise threshold boundaries, repeated approval rejection,
+ownership, and event order. Local FastMCP discovery checks compare tool declarations
+and input schemas; production response models validate fixture outputs. Neither
+test lane proves deployed tool parity or PostgreSQL persistence.
+
+After explicit model-run authorization, the proposed path accepts `--system proposed`,
+`--project-endpoint`, and `--model`. It constructs the production workflow with
+synthetic signed identity and retains one session per multi-turn case. It does not
+start services, deploy, or submit remote Foundry evaluations. Default outputs are
+ignored `evals/results/dispute-baseline.json` and `dispute-proposed.json`, with
+Markdown and JUnit siblings. Use unique `--output` paths to retain repeated runs.
+
+Compare saved proposed evidence without a new model call:
+
+```powershell
+uv run --project app/agent python evals/run_dispute_replay.py --rescore evals/results/dispute-proposed.json --compare-baseline evals/results/dispute-baseline.json --output evals/results/dispute-paired.json
+```
+
+[Structured scoring](dispute_replay.py) checks complete turns, tool arguments and
+returned replies, turn attribution, consent/selection ordering, denial handling,
+canonical status grounding, and unsupported actions. Saved reports are rescored;
+dataset hash, workload IDs, and locale must match. Reports include runtime, model,
+prompt, contract, comparator, and scorer fingerprints, per-turn answers/responses,
+timing, controlled failures, and sanitized evidence. Incomplete or invalid case
+timing is unavailable and excluded from percentiles, never counted as zero.
+Execution failures can lose
+partial transcripts. Semantic and locale review, complete usage/pricing, repeated-run
+variability, and independently verified safe-resolution metrics remain pending.
+Review every transcript of the first authorized real-model dispute run.
+
+[Hosted Agent CI](../.github/workflows/ci-hosted-agent.yml) now also configures a
+credential-free `dispute-offline` job: focused tests, all 25 baseline cases,
+saved-report rescoring, Markdown summary, and 14-day artifacts. It has a 10-minute
+job bound and 10-second case timeout. No dispute model gate or branch protection
+was configured or executed; choose its workload and billable budget separately.
+Local YAML structure checks passed; actionlint was unavailable in this session.
 
 ## Isolated MCP Replay
 

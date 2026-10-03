@@ -68,11 +68,10 @@ Controlled [BFF error codes](../../responses-bff/README.md#controlled-errors) ar
 to local UI messages. Raw backend details and unexpected exception messages are not
 displayed; login errors remain English.
 
-The frontend suite passed with 42 tests before the final Payment/category additions.
-The subsequent focused i18n suite passed with 13 tests, covering all transaction labels,
-catalog parity and unknown-label fallback; modified-file diagnostics were clean.
-Focused localization lint and production build passed before those final additions; the build retains a large-chunk
-warning. Full TypeScript checking reports existing errors in chat rendering/provider
+The latest frontend suite passed with 52 tests; the focused i18n suite passed with
+16 tests, covering transaction labels, catalog parity, timeline/recommendation
+templates and unknown-label fallback. Edited-file lint and production build passed;
+the build retains a large-chunk warning. Full TypeScript checking previously reported existing errors in chat rendering/provider
 types and legacy BFF mocks. Authenticated browser localization, responsive layouts and
 live multilingual conversations were not validated in this change.
 
@@ -163,13 +162,31 @@ BFF. A [`ReportDisputeDialog`](src/components/ReportDisputeDialog.tsx) is wired 
 the Analytics transaction table for `Approved` rows and opens a new case from a
 customer-entered reason.
 
+Reporting is hidden for transactions older than the approved 365-day window,
+using the real clock, and uses a light-blue outline trigger. It does not yet hide
+the trigger for an existing active case; the backend rejects that submission.
+Resolved transactions can currently be reported again. Eligibility also accepts
+approved deposits; restricting transaction types requires an explicit policy decision.
+
+Case outcomes currently do not create financial movements, update balances, or
+block cards. The approval and provisional-credit wording must not be treated as
+evidence that those actions occurred. Any future credit should appear as a separate,
+case-linked movement on its posting date, not rewrite the original transaction.
+
+Recommendation and timeline message templates are localized in en/es/pt, while the
+customer's reason remains unchanged. Generic translated messages omit free-form
+manual-resolution notes and reviewer-assignment suffixes; the original audit data
+remains persisted. On 2026-10-02, 52 frontend tests (including 16 focused localization
+tests), edited-file lint, and the production build passed. The existing bundle-size
+warning remains. These checks do not establish authenticated three-language browser parity.
+
 The detail page shows the case status, an approve/decline gate while
 `WAITING_USER_APPROVAL`, the full event timeline, and the single post-resolution
 recommendation card with an explicit dismiss action once a case resolves favorably. All
 status, resolution, and event values are machine-readable codes translated for display
 through a dedicated `support-cases.*` i18n namespace in all three locale catalogs.
 
-The backend's `DISPUTE_WINDOW_DAYS` mock policy (90 days, evaluated against the real
+The backend's `DISPUTE_WINDOW_DAYS` demo policy (365 days, evaluated against the real
 system clock) rejects opening a _new_ dispute once every loaded transaction falls
 outside that window; this is a dataset-staleness constraint, not a frontend bug.
 
