@@ -2,6 +2,12 @@
 
 This project hosts the Account and Transaction handoff workflow through the Foundry Responses protocol. It is a separate deployable from the browser-facing BFF under [`app/responses-bff`](../responses-bff).
 
+Transaction disputes are the workflow's persisted support-case use case, not a
+third specialist. The agent identifies the transaction, gathers the customer's
+reason, requests explicit approval, and explains tool-reported outcomes. The
+Transaction service owns policy, triage, ownership checks, and case events; the
+agent never determines dispute legitimacy or invents a missing fraud score.
+
 ## Runtime Flow
 
 ```mermaid
@@ -73,7 +79,7 @@ Hosted deployment is owned by [`azure.yaml`](azure.yaml) and uses managed identi
 ## Validation
 
 ```powershell
-uv run pytest tests/test_hosted_workflow.py tests/test_internal_identity.py tests/test_settings.py -q
+uv run python -m pytest tests/test_hosted_workflow.py tests/test_internal_identity.py tests/test_settings.py tests/test_mcp_replay.py -q
 ```
 
 The focused suite passed with 23 tests covering handoff completion, safe ownership
@@ -87,6 +93,38 @@ account returned details and masked cards; a foreign account reached
 visible assistant denial before `response.completed`. No foreign financial data was
 returned. Missing/empty account cases, multi-turn checkpoint restoration, approval
 continuation, and hosted identity transport remain unverified end to end.
+
+### Dispute Evaluation Coverage
+
+The [evaluation guide](../../evals/README.md) separates three evidence levels:
+
+- [Service regression tests](../business-api/transaction/tests/test_dispute_service.py)
+  exercise seeded business rules, ownership, case events, and recommendations.
+  They do not evaluate the model.
+- [Isolated replay](../../evals/run_mcp_replay.py) injects Account and Transaction
+  SDK memory sessions into the existing workflow. A model run uses a real Foundry
+  model and synthetic signed identity, without the BFF, database, real business
+  APIs, or application JWT. Production HTTP/authentication defaults stay intact.
+- [Held-out scenarios](../../evals/scenarios.json) define 18 dispute cases, but
+  complete proposed-system results and persisted-state verification remain open.
+
+The replay's three current cases cover balance lookup, canned denial, and empty
+transactions, not disputes. Offline tests validate the harness; real-model
+execution is pending. `protocol_passed` checks calls and completion, not grounding,
+locale, approval correctness, or dispute success. Behavioral review is pending,
+and the existing CI workflow does not run a real-model replay quality gate.
+
+Next coverage must prioritize dispute identification, clarification, approval and
+decline across turns, low/high/missing-score tool outcomes, safe refusals, and
+status explanations grounded in returned cases/timelines. Simulated MCP replies
+prove agent behavior only; real authorization and persistence require independent
+service/integration checks. Generic MCP consent is not the business approval gate.
+
+Replay reports use `home-banking-agent-mcp-replay-eval` and
+`home-banking-agent-mcp-replay-eval run` as display names. Reports are currently
+local and `foundry_submission: not_submitted`; they do not create remote runs.
+Native hosted evaluation is blocked by the required signed request identity, even
+for prompts that need no tools. Hosted deployment success does not close that gate.
 
 ## Conversation State
 

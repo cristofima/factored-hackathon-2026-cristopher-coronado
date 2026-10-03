@@ -61,7 +61,10 @@ why each of these changed.
 
 For the 2026-10-05 submission, the target audience is retail banking customers who need fast support resolution and clear balance-movement explanations. Dataset profiling shows higher monthly activity in 2026 than 2025 for selected customers, but the core value proposition remains workflow clarity, approval control, and end-to-end case traceability rather than high-volume optimization alone. The demo scope includes one contextual product recommendation after case resolution, with strict guardrails (single recommendation, rationale shown, and opt-out support) to avoid spam-like behavior.
 
-A banking personal assistant designed to revolutionize the way users interact with their bank account information, transaction history, and payment functionalities. Utilizing the power of generative AI within a multi-agent architecture, this assistant aims to provide a seamless, conversational interface through which users can effortlessly access and manage their financial data.
+A banking support prototype for customers who need to identify an unfamiliar
+transaction, submit a dispute with explicit approval, and understand the case's
+progress. The agent gathers context and explains service outcomes; deterministic
+business logic routes the case, and the AI never decides dispute legitimacy.
 
 Even if specific to banking scenarios, this sample can be used for other business use cases as technical reference architecture concerning customer support chatbots or virtual assistants using Microsoft Agent Framework to implement supervisor based orchestration for multiple domains agents that need to integrate with business domains API through MCP. AI-powered assistants in other domains by adapting the agents tools and backend services to your specific business needs.
 
@@ -95,6 +98,38 @@ recommendation with an explicit opt-out after case resolution. See the
 [business API guide](app/business-api/README.md) for the implementation.
 
 The Account and Transaction APIs read banking data from PostgreSQL through a shared SQLModel package and enforce ownership in their service layer. The [Responses BFF](./app/responses-bff/README.md) authenticates persisted users with Argon2, returns customer names, and fronts the Responses agent; the frontend calls Account and Transaction directly, with the same application JWT, for account, card, and transaction reads.
+
+### Evaluation Status
+
+The implemented dispute workflow and its evaluation evidence are separate:
+
+- [Dispute service tests](app/business-api/transaction/tests/test_dispute_service.py)
+  cover deterministic business behavior against seeded fixtures, not real-model
+  quality or deployed data parity.
+- The [18 held-out scenarios](evals/scenarios.json) target transaction disputes,
+  but a complete proposed-system run is not yet verified. The current live runner
+  uses final-text heuristics, not persisted-state verification.
+- The [isolated MCP replay](evals/README.md#isolated-mcp-replay) uses the production
+  workflow with synthetic tools and a real model when executed. Its three current
+  cases are Account/Transaction smoke checks, not dispute workflow evaluations;
+  real-model execution and the PR quality gate remain pending.
+
+The next priority is dispute-specific evaluation of intake, customer approval,
+fast-track versus escalation, safe refusals, and grounded status explanations.
+Service authorization and persisted timelines require independent integration
+checks. See the [evaluation guide](evals/README.md) for coverage and limitations.
+
+Business-impact reporting will distinguish safely completed cases from simple
+containment and correct escalation. No measured reduction in support workload or
+cost is claimed; economic estimates require explicit volume, handling-time, and
+cost assumptions, which are not established by transaction activity alone.
+
+The hackathon also requires baseline-versus-proposed comparison on the same
+held-out workload and baseline evidence for a learned component. The current
+label-derived policy simulation is not an executed comparator. A frozen,
+executable rules-based dispute intake/routing baseline and the pretrained agent
+must be evaluated with shared fixtures and outcome checks before claiming an
+improvement. Fraud-score threshold analysis is separate from that comparison.
 
 ### Key Features
 
@@ -134,7 +169,6 @@ The home banking assistant uses a handoff workflow whose agents specialize in ac
 
 ### Additional resources
 
-- [Skilling-Presentation](./docs/Home%20Banking%20Assistant.pdf)
 - [Architecture](./ARCHITECTURE.md)
 - [Architecture Decision Records](./docs/adr/README.md)
 - For Semantic Kernel version check this [branch](https://github.com/Azure-Samples/agent-openai-python-banking-assistant/tree/semantic-kernel)
