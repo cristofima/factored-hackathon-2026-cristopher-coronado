@@ -19,7 +19,9 @@ The one deliberate architectural split to internalize before changing anything: 
 BFF is scoped to identity and chat-proxying only. The browser calls Account and
 Transaction directly over REST for every financial read (accounts, cards,
 transactions, support cases); it never goes through the BFF for those. The BFF is
-only in the loop for login/profile and for the Responses chat stream.
+only in the loop for allowlisted login/profile/admin facades and the customer
+Responses chat stream. Dedicated Identity owns credentials, profiles and lifecycle;
+the BFF has no database connection.
 
 ## Code Map
 
@@ -35,15 +37,23 @@ consumed by `UiLocaleProvider`.
 
 ### `app/responses-bff/bff/`
 
-`main.py` wires the FastAPI app. `auth.py` + `user_repository.py` verify
-PostgreSQL-backed Argon2 users and issue short-lived HS256 JWTs
-(`sub`, `customer_id`, `email`, `locale`, `iss`, `aud`, `exp`). `responses.py`
-proxies the Responses SSE stream to the local or Foundry-hosted agent.
+`main.py` wires the FastAPI app. `auth.py` fronts allowlisted Identity
+operations and checks current active identity/version without caching. `responses.py`
+proxies the customer-only Responses SSE stream to the local or Foundry-hosted agent.
 `internal_identity.py` signs the verified identity envelope the agent re-verifies.
 `credentials.py` obtains the Azure access token server-side for hosted mode. This
 package does not import or query Account/Transaction/PostgreSQL financial tables;
 that boundary was deliberately removed in the 2026-10-01 direct-API migration (see
 `docs/adr/0005-frontend-calls-account-and-transaction-directly.md`).
+
+### `app/business-api/identity/`
+
+Dedicated FastAPI identity service: Argon2 login, HS256 issuance, customer/operator/
+admin profiles, fixed-role operator management, active/inactive lifecycle, identity
+version and atomic audit. An explicit seed service bootstraps an admin from external
+credentials; it never runs at startup. Protected introspection uses a separate
+`AUTH_INTERNAL_SECRET`. Staff have no `customer_id` and cannot use financial REST
+or customer chat. See [ADR 0006](docs/adr/0006-dedicated-auth-users-and-staff-identities.md).
 
 ### `app/agent/app/`
 
@@ -85,7 +95,9 @@ dispute triage threshold. Alembic migrations live alongside the SQLModel schema.
 
 Terraform only (no Bicep in this repo). One Linux App Service plan, four App
 Services (`account`, `transaction`, Responses BFF, `web`), Log Analytics,
-Application Insights, and a Foundry account/project.
+Application Insights, and a Foundry account/project. Identity is implemented
+locally but its additional cloud service, database grants and rollout remain pending;
+the existing Terraform topology is not deployment evidence for this extraction.
 
 ### `app/agent/azure.yaml` vs root `azure.yaml`
 
