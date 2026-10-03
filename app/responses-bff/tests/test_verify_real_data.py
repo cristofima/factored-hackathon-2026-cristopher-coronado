@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 import importlib.util
+import json
 from pathlib import Path
 import sys
 
@@ -19,6 +20,15 @@ assert spec is not None and spec.loader is not None
 verifier = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = verifier
 spec.loader.exec_module(verifier)
+
+
+def test_retired_verifier_fails_closed_without_database_access(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert verifier.main() == 2
+    result = json.loads(capsys.readouterr().out)
+    assert result["passed"] is False
+    assert result["code"] == "LEGACY_BFF_VERIFIER_RETIRED"
 
 
 @pytest.mark.parametrize("label", CARD_PRODUCT_TYPES)
