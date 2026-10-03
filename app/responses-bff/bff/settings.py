@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     jwt_audience: str = "home-banking-web"
     jwt_access_token_minutes: int = Field(default=15, ge=1, le=60)
     azure_client_id: str | None = None
+    applicationinsights_connection_string: str | None = None
     allowed_origins: list[str] = ["http://localhost:5170"]
 
     model_config = SettingsConfigDict(

@@ -150,13 +150,28 @@ Services use different ports based on the `PROFILE` environment variable:
 
 ## ⚙️ Configuration
 
-| Variable                      | Used by              | Purpose / default                                                         |
-| ----------------------------- | -------------------- | ------------------------------------------------------------------------- |
-| `DATABASE_URL`                | Account, Transaction | Shared PostgreSQL connection (via `banking-shared`).                      |
-| `INTERNAL_IDENTITY_SECRET`    | Account, Transaction | HMAC secret verifying the agent's short-lived MCP bearer.                 |
-| `JWT_SECRET_KEY`              | Account, Transaction | Must match the BFF's signing key; verifies the browser's application JWT. |
-| `JWT_ISSUER` / `JWT_AUDIENCE` | Account, Transaction | Default `home-banking-api` / `home-banking-web`, matching the BFF.        |
-| `CORS_ALLOWED_ORIGINS`        | Account, Transaction | Comma-separated browser origins; defaults to `http://localhost:5170`.     |
+| Variable                                | Used by              | Purpose / default                                                         |
+| --------------------------------------- | -------------------- | ------------------------------------------------------------------------- |
+| `DATABASE_URL`                          | Account, Transaction | Shared PostgreSQL connection (via `banking-shared`).                      |
+| `INTERNAL_IDENTITY_SECRET`              | Account, Transaction | HMAC secret verifying the agent's short-lived MCP bearer.                 |
+| `JWT_SECRET_KEY`                        | Account, Transaction | Must match the BFF's signing key; verifies the browser's application JWT. |
+| `JWT_ISSUER` / `JWT_AUDIENCE`           | Account, Transaction | Default `home-banking-api` / `home-banking-web`, matching the BFF.        |
+| `CORS_ALLOWED_ORIGINS`                  | Account, Transaction | Comma-separated browser origins; defaults to `http://localhost:5170`.     |
+| `APPLICATIONINSIGHTS_CONNECTION_STRING` | Account, Transaction | Optional Azure Monitor trace export.                                      |
+
+### Distributed Tracing
+
+FastAPI instrumentation surrounds each service's REST routes and mounted `/mcp/`
+application. It extracts W3C `traceparent` and `tracestate` from agent requests, or
+starts a new trace for browser REST calls without context. Service resource names
+are `banking-assistant-account` and `banking-assistant-transaction`. Export is optional;
+propagation and server spans remain available without an Application Insights connection.
+The setup does not enable body or authentication-header capture.
+
+In-memory tests verify MCP context reception. Correlation across the deployed
+Foundry gateway remains unverified. The App Service startup command must also trust
+the controlled Azure proxy's forwarded scheme so `/mcp` redirects remain HTTPS;
+the Terraform startup-command correction requires provisioning, not just zip deployment.
 
 ## 📁 Service Structure
 
