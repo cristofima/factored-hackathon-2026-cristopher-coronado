@@ -11,6 +11,27 @@ This business API layer contains **specialized MCP servers** for different banki
 
 Each service runs as an independent FastMCP server exposing banking tools through HTTP endpoints that the copilot agents can consume.
 
+## App Service Deployment
+
+Identity is a separate HTTP identity service, not an MCP specialist. It owns
+persisted users and JWT issuance; see the [Identity guide](./identity/README.md).
+Identity, Account and Transaction deploy independently through the root
+[azd manifest](../../azure.yaml) to Terraform-provisioned App Services.
+
+| Service     | GitHub `Development` Variable | Terraform output / azd variable |
+| ----------- | ----------------------------- | ------------------------------- |
+| Identity    | `AZURE_IDENTITY_APP_NAME`     | `AZURE_IDENTITY_APP_NAME`       |
+| Account     | `AZURE_ACCOUNT_APP_NAME`      | `AZURE_ACCOUNT_APP_NAME`        |
+| Transaction | `AZURE_TRANSACTION_APP_NAME`  | `AZURE_TRANSACTION_APP_NAME`    |
+
+Set GitHub Variables manually from the physical name outputs. Shared CD exports
+those values under the same `_APP_NAME` azd names; `resourceName` and preflight target the
+same app, with no tag-discovery fallback. Identity reuses the shared `database-url`
+Key Vault secret; the BFF remains database-free. Packaging does not migrate the
+database or create users, and resolved references do not prove runtime readiness.
+See the [workflow guide](../../.github/workflows/README.md#required-github-environment-variables)
+and [infrastructure guide](../../infra/README.md) for configuration and rollout.
+
 ## 🚀 Quick Start
 
 ### Prerequisites

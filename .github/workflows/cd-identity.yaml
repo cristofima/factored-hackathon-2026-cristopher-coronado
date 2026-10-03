@@ -1,0 +1,84 @@
+name: Deploy Identity API
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/business-api/identity/**"
+      - "!app/business-api/identity/**/*.md"
+      - "app/business-api/shared/**"
+      - "azure.yaml"
+      - ".github/workflows/cd-identity.yaml"
+      - ".github/actions/ci-python/**"
+      - ".github/actions/appservice-preflight/**"
+      - ".github/actions/cd-azure/**"
+  workflow_dispatch:
+
+concurrency:
+  group: identity-deploy-development
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  validate:
+    name: Validate Identity before deployment
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Test deployment preflight regressions
+        run: node --test .github/actions/appservice-preflight/preflight.test.cjs
+      - uses: ./.github/actions/ci-python
+        with:
+          project-path: app/business-api/identity
+          artifact-name: identity-deploy-test-results
+          run-tests: "true"
+          deployment-requirements: requirements.txt
+
+  deploy:
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: Development
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Validate deployment variables
+        shell: bash
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
+        run: |
+          set -euo pipefail
+          for variable in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID AZURE_LOCATION AZURE_RESOURCE_GROUP; do
+            if [[ -z "${!variable//[[:space:]]/}" ]]; then
+              echo "::error::$variable is required in the Development environment."
+              exit 1
+            fi
+          done
+      - uses: ./.github/actions/cd-azure
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          location: ${{ vars.AZURE_LOCATION }}
+          resource-group: ${{ vars.AZURE_RESOURCE_GROUP }}
+          app-service-name: ${{ vars.AZURE_IDENTITY_APP_NAME }}
+          app-service-name-variable: AZURE_IDENTITY_APP_NAME
+      - uses: ./.github/actions/appservice-preflight
+        with:
+          service: identity
+          app-name: ${{ vars.AZURE_IDENTITY_APP_NAME }}
+          resource-group: ${{ vars.AZURE_RESOURCE_GROUP }}
+      - name: Deploy identity
+        shell: bash
+        run: azd deploy identity --no-prompt

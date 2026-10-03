@@ -22,9 +22,39 @@ variable "resource_group_name" {
 }
 
 variable "plan_sku" {
-  description = "App Service Plan SKU. B1 cannot sustain Always On across 5 App Services (3 Python + Node + BFF) sharing one core/1.75 GiB; B2 (2 cores/3.5 GiB) is the minimum validated to avoid CPU/memory contention once Always On is enabled on all of them."
+  description = "Shared Linux App Service Plan SKU for five sites (four Python services and one frontend). B2 is the retained default, not verified capacity evidence; validate workload capacity before rollout."
   type        = string
   default     = "B2"
+}
+
+variable "jwt_issuer" {
+  description = "Coordinated application JWT issuer for Identity and all three consumers."
+  type        = string
+  default     = "home-banking-api"
+  validation {
+    condition     = length(trimspace(var.jwt_issuer)) > 0
+    error_message = "JWT issuer must be nonempty."
+  }
+}
+
+variable "jwt_audience" {
+  description = "Coordinated application JWT audience for Identity and all three consumers."
+  type        = string
+  default     = "home-banking-web"
+  validation {
+    condition     = length(trimspace(var.jwt_audience)) > 0
+    error_message = "JWT audience must be nonempty."
+  }
+}
+
+variable "access_token_minutes" {
+  description = "Identity-issued application JWT lifetime in minutes."
+  type        = number
+  default     = 15
+  validation {
+    condition     = var.access_token_minutes >= 1 && var.access_token_minutes <= 60 && floor(var.access_token_minutes) == var.access_token_minutes
+    error_message = "Token lifetime must be an integer between 1 and 60 minutes."
+  }
 }
 
 variable "app_names" {

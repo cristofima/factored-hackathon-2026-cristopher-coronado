@@ -11,6 +11,7 @@ on:
       - ".github/workflows/ci-identity.yml"
       - ".github/workflows/cd-identity.yaml"
       - ".github/actions/ci-python/**"
+      - ".github/actions/appservice-preflight/**"
   pull_request:
     branches: ["main", "develop"]
     types: [opened, reopened, synchronize, ready_for_review]
@@ -22,6 +23,7 @@ on:
       - ".github/workflows/ci-identity.yml"
       - ".github/workflows/cd-identity.yaml"
       - ".github/actions/ci-python/**"
+      - ".github/actions/appservice-preflight/**"
   workflow_dispatch:
 
 concurrency:
@@ -39,19 +41,14 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7.0.1
+      - name: Test deployment preflight regressions
+        run: node --test .github/actions/appservice-preflight/preflight.test.cjs
       - uses: ./.github/actions/ci-python
         with:
           project-path: app/business-api/identity
           artifact-name: identity-test-results
           run-tests: "true"
-      - name: Verify deployment requirements match the lockfile
-        shell: bash
-        run: |
-          set -euo pipefail
-          uv export --project app/business-api/identity --frozen --no-dev --no-hashes \
-            --no-emit-project --no-emit-package banking-shared --no-header \
-            --output-file "$RUNNER_TEMP/identity-requirements.txt" > /dev/null
-          diff -u <(sed '/^#/d' app/business-api/identity/requirements.txt) "$RUNNER_TEMP/identity-requirements.txt"
+          deployment-requirements: requirements.txt
 
   build-and-test:
     name: Build & Test (identity push)
@@ -62,16 +59,11 @@ jobs:
       checks: write
     steps:
       - uses: actions/checkout@v7.0.1
+      - name: Test deployment preflight regressions
+        run: node --test .github/actions/appservice-preflight/preflight.test.cjs
       - uses: ./.github/actions/ci-python
         with:
           project-path: app/business-api/identity
           artifact-name: identity-test-results
           run-tests: "true"
-      - name: Verify deployment requirements match the lockfile
-        shell: bash
-        run: |
-          set -euo pipefail
-          uv export --project app/business-api/identity --frozen --no-dev --no-hashes \
-            --no-emit-project --no-emit-package banking-shared --no-header \
-            --output-file "$RUNNER_TEMP/identity-requirements.txt" > /dev/null
-          diff -u <(sed '/^#/d' app/business-api/identity/requirements.txt) "$RUNNER_TEMP/identity-requirements.txt"
+          deployment-requirements: requirements.txt
