@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import asyncio
 import hashlib
 import hmac
 import json
@@ -11,6 +12,7 @@ import re
 from types import SimpleNamespace
 
 import httpx
+import httpcore
 import jwt
 import pytest
 from asgi_lifespan import LifespanManager
@@ -205,3 +207,83 @@ async def test_invalid_continuation_is_rejected(payload: dict[str, object]) -> N
     response = await _post(app, _token("user-a", settings), payload)
 
     assert response.status_code == 400
+
+
+@pytest.mark.parametrize("incoming", [None, "valid", "invalid"])
+@pytest.mark.parametrize("stream", [False, True])
+async def test_w3c_context_propagates_to_agent(
+    monkeypatch: pytest.MonkeyPatch, incoming: str | None, stream: bool
+) -> None:
+    captured: list[httpx.Headers] = []
+
+    async def upstream(
+        pool: httpcore.AsyncConnectionPool, request: httpcore.Request
+    ) -> httpcore.Response:
+        captured.append(httpx.Headers(request.headers))
+        content = (
+            b"event: response.completed\ndata: {}\n\n"
+            if stream else b'{"status":"completed"}'
+        )
+        return httpcore.Response(200, content=content)
+
+    monkeypatch.setattr(httpcore.AsyncConnectionPool, "handle_async_request", upstream)
+    settings = _settings("local")
+    app = create_app(settings)
+    headers = {"Authorization": f"Bearer {_token('user-a', settings)}"}
+    trace_id = "1234567890abcdef1234567890abcdef"
+    parent_id = "1234567890abcdef"
+    if incoming == "valid":
+        headers.update(traceparent=f"00-{trace_id}-{parent_id}-01", tracestate="bank=opaque")
+    elif incoming == "invalid":
+        headers.update(traceparent="invalid", tracestate="bank=opaque")
+
+    async with LifespanManager(app):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post(
+                "/responses", json={"input": "Accounts", "stream": stream}, headers=headers
+            )
+
+    assert response.status_code == 200
+    assert len(captured) == 1
+    outbound = captured[0]["traceparent"]
+    assert re.fullmatch(r"00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}", outbound)
+    assert outbound.split("-")[1] != "0" * 32
+    assert outbound.split("-")[2] != parent_id
+    if incoming == "valid":
+        assert outbound.split("-")[1] == trace_id
+        assert captured[0]["tracestate"] == "bank=opaque"
+    else:
+        assert outbound.split("-")[1] != trace_id
+        assert "tracestate" not in captured[0]
+
+
+async def test_concurrent_bff_requests_have_independent_traces(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: list[str] = []
+    both_requests = asyncio.Event()
+
+    async def upstream(
+        pool: httpcore.AsyncConnectionPool, request: httpcore.Request
+    ) -> httpcore.Response:
+        captured.append(httpx.Headers(request.headers)["traceparent"])
+        if len(captured) == 2:
+            both_requests.set()
+        await asyncio.wait_for(both_requests.wait(), timeout=5)
+        return httpcore.Response(200, content=b'{"status":"completed"}')
+
+    monkeypatch.setattr(httpcore.AsyncConnectionPool, "handle_async_request", upstream)
+    settings = _settings("local")
+    app = create_app(settings)
+    async with LifespanManager(app):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            responses = await asyncio.gather(*(
+                client.post(
+                    "/responses", json={"input": "Accounts"},
+                    headers={"Authorization": f"Bearer {_token(user, settings)}"},
+                )
+                for user in ("user-a", "user-b")
+            ))
+
+    assert [response.status_code for response in responses] == [200, 200]
+    assert len({value.split("-")[1] for value in captured}) == 2
