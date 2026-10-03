@@ -39,6 +39,18 @@ export async function getSupportCaseTimeline(
     return response.json();
 }
 
+export async function getSupportCaseDetail(
+    caseId: string, signal?: AbortSignal,
+): Promise<[SupportCase, SupportCaseEvent[]]> {
+    const [supportCase, timeline] = await Promise.allSettled([
+        getSupportCase(caseId, signal),
+        getSupportCaseTimeline(caseId, signal),
+    ]);
+    if (supportCase.status === "rejected") throw supportCase.reason;
+    if (timeline.status === "rejected") throw timeline.reason;
+    return [supportCase.value, timeline.value];
+}
+
 export async function openSupportCase(
     transactionId: string, reason: string, signal?: AbortSignal,
 ): Promise<SupportCase> {

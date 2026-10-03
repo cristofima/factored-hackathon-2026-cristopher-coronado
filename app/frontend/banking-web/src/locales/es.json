@@ -197,6 +197,22 @@
       "fraud_confirmed_refund_issued": "Fraude confirmado: reembolso emitido",
       "withdrawn_by_customer": "Retirado por ti"
     },
+    "recommendations": {
+      "transaction_alerts": "Este reclamo se relacionó con un cargo no reconocido. Activar alertas instantáneas de transacciones puede ayudarte a detectar cargos similares antes."
+    },
+    "messages": {
+      "CASE_OPENED": "Reclamo abierto para la transacción {{transactionId}}.",
+      "APPROVAL_REQUESTED": "Se requiere tu confirmación para continuar con el reclamo y el bloqueo de la tarjeta.",
+      "APPROVAL_GRANTED": "Aprobaste el reclamo y el bloqueo de la tarjeta.",
+      "APPROVAL_DECLINED": "Rechazaste continuar con el reclamo.",
+      "FAST_TRACKED": "Puntuación de riesgo de fraude baja; enviado a resolución automática sin revisión manual.",
+      "ESCALATED_TO_REVIEW": "Puntuación de riesgo de fraude elevada; enviado a revisión manual.",
+      "INSUFFICIENT_SIGNAL": "No hay una puntuación de fraude para esta transacción; enviado a revisión manual.",
+      "PROVISIONAL_CREDIT": "Crédito provisional emitido; caso resuelto sin revisión manual.",
+      "WITHDRAWN": "Caso cerrado: retirado por ti.",
+      "RESOLVED": "Se registró la resolución del caso.",
+      "RECOMMENDATION_DISMISSED": "Descartaste la recomendación posterior a la resolución."
+    },
     "events": {
       "CASE_OPENED": "Reclamo abierto",
       "APPROVAL_REQUESTED": "Aprobación solicitada",

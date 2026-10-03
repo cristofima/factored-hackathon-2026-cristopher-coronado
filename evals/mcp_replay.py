@@ -32,7 +32,6 @@ def _argument_schema(argument: ast.arg) -> dict[str, str]:
         raise ValueError("Unsupported contract annotation")
     schema = {
         "type": "string" if annotation.id == "str" else "boolean",
-        "title": argument.arg.replace("_", " ").title(),
     }
     if description is not None:
         schema["description"] = description
@@ -45,7 +44,9 @@ def _tool_contract(function: ast.FunctionDef, decorator: ast.Call) -> types.Tool
         argument.arg: _argument_schema(argument)
         for argument in function.args.args if argument.arg != "headers"
     }
-    schema: dict[str, Any] = {"type": "object", "properties": properties}
+    schema: dict[str, Any] = {
+        "type": "object", "properties": properties, "additionalProperties": False,
+    }
     if properties:
         schema["required"] = list(properties)
     return types.Tool(
@@ -83,6 +84,7 @@ class ReplayServer:
     name: str
     replies: list[ReplayReply]
     trace: list[dict[str, Any]] | None = None
+    turn: int | None = None
     calls: list[dict[str, Any]] = field(default_factory=list, init=False)
     failures: list[str] = field(default_factory=list, init=False)
     _position: int = field(default=0, init=False)
@@ -98,6 +100,8 @@ class ReplayServer:
         @server.call_tool()
         async def call_tool(name: str, arguments: dict[str, Any]) -> types.CallToolResult:
             call = {"server": self.name, "tool": name, "arguments": arguments}
+            if self.turn is not None:
+                call["turn"] = self.turn
             self.calls.append(call)
             if self.trace is not None:
                 call["sequence"] = len(self.trace)

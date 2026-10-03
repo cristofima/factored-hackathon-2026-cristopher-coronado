@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { MessageSquareWarning } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -23,9 +24,11 @@ export default function ReportDisputeDialog({
   const [reason, setReason] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const submitting = useRef(false);
 
   const submit = async () => {
-    if (!reason.trim()) return;
+    if (!reason.trim() || submitting.current) return;
+    submitting.current = true;
     setPending(true);
     setError(null);
     try {
@@ -36,6 +39,7 @@ export default function ReportDisputeDialog({
     } catch (cause) {
       setError(errorTranslationKey(cause, "Could not open the dispute"));
     } finally {
+      submitting.current = false;
       setPending(false);
     }
   };
@@ -43,7 +47,12 @@ export default function ReportDisputeDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
+        <Button
+          variant="outline"
+          size="sm"
+          className="border-sky-300 bg-sky-50 text-sky-800 hover:border-sky-400 hover:bg-sky-100 hover:text-sky-900 focus-visible:ring-sky-600"
+        >
+          <MessageSquareWarning aria-hidden="true" />
           {t("Report dispute")}
         </Button>
       </DialogTrigger>

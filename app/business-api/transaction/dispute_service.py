@@ -35,9 +35,7 @@ SessionFactory = Callable[[], Session]
 # F1 0.801 against the dataset's own is_fraud label (see evaluate_fraud_threshold.py).
 FRAUD_SCORE_ESCALATION_THRESHOLD = Decimal("32")
 
-# Mock policy: compresses a real-world multi-week dispute investigation window for the
-# demo. Stated explicitly here rather than implied as a dataset-derived rule.
-DISPUTE_WINDOW_DAYS = 90
+DISPUTE_WINDOW_DAYS = 365
 
 DISPUTABLE_TRANSACTION_STATUS = "Approved"
 ACTIVE_PRODUCT_STATUS = "Active"

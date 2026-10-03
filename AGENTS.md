@@ -2,6 +2,11 @@
 
 This repository is a banking-assistant prototype built with Python, Microsoft Agent Framework, Foundry Responses, FastMCP, React, and Terraform.
 
+Read [Copilot Instructions](.github/copilot-instructions.md) before repository work.
+That file owns all repository-wide agent rules; this guide is an entry point, not a
+second policy set. Use [ARCHITECTURE.md](ARCHITECTURE.md) for the code map and
+[docs/adr/README.md](docs/adr/README.md) for decision rationale.
+
 ## Active Architecture
 
 ```mermaid
@@ -32,27 +37,6 @@ flowchart LR
 - `infra`: Terraform for the App Service stack and Foundry resources.
 - `app/agent/azure.yaml`: separate azd root for the hosted Foundry agent.
 
-## Security Boundaries
-
-- The browser calls the BFF for chat and never calls Foundry or the local agent directly.
-  For account, card, transaction, and support-case reads, the browser calls Account and
-  Transaction directly instead, authenticated with the same application JWT the BFF issues;
-  this is the one scoped exception to the BFF-only rule.
-- The BFF authenticates PostgreSQL-backed Argon2 users, issues short-lived application JWTs,
-  validates those JWTs for its own two routes, and obtains Azure credentials server-side. Its
-  [service guide](app/responses-bff/README.md) documents login and profile only; it no longer
-  reads account/card/transaction data.
-- Conversation ownership is bound to the verified JWT subject.
-- The BFF signs verified `sub` and `customer_id` claims for the agent. The agent verifies that envelope and issues a fresh 60-second bearer for Account and Transaction MCP calls. This chain is validated locally; hosted transport behavior still requires proof.
-- Account and Transaction independently verify the browser's application JWT for their REST
-  endpoints (`jwt_identity.py`, same HS256 secret/issuer/audience as the BFF) and enforce
-  customer-resource ownership in `services.py` through PostgreSQL product relationships and
-  transaction filters. This is a separate auth dependency from the MCP-only
-  `internal_identity.py` bearer; never conflate the two. CORS is enabled via
-  `CORS_ALLOWED_ORIGINS` on both services.
-- Persisted users, customer names, owned-account selection and signed profile/locale injection are implemented. Actual multilingual conversations and hosted identity transport validation remain pending. Do not add fixed tokens, `MOCK_SESSION_TOKEN`, fabricated claims, or a second login mechanism.
-- Never log JWTs, passwords, bearer tokens, or Azure credentials.
-
 ## Local Development
 
 The root `.vscode` configuration owns local orchestration. `DEV - Full Stack Ordered` starts:
@@ -67,67 +51,16 @@ The root `.vscode` configuration owns local orchestration. `DEV - Full Stack Ord
 
 Use the browser through this topology for local validation. Hosted Foundry deployment is a later, separate validation target.
 
-## Data Ingestion
+## Task Guides
 
-Use `app/business-api/data/scripts/run_pipeline.py` for normal data loads. It runs EDA,
-scope selection, loading, and verification in order. The
-[data module guide](app/business-api/data/README.md) is the source of truth for detailed
-operation. Invoke it from the repository root with the data project's ignored `.env` file
-and an explicit inclusive date window:
-
-```powershell
-uv run --project app/business-api/data --env-file app/business-api/data/.env python app/business-api/data/scripts/run_pipeline.py --start-date 2026-06-01 --end-date 2026-06-01 --customer-ids CUSTOMER_A,CUSTOMER_B,CUSTOMER_C
-```
-
-- `--customer-ids` is optional and is one comma-separated string. Whitespace and duplicates
-  are normalized internally; demo loads should use at most three customers.
-- Customer filtering applies to `customers`, `products`, and transactions in the selected
-  date window. `branches` and `service_agents` remain complete shared catalogs.
-- The loader validates requested customers and product ownership before committing selected
-  transactions. It never populates `users`.
-- Dimensions commit first. Each transaction day then commits or rolls back independently,
-  and later days continue after a failed day.
-- Treat the generated load manifest as the source of truth for checksums, processed counts,
-  customer scope, daily outcomes, and verification. Filtered artifact names include a stable
-  customer count/hash suffix.
-- Keep `DATABASE_URL`, `DATA_SOURCE_DIR`, `DATA_ARTIFACTS_DIR`, and `DATA_MANIFEST_DIR` in the
-  ignored data `.env`; never print credentials.
-
-## Development Rules
-
-- Read `plan/README.md` and `plan/00-decisions.md` before non-trivial changes.
-- Keep `plan/` local-only and never stage or commit it.
-- Use Python 3.11+, modern type annotations, async I/O, and `uv`.
-- Keep MCP tools thin; put business logic and authorization in service modules.
-- Keep agent instructions and tool schemas in English. The profile provider uses signed per-request `locale` (`es`, `pt`, `en`, otherwise `en`) for response language. Do not infer it from messages or checkpoint state.
-- Preserve the separate root App Service and `app/agent` hosted-agent azd projects.
-
-## Evaluation Boundaries
-
-- [MCP replay](evals/README.md#isolated-mcp-replay) injects in-memory synthetic MCP
-  sessions into the production workflow and uses a real model when executed. Its
-  three cases cover balance lookup, canned denial, and empty transactions, not
-  the transaction-dispute workflow. Never add a production fake mode or treat
-  synthetic identity and denial fixtures as proof of service authorization.
-- [Hosted Agent CI](.github/workflows/ci-hosted-agent.yml) configures real-model
-  protocol smoke after offline tests for same-repository PRs targeting `main` or
-  `develop`. It uses Development OIDC, a persistent PR comment, and 14-day evidence
-  artifacts. Fork replay is explicitly not executed. Configuration and reporting
-  rules are documented in the [PR smoke guide](evals/README.md#pr-smoke-check).
-- Missing configuration, incomplete cases, protocol failures, and missing
-  answer/transcript evidence must fail the smoke check. PR comments contain
-  controlled statuses, never model answers or raw exceptions.
-- Offline tests and workflow configuration are verified; actual PR/OIDC/model
-  execution remains unverified. Protocol smoke is not `eval-quality` or
-  `eval-authz`, and does not establish grounding, locale correctness, customer
-  approval, dispute resolution, or baseline improvement.
-- Keep dispute-specific multi-turn evaluation, real BFF/JWT/service ownership
-  checks, and an independent executable baseline comparison as separate gates.
-  The 18 held-out scenario definitions are not observed results. Replay display
-  names follow the [naming convention](evals/README.md#isolated-mcp-replay), but
-  `foundry_submission: not_submitted` means no remote Foundry run was created.
-- Do not run billable replay, inspect credentials, start the stack, or perform
-  cloud operations without explicit session authorization.
+| Task                                       | Source of truth                                                                                                    |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| Architecture and security constraints      | [Copilot Instructions](.github/copilot-instructions.md#locked-architecture-do-not-relitigate-without-new-evidence) |
+| Data ingestion and manifest verification   | [Data module guide](app/business-api/data/README.md)                                                               |
+| Replay and held-out evaluation             | [Evaluation guide](evals/README.md)                                                                                |
+| Evaluation policy and verified CI evidence | [Evaluation requirements](.github/copilot-instructions.md#evaluation-requirements)                                 |
+| BFF identity and Responses proxy           | [BFF guide](app/responses-bff/README.md)                                                                           |
+| Infrastructure                             | [Infrastructure guide](infra/README.md)                                                                            |
 
 ## Focused Checks
 
