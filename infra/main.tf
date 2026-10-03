@@ -176,8 +176,12 @@ resource "azapi_resource" "app" {
       siteConfig = {
         linuxFxVersion = "PYTHON|3.11"
         # Always On is supported from Basic (B1) up; only Free/Shared tiers lack it.
-        alwaysOn       = var.plan_sku != "F1"
-        appCommandLine = "python -m uvicorn main:app --host 0.0.0.0 --port 8080"
+        alwaysOn = var.plan_sku != "F1"
+        # App Service terminates TLS at its own front end and forwards plain HTTP to the
+        # container; without --proxy-headers/--forwarded-allow-ips, Uvicorn ignores
+        # X-Forwarded-Proto and emits http:// redirects (e.g. the mounted MCP app's own
+        # trailing-slash redirect), which MCP clients correctly refuse as an HTTPS downgrade.
+        appCommandLine = "python -m uvicorn main:app --host 0.0.0.0 --port 8080 --proxy-headers --forwarded-allow-ips '*'"
         appSettings = concat([
           { name = "WEBSITES_PORT", value = "8080" },
           { name = "APPLICATIONINSIGHTS_CONNECTION_STRING", value = azurerm_application_insights.main.connection_string },
