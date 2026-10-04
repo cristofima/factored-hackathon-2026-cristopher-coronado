@@ -200,7 +200,30 @@
   "Checking active disputes...": "Comprobando disputas activas...",
   "Dispute eligibility unavailable. Reporting is disabled.": "Elegibilidad de disputa no disponible. No se pueden reportar disputas.",
   "View existing dispute": "Ver disputa existente",
+  "Case views": "Vistas de casos",
+  "Available cases": "Casos disponibles",
+  "Assigned cases": "Casos asignados",
+  "View case": "Ver caso",
+  "No assigned cases": "No hay casos asignados",
+  "Review cases": "Casos en revisión",
   "support-cases": {
+    "operator": {
+      "events": {
+        "APPROVAL_REQUESTED": "Aprobación solicitada al cliente",
+        "APPROVAL_GRANTED": "El cliente aprobó el reclamo",
+        "APPROVAL_DECLINED": "El cliente rechazó el reclamo",
+        "OPERATOR_CLAIMED": "Asignado a ti",
+        "RECOMMENDATION_DISMISSED": "El cliente descartó la recomendación"
+      },
+      "messages": {
+        "APPROVAL_REQUESTED": "Se requiere el consentimiento del cliente para continuar el procesamiento del caso.",
+        "APPROVAL_GRANTED": "El consentimiento del cliente para continuar el procesamiento del caso quedó registrado.",
+        "APPROVAL_DECLINED": "El cliente rechazó continuar con el reclamo.",
+        "OPERATOR_CLAIMED": "Tomaste la responsabilidad exclusiva de revisar este caso; no se registró un veredicto ni un efecto financiero.",
+        "WITHDRAWN": "Caso cerrado: retirado por el cliente.",
+        "RECOMMENDATION_DISMISSED": "El cliente descartó la recomendación posterior a la resolución."
+      }
+    },
     "status": {
       "OPEN": "Abierto",
       "WAITING_USER_APPROVAL": "Esperando tu aprobación",
@@ -216,6 +239,7 @@
       "transaction_alerts": "Este reclamo se relacionó con un cargo no reconocido. Activar alertas instantáneas de transacciones puede ayudarte a detectar cargos similares antes."
     },
     "messages": {
+      "OPERATOR_CLAIMED": "Un operador autenticado tomó la revisión exclusiva del caso; no se registró un veredicto ni un efecto financiero.",
       "CASE_OPENED": "Reclamo abierto para la transacción {{transactionId}}.",
       "APPROVAL_REQUESTED": "Se requiere tu consentimiento para continuar el procesamiento del caso.",
       "APPROVAL_GRANTED": "Tu consentimiento para continuar el procesamiento del caso quedó registrado.",
@@ -230,6 +254,7 @@
       "RECOMMENDATION_DISMISSED": "Descartaste la recomendación posterior a la resolución."
     },
     "events": {
+      "OPERATOR_CLAIMED": "Operador asignado",
       "CASE_OPENED": "Reclamo abierto",
       "APPROVAL_REQUESTED": "Aprobación solicitada",
       "APPROVAL_GRANTED": "Aprobaste el reclamo",
@@ -302,5 +327,27 @@
   "Page {{page}} of {{count}}": "Página {{page}} de {{count}}",
   "Filter movements": "Filtrar movimientos",
   "About these totals": "Sobre estos totales",
-  "Movement window": "{{count}} movimientos · {{start}} – {{end}}"
+  "Movement window": "{{count}} movimientos · {{start}} – {{end}}",
+  "Dispute review queue": "Cola de revisión de reclamos",
+  "Taking a case does not authorize a verdict or financial changes.": "Tomar un reclamo no autoriza un veredicto ni cambios financieros.",
+  "Operator subject": "Identificador del operador",
+  "Claimed at": "Asignado el",
+  "Case version": "Versión del reclamo",
+  "Assigned to you": "Asignado a ti",
+  "Assigned": "Asignado",
+  "Unassigned": "Sin asignar",
+  "Taking case...": "Tomando reclamo...",
+  "Take case": "Tomar reclamo",
+  "Back to review queue": "Volver a la cola de revisión",
+  "Review queue unavailable": "Cola de revisión no disponible",
+  "Case assigned to you": "Reclamo asignado a ti",
+  "Loading review queue...": "Cargando cola de revisión...",
+  "No cases awaiting review": "No hay reclamos pendientes de revisión",
+  "Case event": "Evento del reclamo",
+  "Case changed or already assigned. Refresh and try again.": "El reclamo cambió o ya está asignado. Actualiza e inténtalo nuevamente.",
+  "Claim version": "Versión de asignación",
+  "Review queue pages": "Páginas de la cola de revisión",
+  "Previous page": "Página anterior",
+  "Total cases": "Total de reclamos",
+  "Next page": "Página siguiente"
 }
