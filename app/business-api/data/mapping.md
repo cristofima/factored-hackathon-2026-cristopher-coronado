@@ -9,7 +9,6 @@ The loader uses `C:\Factored\data` only as a local source supplied through
 | --------------------------- | ------------------------------------ | ----------------------------------------------------------------- |
 | `branches`                  | `branches.csv`                       | Complete shared catalog                                           |
 | `customers`                 | `customers.csv`                      | Requested customer IDs, or all rows when no filter is supplied    |
-| `service_agents`            | `service_agents.csv`                 | Complete shared catalog                                           |
 | `products`                  | `products.csv`                       | Products owned by the selected customers                          |
 | `transactions`              | Daily transaction CSVs               | Selected customers and the requested inclusive date window        |
 | `product_monthly_snapshots` | PostgreSQL `products`/`transactions` | Derived complete months for the requested customer and date scope |

@@ -9,7 +9,7 @@ from pathlib import Path
 
 DEFAULT_START_DATE = date(2025, 12, 1)
 DEFAULT_END_DATE = date(2026, 5, 31)
-DIMENSION_FILES = ("branches.csv", "customers.csv", "service_agents.csv", "products.csv")
+DIMENSION_FILES = ("branches.csv", "customers.csv", "products.csv")
 
 
 def parse_customer_ids(value: str | None) -> tuple[str, ...]:
