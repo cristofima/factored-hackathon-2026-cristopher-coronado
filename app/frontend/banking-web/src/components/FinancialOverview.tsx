@@ -1,37 +1,34 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ArrowRight, RefreshCw } from "lucide-react";
-import { AccountSummary, getAccounts } from "@/api/authClient";
+import { RefreshCw } from "lucide-react";
+import { useProductCatalog } from "@/hooks/useProductCatalog";
+import { maskedCardNumber, resolveProduct } from "@/common/products";
 import { FinancialTransaction, getTransactions } from "@/api/financialClient";
 import { errorTranslationKey } from "@/api/errors";
 import {
-  canReportDispute,
   calendarDate,
   decimalString,
   summarizeTransactions,
 } from "@/common/financial";
-import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import ReportDisputeDialog from "@/components/ReportDisputeDialog";
+import ProductSummaryCard from "@/components/ProductSummaryCard";
+import { formatProductAmount } from "@/common/productAmount";
+import DisputeReportAction from "@/components/DisputeReportAction";
+import { useDisputeEligibility } from "@/hooks/useDisputeEligibility";
 import { useTranslation } from "react-i18next";
 
-export default function FinancialOverview({
-  analytics = false,
-}: Readonly<{ analytics?: boolean }>) {
-  const { user } = useAuth();
-  const { t } = useTranslation();
+export default function FinancialOverview({ productId: requestedProductId }: Readonly<{ productId?: string }>) {
+  const { t, i18n } = useTranslation();
+  const formatAmount = (value: string) => formatProductAmount(value, i18n?.resolvedLanguage ?? i18n?.language ?? "en");
   const [params, setParams] = useSearchParams();
-  const requestedId = params.get("account") ?? "";
-  const [accounts, setAccounts] = useState<AccountSummary[]>([]);
-  const [selectedId, setSelectedId] = useState("");
-  const [accountsLoading, setAccountsLoading] = useState(true);
-  const [accountsError, setAccountsError] = useState<string | null>(null);
-  const [records, setRecords] = useState<FinancialTransaction[]>([]);
+  const { accounts, cards, scope, loading: accountsLoading, error: accountsError, retry } = useProductCatalog();
+  const [storedRecords, setRecords] = useState<FinancialTransaction[]>([]);
+  const [recordsScope, setRecordsScope] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
-  const [accountsAttempt, setAccountsAttempt] = useState(0);
+  const [page, setPage] = useState(1);
   const [start, setStart] = useState(() => {
     if (params.get("start")) return params.get("start")!;
     const value = new Date();
@@ -42,54 +39,36 @@ export default function FinancialOverview({
     () => params.get("end") ?? calendarDate(new Date()),
   );
 
-  useEffect(() => {
-    const controller = new AbortController();
-    setAccounts([]);
-    setSelectedId("");
-    setRecords([]);
-    setAccountsLoading(true);
-    setAccountsError(null);
-    getAccounts(controller.signal)
-      .then((items) => {
-        if (!controller.signal.aborted) {
-          setAccounts(items);
-        }
-      })
-      .catch((cause: unknown) => {
-        if (!controller.signal.aborted)
-          setAccountsError(
-            errorTranslationKey(cause, "Accounts are unavailable"),
-          );
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setAccountsLoading(false);
-      });
-    return () => controller.abort();
-  }, [user?.id, accountsAttempt]);
-
-  useEffect(() => {
-    setSelectedId(
-      accounts.find((item) => item.number === requestedId)?.number ??
-        accounts.find((item) => item.number)?.number ??
-        "",
-    );
-  }, [accounts, requestedId]);
+  const selected = resolveProduct(accounts, cards, requestedProductId);
+  const account = selected?.kind === "account" ? selected.item : undefined;
+  const card = selected?.kind === "card" ? selected.item : undefined;
+  const product = selected?.item;
+  const selectedId = product?.product_id ?? "";
+  const eligibility = useDisputeEligibility(Boolean(card));
+  const displayNumber = card ? maskedCardNumber(card.number) ?? "" : account?.number ?? "";
+  const productId = card?.product_id;
+  const historyScope = JSON.stringify([scope, selectedId, start, end]);
+  const records = recordsScope === historyScope && product ? storedRecords : [];
 
   useEffect(() => {
     const controller = new AbortController();
     setRecords([]);
+    setPage(1);
     setError(null);
     setLoading(false);
-    if (!selectedId) return () => controller.abort();
+    if (!selectedId || (!displayNumber && productId === undefined)) return () => controller.abort();
     if (!start || !end || start > end) {
       setError("Choose a valid inclusive start and end date.");
       return () => controller.abort();
     }
     setLoading(true);
-    getTransactions(selectedId, start, end, controller.signal)
+    getTransactions(displayNumber, start, end, controller.signal, productId)
       .then((items) => {
         summarizeTransactions(items);
-        if (!controller.signal.aborted) setRecords(items);
+        if (!controller.signal.aborted) {
+          setRecords(items);
+          setRecordsScope(historyScope);
+        }
       })
       .catch((cause: unknown) => {
         if (!controller.signal.aborted)
@@ -99,71 +78,56 @@ export default function FinancialOverview({
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [selectedId, start, end, user?.id, attempt]);
-
-  const account = accounts.find((item) => item.number === selectedId);
+  }, [selectedId, displayNumber, productId, start, end, historyScope, attempt]);
   const summary = summarizeTransactions(records);
   const changeWindow = (update: () => void) => {
     setRecords([]);
     setLoading(true);
     update();
   };
-  const visible = analytics ? records : records.slice(0, 5);
+  const pageCount = Math.max(1, Math.ceil(records.length / 25));
+  const currentPage = Math.min(page, pageCount);
+  const visible = records.slice((currentPage - 1) * 25, currentPage * 25);
   const errorKey = error ?? "Transactions are unavailable";
   return (
-    <section className="p-6 space-y-6 animate-fade-in">
+    <section className="mx-auto max-w-7xl p-4 sm:p-6 space-y-6 animate-fade-in">
       <h1 className="text-2xl font-bold">
-        {t(analytics ? "Transaction Analytics" : "Dashboard Overview")}
+        {t("Product movements")}
       </h1>
-      {accountsLoading && <output>{t("Loading accounts...")}</output>}
+      <Link to="/" className="text-sm text-primary hover:underline">{t("My products")}</Link>
+      {card && eligibility.status === "loading" && (
+        <output>{t("Checking active disputes...")}</output>
+      )}
+      {card && eligibility.status === "error" && (
+        <div role="alert">
+          <p>{t("Dispute eligibility unavailable. Reporting is disabled.")}</p>
+          <Button variant="outline" onClick={eligibility.refresh}>{t("Retry")}</Button>
+        </div>
+      )}
+      {accountsLoading && <output>{t("Loading products...")}</output>}
       {accountsError && <div role="alert">{t(accountsError)}</div>}
       {(accountsError || error) && (
         <Button
           variant="outline"
           onClick={() =>
             accountsError
-              ? setAccountsAttempt((value) => value + 1)
+              ? retry()
               : setAttempt((value) => value + 1)
           }
         >
           <RefreshCw className="mr-2 h-4 w-4" aria-hidden="true" /> {t("Retry")}
         </Button>
       )}
-      {!accountsLoading && !accountsError && !accounts.length && (
-        <output>
-          {t("No bank accounts are registered for this customer.")}
-        </output>
+      {!accountsLoading && !accountsError && !accounts.length && !cards.length && (
+        <output>{t("No products are registered for this customer.")}</output>
       )}
-      {!!accounts.length && (
-        <div className="flex flex-wrap gap-4 items-end border-b pb-5">
-          <label className="space-y-2 min-w-0 w-80 text-sm font-medium">
-            <span>{t("Account")}</span>
-            <select
-              aria-label={t("Account")}
-              value={selectedId}
-              onChange={(event) =>
-                changeWindow(() => {
-                  setSelectedId(event.target.value);
-                  setParams(
-                    { account: event.target.value, start, end },
-                    { replace: true },
-                  );
-                })
-              }
-              className="block h-10 w-full rounded-md border bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              {accounts.map((item, index) => (
-                <option
-                  key={item.number ?? `unavailable-${index}`}
-                  value={item.number ?? ""}
-                  disabled={!item.number}
-                >
-                  {t(item.type)} - {item.number ?? t("Number unavailable")} (
-                  {item.currency})
-                </option>
-              ))}
-            </select>
-          </label>
+      {!accountsLoading && !accountsError && !product && (
+        <output>{t("Selected product is unavailable.")}</output>
+      )}
+      {product && selected && <div className="max-w-2xl"><ProductSummaryCard product={product} kind={selected.kind} headingId="selected-product" /></div>}
+      {product && (
+        <div className="flex flex-wrap gap-4 items-end rounded-xl border bg-card p-5">
+          <h2 className="w-full text-lg font-semibold">{t("Filter movements")}</h2>
           <label className="space-y-2 text-sm font-medium">
             <span className="block">{t("Start date")}</span>
             <input
@@ -171,7 +135,10 @@ export default function FinancialOverview({
               type="date"
               value={start}
               onChange={(event) =>
-                changeWindow(() => setStart(event.target.value))
+                changeWindow(() => {
+                  setStart(event.target.value);
+                  setParams({ start: event.target.value, end }, { replace: true });
+                })
               }
               className="block h-10 rounded-md border bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
@@ -183,50 +150,34 @@ export default function FinancialOverview({
               type="date"
               value={end}
               onChange={(event) =>
-                changeWindow(() => setEnd(event.target.value))
+                changeWindow(() => {
+                  setEnd(event.target.value);
+                  setParams({ start, end: event.target.value }, { replace: true });
+                })
               }
               className="block h-10 rounded-md border bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
           </label>
         </div>
       )}
-      {account && (
-        <Card className="max-w-xl shadow-sm">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">
-              {t("Selected Account Balance")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold break-all tabular-nums mb-2">
-              {account.balance === null
-                ? t("Not available")
-                : `${account.currency} ${account.balance}`}
-            </p>
-            <p className="text-sm text-muted-foreground">
-              {t("Balance context", {
-                status: account.status ?? t("Not available"),
-              })}
-            </p>
-          </CardContent>
-        </Card>
-      )}
       {loading && (
         <output>{t("Loading the complete transaction window...")}</output>
       )}
       {error && <div role="alert">{t(errorKey)}</div>}
-      {account && !loading && !error && (
+      {product && !loading && !error && (
         <>
-          <p className="text-sm text-muted-foreground">
-            {t("Window context", { count: records.length, start, end })}
-          </p>
-          {analytics && (
+          <p className="text-sm text-muted-foreground">{t("Movement window", { count: records.length, start, end })}</p>
+          {(
             <>
-              <p className="text-sm text-muted-foreground">
-                {t("Movement policy")}
-              </p>
-              <p>{t("Excluded records", { count: summary.excluded })}</p>
-              <div className="grid gap-4 md:grid-cols-2">
+              <details className="rounded-lg border bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
+                <summary className="cursor-pointer font-medium text-foreground">{t("About these totals")}</summary>
+                <div className="mt-3 space-y-2">
+                  <p>{t("Window context", { count: records.length, start, end })}</p>
+                  <p>{t("Movement policy")}</p>
+                  <p>{t("Excluded records", { count: summary.excluded })}</p>
+                </div>
+              </details>
+              <div className="grid gap-4 lg:grid-cols-2">
                 {[...summary.currencies].map(([currency, totals]) => (
                   <Card key={currency}>
                     <CardHeader>
@@ -234,17 +185,17 @@ export default function FinancialOverview({
                         {t("{{currency}} movements", { currency })}
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-2 break-all">
+                    <CardContent className="grid gap-4 sm:grid-cols-3 break-words tabular-nums">
                       <p>
-                        {t("Inflow")}: {currency} {decimalString(totals.inflow)}
+                        {t("Inflow")}: {currency} {formatAmount(decimalString(totals.inflow))}
                       </p>
                       <p>
                         {t("Outflow")}: {currency}{" "}
-                        {decimalString(totals.outflow)}
+                        {formatAmount(decimalString(totals.outflow))}
                       </p>
                       <p>
                         {t("Net movement")}: {currency}{" "}
-                        {decimalString(totals.inflow - totals.outflow)}
+                        {formatAmount(decimalString(totals.inflow - totals.outflow))}
                       </p>
                       <p>{t("Classified records", { count: totals.count })}</p>
                     </CardContent>
@@ -256,11 +207,7 @@ export default function FinancialOverview({
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
-                {t(
-                  analytics
-                    ? "Transactions in Selected Window"
-                    : "Recent Transactions in Selected Window",
-                )}
+                {t("Transactions in Selected Window")}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -285,7 +232,7 @@ export default function FinancialOverview({
                             {t(heading)}
                           </th>
                         ))}
-                        {analytics && <th className="p-3 whitespace-nowrap" />}
+                        {card && <th className="p-3 whitespace-nowrap">{t("Dispute actions")}</th>}
                       </tr>
                     </thead>
                     <tbody>
@@ -330,15 +277,11 @@ export default function FinancialOverview({
                                 })}
                           </td>
                           <td className="p-3 whitespace-nowrap text-right font-medium tabular-nums">
-                            {record.currency} {record.amount}
+                            {record.currency} {formatAmount(record.amount)}
                           </td>
-                          {analytics && (
+                          {card && (
                             <td className="p-3 whitespace-nowrap">
-                              {canReportDispute(record) && (
-                                <ReportDisputeDialog
-                                  transactionId={record.id}
-                                />
-                              )}
+                              <DisputeReportAction record={record} eligibility={eligibility} />
                             </td>
                           )}
                         </tr>
@@ -347,30 +290,16 @@ export default function FinancialOverview({
                   </table>
                 </div>
               )}
+              {records.length > 25 && (
+                <nav aria-label={t("Movement pagination")} className="mt-4 flex items-center justify-between gap-3">
+                  <Button variant="outline" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>{t("Previous")}</Button>
+                  <span>{t("Page {{page}} of {{count}}", { page: currentPage, count: pageCount })}</span>
+                  <Button variant="outline" disabled={currentPage === pageCount} onClick={() => setPage(currentPage + 1)}>{t("Next")}</Button>
+                </nav>
+              )}
             </CardContent>
           </Card>
-          {!analytics && (
-            <Link
-              to={`/analytics?${new URLSearchParams({ account: selectedId, start, end })}`}
-              className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline"
-            >
-              {t("View full transaction analytics")}
-              <ArrowRight className="h-4 w-4" aria-hidden="true" />
-            </Link>
-          )}
         </>
-      )}
-      {!analytics && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">
-              {t("Unavailable Features")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            {t("Unavailable financial features")}
-          </CardContent>
-        </Card>
       )}
     </section>
   );
