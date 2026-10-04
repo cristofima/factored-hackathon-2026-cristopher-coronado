@@ -73,13 +73,58 @@ alone does not establish browser or deployed financial acceptance.
   Customer creation, deletion and password reset are unavailable. Loading, empty,
   retry, safe errors, revoked-session logout and pending-operation cancellation follow
   the operator workspace patterns. No browser Identity URL is introduced.
-- Operators use `/operator`, which explicitly states that reviewer queues and dispute decisions are unavailable. Neither staff shell mounts financial screens or chat providers.
+- Operators use `/operator/support-cases` for available and assigned case lists;
+  `/operator` redirects there. Available cases are consented, unclaimed `IN_REVIEW`
+  cases. Assigned cases include resolved cases and belong only to the authenticated
+  operator, so they can be rediscovered after refresh. Owner-only detail uses
+  `/operator/support-cases/:caseId`. Requests go directly to Transaction with the
+  application JWT; Transaction revalidates the operator with Identity. The bodyless
+  claim atomically assigns review responsibility and navigates to persisted detail;
+  a controlled conflict refreshes the queue. Unclaimed cases have no detail link.
+  Each view has isolated pagination, resets on switching views, shows the total and
+  recovers after shrinking. Detail displays claim time and version, without the
+  redundant operator subject, and shares timeline markup with customer detail while
+  using operator-specific localized wording: consent and withdrawals remain customer
+  actions, and assignment refers to the viewing operator's review responsibility.
+  Cards separate the case title and status badge from labeled metadata and actions.
+  Detail gives the unchanged customer reason its own full-width bordered block;
+  assignment labels and values align in two columns on wider screens and stack on
+  mobile. Typography, spacing and grouping distinguish fields without relying on
+  color alone. Case timestamps use day, localized abbreviated month, year and a
+  24-hour clock in the browser's local timezone (for example, `3 oct 2026, 23:35`
+  in Spanish); timeline entries also include seconds. Movement tables retain
+  `YYYY-MM-DD`. The shared `formatDateTime(value, locale, format)` helper accepts
+  `YYYY-MM-DD`, `date-time` (default), or `date-time-seconds`; date-only formatting
+  preserves the source calendar date without timezone conversion. Stored timestamps,
+  audit text and custom resolution notes remain unchanged.
+  Pending requests are canceled on route/session teardown. Claim records responsibility
+  only: dispute decisions, reassignment and financial actions remain unavailable.
+  Neither staff shell mounts financial screens or chat providers.
 
 Direct and nested routes are role-guarded; unknown staff paths return to their workspace. Login destinations cannot redirect to another role's workspace or an external URL. Role guards are UI isolation, not a replacement for server authorization.
 
-Login, logout and cross-tab token changes cancel pending identity work, clear query caches and notifications, and remount the authorized shell to discard local conversation state. Staff and administrator UI uses the profile's en/es/pt locale; logout resets it to English.
+Login, logout and cross-tab token changes cancel pending identity work, clear query caches and notifications, and remount the authorized shell to discard local conversation state. The shell key includes session epoch, user, role and identity version; loading or failed profile restoration never mounts customer chat. Staff and administrator UI uses the profile's en/es/pt locale; logout resets it to English.
+
+Verified sessions also schedule teardown at JWT expiry and recheck expiry on window focus. JWT payload parsing is only a UI timer, never an identity or authorization source. Customer Responses `AUTH_REQUIRED` or `ACCESS_DENIED` errors invoke the same logout boundary. Canceled streams and streams whose stored token changed cannot publish late text, approval widgets, conversation IDs, errors or completion callbacks into another session. Revocation is observed when the BFF rejects a request; this is not proactive revocation polling.
+
+Focused Node tests cover customer launcher/routes, staff exclusion, failed/loading profiles, expiry/focus, logout and replacement-token stream isolation. Operator tests cover validated queue/detail/claim payloads, exclusive-claim controls, conflict refresh and request cancellation. Browser evidence remains unverified: customer launcher interaction, refresh/deep links, real expiry/revocation, cross-user/role transitions with open or minimized chat, and retained composer/widget/conversation cleanup require an authorized browser run through the BFF. Operator queue/detail/claim requires its own browser run using direct JWT-authenticated Transaction requests. Unit tests and builds do not close the live acceptance gates in issues #35, #42, #55 or #56; the operator claim workspace is implemented, but final-verdict controls are not.
 
 Run `npm test`, `npm run lint` and `npm run build` for frontend checks. Administrator client tests resolve request paths against a synthetic base URL so they work both with a configured BFF URL and without local Vite environment files, as in CI. This test base does not change production transport configuration. Identity tests cover contracts, route mount isolation, session reset orchestration and administrator form handlers using the existing Node test environment. These are not browser or live-backend acceptance evidence. Manual checks still include three-role deep links and refresh, lifecycle persistence, expired/revoked sessions, locale display and cross-user logout isolation.
+
+## Session validation (2026-10-04)
+
+Final focused support-case timestamp/operator/timeline checks:
+
+```powershell
+rtk proxy npm --prefix app\frontend\banking-web test -- --run src/common/dateTime.test.ts src/pages/OperatorCases.test.tsx src/components/SupportCaseTimeline.test.tsx
+rtk proxy npm --prefix app\frontend\banking-web run lint
+rtk proxy npm --prefix app\frontend\banking-web run build
+```
+
+Results: 36 tests passed; lint had zero errors and 14 existing warnings; build
+passed with the existing large-chunk warning. These checks cover reusable date
+presets and operator UI contracts, not authenticated browser acceptance.
+Historical suite counts elsewhere describe earlier runs, not the current total.
 
 ## Localization
 
@@ -109,7 +154,7 @@ Controlled [BFF error codes](../../responses-bff/README.md#controlled-errors) ar
 to local UI messages. Raw backend details and unexpected exception messages are not
 displayed; login errors remain English.
 
-The latest frontend suite passed with 52 tests; the focused i18n suite passed with
+The earlier localization snapshot passed with 52 frontend tests; its focused i18n suite passed with
 16 tests, covering transaction labels, catalog parity, timeline/recommendation
 templates and unknown-label fallback. Edited-file lint and production build passed;
 the build retains a large-chunk warning. Full TypeScript checking previously reported existing errors in chat rendering/provider

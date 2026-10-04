@@ -16,7 +16,11 @@ It does not own financial data, dispute verdicts, or a real reviewer queue.
   nullable components are not guessed or split and retain the User.name fallback.
   User email is limited to 120 characters and User.name to 101 characters.
   `CustomerUser` maps customer principals to real customers; staff have no invented
-  customer association. An optional operator/ServiceAgent mapping is explicit.
+  customer association. Operators use the stable `user_id` key; revision
+  `20261004_0010` removes the optional simulated reviewer mapping and archives
+  existing mappings in `legacy_operator_service_agents`, without live foreign keys.
+  Support-case real ownership references `operators.user_id`; catalog snapshots
+  never grant operator authority.
 - Users have database-constrained `active`/`inactive` status, UTC `created_at` and
   `updated_at`, and positive `identity_version`. New operators start inactive.
 - JWTs include `sub`, `email`, `locale`, `role`, `identity_version`, `iss`, `aud`,
@@ -56,7 +60,11 @@ using these endpoints; applying it is not part of offline tests.
 
 The introspection secret is distinct from `JWT_SECRET_KEY` and the agent-only
 `INTERNAL_IDENTITY_SECRET` HMAC envelope. Staff cannot use customer chat or financial
-REST routes. Real reviewer access remains unavailable pending the dispute workstream.
+REST routes. Current operators have a separate direct Transaction review surface:
+consented available cases, exclusively assigned cases and owner-only detail.
+Identity authenticates and revalidates those operators; Transaction owns claim
+policy and audit. See the [Transaction guide](../transaction/README.md).
+Operator verdicts and reassignment remain unavailable.
 
 ## Configuration and local tooling
 
