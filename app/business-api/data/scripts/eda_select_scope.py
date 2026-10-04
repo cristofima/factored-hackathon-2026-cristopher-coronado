@@ -53,7 +53,7 @@ def main() -> None:
             "start_date": args.start_date.isoformat(),
             "end_date": args.end_date.isoformat(),
         },
-        "load_dimensions": ["branches.csv", "customers.csv", "service_agents.csv", "products.csv"],
+        "load_dimensions": ["branches.csv", "customers.csv", "products.csv"],
         "load_transactions": True,
         "gates": {
             "partitions_complete": missing_days == 0,

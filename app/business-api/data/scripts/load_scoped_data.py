@@ -18,7 +18,7 @@ if str(DATA_DIR) not in sys.path:
     sys.path.insert(0, str(DATA_DIR))
 
 from database import create_database_engine
-from models import Branch, Customer, Product, ServiceAgent, TransactionRecord
+from models import Branch, Customer, Product, TransactionRecord
 from inspect_sources import build_inventory
 from shared import (
     DEFAULT_END_DATE,
@@ -115,19 +115,6 @@ def sanitize_optional_branch_fk(
             yield row
 
     return _iterator(), stats
-
-
-def map_service_agent(row: dict[str, str]) -> Row:
-    return {
-        "agent_id": row["agent_id"],
-        "employee_code": optional(row["employee_code"]),
-        "assigned_branch_id": optional(row["assigned_branch_id"]),
-        "agent_type": optional(row["agent_type"]),
-        "experience_level": optional(row["experience_level"]),
-        "languages": optional(row["languages"]),
-        "specialty": optional(row["specialty"]),
-        "agent_status": optional(row["agent_status"]),
-    }
 
 
 def map_product(row: dict[str, str]) -> Row:
@@ -273,19 +260,6 @@ def main() -> None:
             adjustments.update(customer_adjustments)
             counts["customers"] = upsert_batches(
                 session, Customer, customer_rows, args.batch_size
-            )
-            service_agent_rows, service_agent_adjustments = sanitize_optional_branch_fk(
-                mapped_rows(args.source / "service_agents.csv", map_service_agent),
-                "assigned_branch_id",
-                valid_branch_ids,
-                "invalid_assigned_branch_refs",
-            )
-            adjustments.update(service_agent_adjustments)
-            counts["service_agents"] = upsert_batches(
-                session,
-                ServiceAgent,
-                service_agent_rows,
-                args.batch_size,
             )
             product_rows = list(
                 mapped_rows(

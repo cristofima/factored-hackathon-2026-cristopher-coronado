@@ -14,7 +14,7 @@ if str(DATA_DIR) not in sys.path:
     sys.path.insert(0, str(DATA_DIR))
 
 from database import create_database_engine
-from models import Branch, Customer, Product, ServiceAgent, TransactionRecord
+from models import Branch, Customer, LegacyServiceAgent, Product, TransactionRecord
 from shared import file_checksum
 
 
@@ -100,7 +100,6 @@ def main() -> None:
         actual = {
             "branches": scalar_count(session, Branch),
             "customers": customer_count(session, customer_ids),
-            "service_agents": scalar_count(session, ServiceAgent),
             "products": product_count(session, customer_ids),
             "transactions": transaction_count(
                 session,
@@ -144,6 +143,11 @@ def main() -> None:
             )
         orphan_transactions = session.exec(orphan_transactions_statement).one()
 
+    if "service_agents" in expected:
+        # Older manifests verify the preserved snapshot, not an active reviewer catalog.
+        with Session(create_database_engine()) as session:
+            actual["service_agents"] = scalar_count(session, LegacyServiceAgent)
+        print("Legacy service_agents count verified against migration archive only")
     mismatches = {name: (expected[name], actual[name]) for name in expected if expected[name] != actual[name]}
     if mismatches or orphan_products or orphan_transactions:
         raise RuntimeError(

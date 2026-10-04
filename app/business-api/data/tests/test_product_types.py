@@ -83,11 +83,6 @@ def loader_rows() -> dict[str, list[dict[str, str]]]:
         "customer_id", "email", "first_name", "last_name", "country", "detected_accent",
         "segment", "registration_date", "registration_branch_id", "customer_status",
     ), "")
-    agent = dict.fromkeys((
-        "agent_id", "employee_code", "assigned_branch_id", "agent_type", "experience_level",
-        "languages", "specialty", "agent_status",
-    ), "")
-    agent["agent_id"] = "A1"
     product = dict.fromkeys((
         "product_id", "customer_id", "product_number", "currency", "current_balance",
         "credit_limit", "interest_rate", "opening_date", "expiration_date",
@@ -101,7 +96,6 @@ def loader_rows() -> dict[str, list[dict[str, str]]]:
     return {
         "branches.csv": [branch],
         "customers.csv": [{**customer, "customer_id": "C1"}, {**customer, "customer_id": "C2"}],
-        "service_agents.csv": [agent],
         "products.csv": [
             {**product, "product_id": "P1", "customer_id": "C1", "product_type": "Cuenta Ahorro"},
             {**product, "product_id": "P2", "customer_id": "C2", "product_type": "Unknown"},
@@ -155,7 +149,6 @@ def test_loader_unknown_product_type_respects_customer_scope(
             load_scoped_data.Branch.__tablename__,
             load_scoped_data.Customer.__tablename__,
             load_scoped_data.Customer.__tablename__,
-            load_scoped_data.ServiceAgent.__tablename__,
         ]
     else:
         load_scoped_data.main()
@@ -168,7 +161,7 @@ def test_loader_unknown_product_type_respects_customer_scope(
         assert loaded_manifest["status"] == "completed"
         assert loaded_manifest["customer_filter"]["customer_ids"] == ["C1"]
         assert loaded_manifest["processed_rows"] == {
-            "branches": 1, "customers": 1, "service_agents": 1, "products": 1, "transactions": 1,
+            "branches": 1, "customers": 1, "products": 1, "transactions": 1,
         }
         assert loaded_manifest["days_loaded"] == 1
         assert loaded_manifest["days_failed"] == 0
