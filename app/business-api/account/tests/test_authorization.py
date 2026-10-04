@@ -92,12 +92,15 @@ def test_list_accounts_and_cards_are_scoped_to_owner(
     foreign_accounts = account_service.list_accounts("customer-foreign")
 
     assert [account.number for account in owned_accounts] == ["ACCOUNT-SOURCE-NUMBER"]
+    assert [account.product_id for account in owned_accounts] == ["account-owned"]
     assert owned_accounts[0].type == "Checking Account"
     assert owned_accounts[0].balance == "1250.5000"
     assert len(owned_cards) == 1
-    assert owned_cards[0].number == "**** 1111"
+    assert owned_cards[0].number == "4111 **** **** 1111"
+    assert owned_cards[0].product_id == "card-owned"
     assert owned_cards[0].credit_limit == "3000.0000"
     assert len(foreign_accounts) == 1
+    assert foreign_accounts[0].product_id == "account-foreign"
     assert foreign_accounts[0].number is None
 
 
@@ -120,8 +123,12 @@ def test_list_accounts_rest_endpoint_requires_jwt_identity(
     assert denied.status_code == 401
     assert allowed.status_code == 200
     assert [item["number"] for item in allowed.json()] == ["ACCOUNT-SOURCE-NUMBER"]
+    assert [item["product_id"] for item in allowed.json()] == ["account-owned"]
+    assert "account-foreign" not in allowed.text
     assert cards.status_code == 200
-    assert [item["number"] for item in cards.json()] == ["**** 1111"]
+    assert [item["number"] for item in cards.json()] == ["4111 **** **** 1111"]
+    assert [item["product_id"] for item in cards.json()] == ["card-owned"]
+    assert "4111111111111111" not in cards.text
 
 
 def test_owned_account_resources_are_mapped_from_storage(
@@ -143,11 +150,11 @@ def test_owned_account_resources_are_mapped_from_storage(
     assert user_accounts[0].accountNumber == "ACCOUNT-SOURCE-NUMBER"
     assert account.accountHolderFullName == "Ada Lovelace"
     assert account.balance == "1250.5000"
-    assert [method.number for method in account.paymentMethods or []] == ["**** 1111"]
+    assert [method.number for method in account.paymentMethods or []] == ["4111 **** **** 1111"]
     assert len(cards) == 1
     assert "account-owned" not in account.model_dump_json()
     assert "card-owned" not in account.model_dump_json()
-    assert cards[0].number == "**** 1111"
+    assert cards[0].number == "4111 **** **** 1111"
     assert cards[0].type == "credit"
     assert cards[0].name == "Credit Card"
     assert account.paymentMethods[0].type == "credit"
