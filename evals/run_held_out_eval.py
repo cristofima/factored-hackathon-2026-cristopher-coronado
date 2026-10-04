@@ -1,20 +1,10 @@
-"""Held-out evaluation runner for the transaction-dispute support-case workflow.
+"""Historical obsolete-policy diagnostic, not current dispute acceptance.
 
-Two modes:
-
-- ``baseline``: a pure, offline classification over ``scenarios.json`` using the
-  simplest defensible baseline policy (triage disabled: every case either clarifies
-  or escalates, nothing fast-tracks). Requires no running services.
-- ``proposed``: drives the real system end to end through the Responses BFF
-  (login -> POST /responses, one HTTP call per conversation turn) and classifies the
-  agent's actual behavior against each scenario's ``expected_outcome``. Requires the
-  full local stack (Account, Transaction, agent, BFF) already running; this script
-  does not start it.
-
-Metrics reported use the rubric's own vocabulary: Safe Automated Resolution,
-Containment, Escalation Quality, Unsafe Outcomes, and Operating Efficiency
-(p50/p95 latency). Every run prints its sample size and an explicit
-offline/simulated label; never read these numbers as a production result.
+The baseline assigns labels rather than independently executing a workflow.
+Proposed local execution requires explicit credentials and an existing BFF stack;
+hosted execution is a direct diagnostic, not topology acceptance. Complete redacted
+turn evidence and failures are retained. Keyword labels establish neither semantic
+quality nor safe resolution. Use run_dispute_replay.py for current confirmation.
 """
 
 from __future__ import annotations
@@ -24,14 +14,19 @@ import base64
 import hashlib
 import hmac
 import json
+import math
 import os
 import subprocess
+import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
 import httpx
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from evals.evidence import available_output, controlled_error, sanitize, unique_output
 
 SCENARIOS_PATH = Path(__file__).resolve().parent / "scenarios.json"
 
@@ -73,6 +68,8 @@ class ScenarioResult:
     unsafe: bool
     latency_seconds: float | None = None
     detail: str = ""
+    turns: list[dict[str, Any]] = field(default_factory=list)
+    error: dict[str, Any] | None = None
 
 
 @dataclass
@@ -104,7 +101,9 @@ class EvalReport:
         return (sum(1 for r in self.results if r.unsafe), len(self.results))
 
     def latency_percentiles(self) -> tuple[float | None, float | None]:
-        samples = sorted(r.latency_seconds for r in self.results if r.latency_seconds is not None)
+        samples = sorted(r.latency_seconds for r in self.results
+                         if r.error is None and type(r.latency_seconds) in {int, float}
+                         and math.isfinite(r.latency_seconds) and r.latency_seconds >= 0)
         if not samples:
             return (None, None)
         return (_percentile(samples, 0.50), _percentile(samples, 0.95))
@@ -116,10 +115,12 @@ class EvalReport:
             "system": self.system,
             "sample_size": self.sample_size,
             "offline_or_simulated": self.offline_or_simulated,
-            "safe_automated_resolution_rate": round(self.safe_automated_resolution_rate(), 3),
-            "containment_rate": round(self.containment_rate(), 3),
-            "escalation_quality": round(self.escalation_quality(), 3),
-            "unsafe_outcomes": f"{unsafe_count}/{denominator}",
+            "acceptance": "historical obsolete-policy diagnostic; not current dispute acceptance",
+            "historical_label_match_rate": round(self.containment_rate(), 3),
+            "heuristic_flags": f"{unsafe_count}/{denominator}",
+            "failed_cases": sum(result.error is not None for result in self.results),
+            "safe_resolution": "not established",
+            "semantic_review": "pending",
             "latency_p50_seconds": p50,
             "latency_p95_seconds": p95,
         }
@@ -294,16 +295,27 @@ def run_proposed(
             conversation: str | None = None
             started = time.perf_counter()
             final_text = ""
-            for turn in scenario["turns"]:
-                if bff_client is not None:
-                    token = bff_client.login(customer["email"], password)
-                    body, conversation = bff_client.send_turn(token, turn, conversation)
-                else:
-                    assert hosted_client is not None
-                    body, conversation = hosted_client.send_turn(customer, turn, conversation)
-                final_text = _extract_output_text(body)
-            latency = time.perf_counter() - started
+            trajectory: list[dict[str, Any]] = []
+            error: dict[str, Any] | None = None
+            try:
+                for index, turn in enumerate(scenario["turns"]):
+                    entry: dict[str, Any] = {"turn": index, "query": turn, "completed": False,
+                                             "final_answer": ""}
+                    trajectory.append(entry)
+                    if bff_client is not None:
+                        token = bff_client.login(customer["email"], password)
+                        body, conversation = bff_client.send_turn(token, turn, conversation)
+                    else:
+                        assert hosted_client is not None
+                        body, conversation = hosted_client.send_turn(customer, turn, conversation)
+                    final_text = sanitize(_extract_output_text(body))
+                    entry.update(response=sanitize(body), final_answer=final_text, completed=True)
+            except Exception as failure:
+                error = controlled_error(failure)
+            latency = time.perf_counter() - started if error is None else None
             actual_outcome, unsafe = _classify_response(final_text, scenario)
+            if error is not None:
+                actual_outcome = "execution_failed"
             results.append(
                 ScenarioResult(
                     scenario_id=scenario["id"],
@@ -313,7 +325,9 @@ def run_proposed(
                     correct=actual_outcome == scenario["expected_outcome"],
                     unsafe=unsafe,
                     latency_seconds=latency,
-                    detail=final_text[:200],
+                    detail=final_text,
+                    turns=sanitize(trajectory),
+                    error=error,
                 )
             )
     finally:
@@ -368,11 +382,13 @@ def main() -> None:
                               "INTERNAL_IDENTITY_SECRET).")
     parser.add_argument("--bff-base-url", default="http://localhost:8080")
     parser.add_argument("--agent-endpoint", default=DEFAULT_HOSTED_AGENT_ENDPOINT)
-    parser.add_argument("--password", default="LocalDemoUserPassword01!")
+    parser.add_argument("--password", help="Explicit externally supplied test credential; no default")
     parser.add_argument("--only-category", default=None,
                          help="Restrict the run to one scenarios.json category, e.g. ambiguous_unsupported.")
     args = parser.parse_args()
 
+    if args.system == "proposed" and args.target == "local" and not args.password:
+        parser.error("Local diagnostic execution requires an explicitly supplied credential")
     data = load_scenarios()
     scenarios = data["scenarios"]
     if args.only_category:
@@ -384,8 +400,13 @@ def main() -> None:
         report = run_proposed(scenarios, data["demo_customers"], args.bff_base_url, args.password,
                                target=args.target, agent_endpoint=args.agent_endpoint)
 
-    print(json.dumps(report.to_summary(), indent=2))
-    print(json.dumps([r.__dict__ for r in report.results], indent=2))
+    evidence = sanitize({"summary": report.to_summary(),
+                         "results": [result.__dict__ for result in report.results]})
+    output = available_output(unique_output(SCENARIOS_PATH.parent / "results", "historical-diagnostic"))
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(evidence, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    print(json.dumps(evidence["summary"], indent=2))
+    print(f"Redacted historical diagnostic evidence: {output}")
 
 
 if __name__ == "__main__":
