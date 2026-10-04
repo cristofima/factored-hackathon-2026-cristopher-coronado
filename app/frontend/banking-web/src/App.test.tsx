@@ -1,5 +1,6 @@
+import { Children, isValidElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Navigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import { AppRoutes, RequireRole } from "./App";
@@ -15,9 +16,7 @@ vi.mock("./components/Sidebar", () => ({ default: () => { mounts.customer(); ret
 vi.mock("./components/AIAgent", () => ({ default: () => { mounts.customer(); return "CUSTOMER_AGENT"; } }));
 vi.mock("./pages/Dashboard", () => ({ default: () => { mounts.customer(); return "CUSTOMER_DASHBOARD"; } }));
 vi.mock("./pages/Account", () => ({ default: () => { mounts.customer(); return "CUSTOMER_ACCOUNT"; } }));
-vi.mock("./pages/TransactionAnalytics", () => ({ default: () => { mounts.customer(); return "CUSTOMER_ANALYTICS"; } }));
-vi.mock("./pages/CreditCardManagement", () => ({ default: () => { mounts.customer(); return "CUSTOMER_CARDS"; } }));
-vi.mock("./pages/InvestmentPortfolio", () => ({ default: () => { mounts.customer(); return "CUSTOMER_PORTFOLIO"; } }));
+vi.mock("./pages/ProductDetail", () => ({ default: () => { mounts.customer(); return "CUSTOMER_ANALYTICS"; } }));
 vi.mock("./pages/Support", () => ({ default: () => { mounts.customer(); return "CUSTOMER_SUPPORT"; } }));
 vi.mock("./pages/SupportCases", () => ({ default: () => { mounts.customer(); return "CUSTOMER_CASES"; } }));
 vi.mock("./pages/SupportCaseDetail", () => ({ default: () => { mounts.customer(); return "CUSTOMER_CASE"; } }));
@@ -30,10 +29,26 @@ const renderRoute = (path: string) => renderToStaticMarkup(
 );
 
 describe("role isolated routing", () => {
+  it.each(["credit-cards", "portfolio"])("redirects the removed %s page to the catalog", (path) => {
+    const customerGroup = Children.toArray(AppRoutes().props.children).find(
+      (node) => isValidElement<{ element?: ReactNode }>(node)
+        && isValidElement<{ role?: string }>(node.props.element)
+        && node.props.element.props.role === "customer",
+    );
+    if (!isValidElement<{ children?: ReactNode }>(customerGroup)) throw new Error("Customer routes missing");
+    const route = Children.toArray(customerGroup.props.children).find(
+      (node) => isValidElement<{ path?: string }>(node) && node.props.path === path,
+    );
+    if (!isValidElement<{ element?: ReactNode }>(route)) throw new Error("Legacy route missing");
+    expect(isValidElement(route.props.element) && route.props.element.type).toBe(Navigate);
+    if (!isValidElement<{ to: string; replace: boolean }>(route.props.element)) throw new Error("Redirect missing");
+    expect(route.props.element.props.to).toBe("/");
+    expect(route.props.element.props.replace).toBe(true);
+  });
   it.each(["admin", "operator"] as const)("never mounts customer functionality for %s deep links", (role) => {
     auth.user = staff(role);
     mounts.customer.mockClear();
-    for (const path of ["/", "/account", "/analytics", "/credit-cards", "/portfolio", "/support", "/support-cases", "/support-cases/case-id", "/unknown"]) {
+    for (const path of ["/", "/account", "/analytics", "/product/opaque-id", "/credit-cards", "/portfolio", "/support", "/support-cases", "/support-cases/case-id", "/unknown"]) {
       expect(renderRoute(path)).not.toContain("CUSTOMER_");
     }
     expect(mounts.customer).not.toHaveBeenCalled();
