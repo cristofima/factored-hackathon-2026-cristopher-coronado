@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Literal, Optional
 
 
 class Transaction(BaseModel):
@@ -41,6 +41,8 @@ class DisputeCase(BaseModel):
     triageOutcome: Optional[str] = None
     resolutionOutcome: Optional[str] = None
     resolutionNotes: Optional[str] = None
+    financialEffectsStatus: Literal["NOT_IMPLEMENTED"] = "NOT_IMPLEMENTED"
+    cardProtectionStatus: Literal["NOT_IMPLEMENTED"] = "NOT_IMPLEMENTED"
     recommendationType: Optional[str] = None
     recommendationRationale: Optional[str] = None
     recommendationOptedOut: bool = False
@@ -53,6 +55,7 @@ class DisputeCaseEvent(BaseModel):
     eventType: str
     actor: str
     message: Optional[str] = None
+    displayMessage: Optional[str] = None
     createdAt: str
 
 

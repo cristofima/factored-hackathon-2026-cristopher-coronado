@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Callable
 from decimal import Decimal
 
@@ -218,9 +219,20 @@ def _to_account(product: Product, customer: Customer, cards: list[Product]) -> A
     )
 
 
+def _masked_card_number(number: str | None) -> str | None:
+    compact = re.sub(r"[\s-]", "", number or "")
+    if re.fullmatch(r"[0-9]{4}\*+[0-9]{4}", compact):
+        return f"{compact[:4]} **** **** {compact[-4:]}"
+    if re.fullmatch(r"\*+[0-9]{4}", compact):
+        return f"**** {compact[-4:]}"
+    if not re.fullmatch(r"[0-9]{12,19}", compact):
+        return None
+    return f"{compact[:4]} **** **** {compact[-4:]}"
+
+
 def _to_payment_method_summary(product: Product) -> PaymentMethodSummary:
     return PaymentMethodSummary(
-        number=f"**** {product.product_number[-4:]}" if product.product_number and len(product.product_number) > 4 else None,
+        number=_masked_card_number(product.product_number),
         type=card_type(product.product_type),
         activationDate=_date_value(product.opening_date),
         expirationDate=_date_value(product.expiration_date),
@@ -230,10 +242,7 @@ def _to_payment_method_summary(product: Product) -> PaymentMethodSummary:
 def _to_payment_method(product: Product) -> PaymentMethod:
     return PaymentMethod(
         type=card_type(product.product_type),
-        cardNumber=(
-            f"**** {product.product_number[-4:]}"
-            if product.product_number and len(product.product_number) > 4 else None
-        ),
+        cardNumber=_masked_card_number(product.product_number),
         activationDate=_date_value(product.opening_date),
         expirationDate=_date_value(product.expiration_date),
         availableBalance=_decimal_float(product.current_balance),
@@ -243,6 +252,7 @@ def _to_payment_method(product: Product) -> PaymentMethod:
 
 def _to_account_summary(product: Product) -> AccountSummary:
     return AccountSummary(
+        product_id=product.product_id,
         type=normalize_product_type(product.product_type),
         status=product.product_status,
         opened=_date_value(product.opening_date),
@@ -254,14 +264,12 @@ def _to_account_summary(product: Product) -> AccountSummary:
 
 def _to_card_summary(product: Product) -> CardSummary:
     return CardSummary(
+        product_id=product.product_id,
         type=normalize_product_type(product.product_type),
         status=product.product_status,
         opened=_date_value(product.opening_date),
         expires=_date_value(product.expiration_date),
-        number=(
-            f"**** {product.product_number[-4:]}"
-            if product.product_number and len(product.product_number) > 4 else None
-        ),
+        number=_masked_card_number(product.product_number),
         currency=product.currency,
         balance=_decimal_text(product.current_balance),
         credit_limit=_decimal_text(product.credit_limit),
@@ -271,10 +279,7 @@ def _to_card_summary(product: Product) -> CardSummary:
 def _to_card(product: Product) -> Card:
     return Card(
         type=card_type(product.product_type),
-        number=(
-            f"**** {product.product_number[-4:]}"
-            if product.product_number and len(product.product_number) > 4 else None
-        ),
+        number=_masked_card_number(product.product_number),
         name=normalize_product_type(product.product_type),
         activationDate=_date_value(product.opening_date),
         expirationDate=_date_value(product.expiration_date),

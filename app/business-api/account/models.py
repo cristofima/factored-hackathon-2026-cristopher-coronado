@@ -58,6 +58,7 @@ class Account(BaseModel):
 
 
 class AccountSummary(BaseModel):
+    product_id: str
     type: str
     status: Optional[str] = None
     opened: Optional[str] = None

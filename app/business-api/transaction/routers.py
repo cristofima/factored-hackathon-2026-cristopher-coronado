@@ -13,6 +13,33 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+@router.get("/products/{product_id}/history", response_model=TransactionPage)
+def get_card_transaction_history(
+    product_id: str,
+    customer_id: Annotated[str, Depends(get_jwt_customer_id)],
+    start_date: date | None = None,
+    end_date: date | None = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> TransactionPage:
+    """Read an owned card by opaque product ID without requiring its full PAN."""
+    if start_date is not None and end_date is not None and start_date > end_date:
+        raise HTTPException(status_code=422, detail="start_date must not be after end_date")
+    try:
+        items, total = service.get_card_transaction_history(
+            product_id, customer_id, start_date, end_date, limit, offset,
+        )
+    except PermissionError as error:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+    return TransactionPage(
+        items=items, total=total, limit=limit, offset=offset,
+        start_date=start_date.isoformat() if start_date else None,
+        end_date=end_date.isoformat() if end_date else None,
+    )
+
+
 @router.get("/{product_number}/history", response_model=TransactionPage)
 def get_transaction_history(
     product_number: str,
