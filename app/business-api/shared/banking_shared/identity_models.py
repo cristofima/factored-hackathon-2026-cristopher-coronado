@@ -83,10 +83,6 @@ class Operator(SQLModel, table=True):
     first_name: str | None = Field(default=None, max_length=50)
     last_name: str | None = Field(default=None, max_length=50)
 
-    service_agent_id: str | None = Field(
-        default=None, unique=True, foreign_key="service_agents.agent_id", max_length=64,
-    )
-
     @property
     def display_name(self) -> str | None:
         return " ".join(part for part in (self.first_name, self.last_name) if part) or None

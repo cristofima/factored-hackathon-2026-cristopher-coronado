@@ -5,7 +5,7 @@ from decimal import Decimal
 from uuid import uuid4
 from typing import Literal
 
-from sqlalchemy import CheckConstraint, Column, DateTime, Index, Numeric, String
+from sqlalchemy import CheckConstraint, Column, DateTime, Index, Integer, Numeric, String
 from sqlmodel import Field, SQLModel
 
 from banking_shared.identity_models import (
@@ -66,21 +66,27 @@ class Customer(SQLModel, table=True):
     )
 
 
-class ServiceAgent(SQLModel, table=True):
-    __tablename__ = "service_agents"
+class LegacyServiceAgent(SQLModel, table=True):
+    """Migration-only historical catalog; never an operational reviewer."""
+
+    __tablename__ = "legacy_service_agents"
 
     agent_id: str = Field(primary_key=True, max_length=64)
     employee_code: str | None = Field(default=None, max_length=64)
-    assigned_branch_id: str | None = Field(
-        default=None,
-        foreign_key=BRANCH_ID_FOREIGN_KEY,
-        max_length=64,
-    )
+    assigned_branch_id: str | None = Field(default=None, max_length=64)
     agent_type: str | None = Field(default=None, max_length=64)
     experience_level: str | None = Field(default=None, max_length=64)
     languages: str | None = Field(default=None, max_length=250)
     specialty: str | None = Field(default=None, max_length=120)
     agent_status: str | None = Field(default=None, max_length=64)
+
+
+class LegacyOperatorServiceAgent(SQLModel, table=True):
+    """Snapshot of an obsolete association, without identity or catalog authority."""
+
+    __tablename__ = "legacy_operator_service_agents"
+    user_id: str = Field(primary_key=True, max_length=36)
+    service_agent_id: str = Field(max_length=64)
 
 
 class Product(SQLModel, table=True):
@@ -179,6 +185,7 @@ class SupportCase(SQLModel, table=True):
     __table_args__ = (
         Index("ix_support_cases_customer_status", "customer_id", "status"),
         Index("ix_support_cases_transaction", "transaction_id"),
+        Index("ix_support_cases_operator_queue", "status", "assigned_operator_sub", "opened_at"),
     )
 
     case_id: str = Field(
@@ -194,11 +201,12 @@ class SupportCase(SQLModel, table=True):
     status: str = Field(default="OPEN", max_length=32)
     fraud_score_at_open: Decimal | None = Field(default=None, sa_column=Column(Numeric(6, 4)))
     triage_outcome: str | None = Field(default=None, max_length=32)
-    assigned_agent_id: str | None = Field(
-        default=None,
-        foreign_key="service_agents.agent_id",
-        max_length=64,
+    legacy_assigned_agent_id: str | None = Field(default=None, max_length=64)
+    assigned_operator_sub: str | None = Field(
+        default=None, foreign_key="operators.user_id", ondelete="RESTRICT", max_length=36,
     )
+    claimed_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True)))
+    claim_version: int = Field(default=0, sa_column=Column(Integer, nullable=False, server_default="0"))
     resolution_outcome: str | None = Field(default=None, max_length=64)
     resolution_notes: str | None = Field(default=None, max_length=1000)
     recommendation_type: str | None = Field(default=None, max_length=64)
@@ -224,6 +232,9 @@ class SupportCaseEvent(SQLModel, table=True):
     event_type: str = Field(max_length=64)
     actor: str = Field(max_length=32)
     message: str | None = Field(default=None, max_length=1000)
+    operator_sub: str | None = Field(default=None, max_length=36)
+    operator_identity_version: int | None = Field(default=None)
+    claim_version: int | None = Field(default=None)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(DateTime(timezone=True), nullable=False),

@@ -8,7 +8,6 @@ import pytest
 from banking_shared.models import (
     Customer,
     Product,
-    ServiceAgent,
     SQLModel,
     SupportCase,
     SupportCaseEvent,
@@ -54,11 +53,6 @@ def session_factory() -> Callable[[], Session]:
                     product_type="Credit Card",
                     currency="USD",
                     product_status="Blocked",
-                ),
-                ServiceAgent(
-                    agent_id="agent-1",
-                    agent_status="Active",
-                    specialty="Fraudes",
                 ),
             ]
         )
@@ -268,7 +262,7 @@ def test_low_fraud_score_case_stays_in_review_until_explicit_resolution(
         "CASE_OPENED", "APPROVAL_REQUESTED", "APPROVAL_GRANTED", "REVIEW_REQUIRED",
     ]
     with session_factory() as session:
-        assert session.get(SupportCase, opened.caseId).assigned_agent_id == "agent-1"
+        assert session.get(SupportCase, opened.caseId).legacy_assigned_agent_id is None
         assert session.get(Product, "card-owned").product_status == "Active"
         assert session.get(TransactionRecord, "tx-low-risk").amount == Decimal("120.0000")
 
@@ -340,18 +334,13 @@ def test_high_fraud_score_case_is_escalated_to_a_fraud_agent(
 
     with session_factory() as session:
         case = session.get(SupportCase, escalated.caseId)
-        assert case.assigned_agent_id == "agent-1"
+        assert case.legacy_assigned_agent_id is None
 
 
 @pytest.mark.parametrize("transaction_id", ["tx-low-risk", "tx-high-risk", "tx-no-score"])
 def test_approval_without_catalog_reviewer_remains_unresolved(
     session_factory: Callable[[], Session], transaction_id: str,
 ) -> None:
-    with session_factory() as session:
-        for agent in session.exec(select(ServiceAgent)).all():
-            session.delete(agent)
-        session.commit()
-
     service = SupportCaseService(session_factory)
     opened = service.open_transaction_dispute(transaction_id, "customer-owned", "Unrecognized charge")
     reviewing = service.respond_to_approval(opened.caseId, "customer-owned", approved=True)
@@ -361,7 +350,7 @@ def test_approval_without_catalog_reviewer_remains_unresolved(
     assert reviewing.resolvedAt is None
     assert reviewing.recommendationType is None
     with session_factory() as session:
-        assert session.get(SupportCase, opened.caseId).assigned_agent_id is None
+        assert session.get(SupportCase, opened.caseId).legacy_assigned_agent_id is None
     assert "RESOLVED" not in [
         event.eventType for event in service.get_case_timeline(opened.caseId, "customer-owned")
     ]
