@@ -3,11 +3,8 @@ import { NavLink } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   BarChart3,
-  TrendingUp,
   ChevronLeft,
   ChevronRight,
-  Wallet,
-  PieChart,
   User,
   HelpCircle,
   ShieldAlert,
@@ -15,9 +12,6 @@ import {
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: BarChart3 },
-  { name: "Credit Cards", href: "/credit-cards", icon: Wallet },
-  { name: "Investment Portfolio", href: "/portfolio", icon: PieChart },
-  { name: "Transaction Analytics", href: "/analytics", icon: TrendingUp },
   { name: "Account", href: "/account", icon: User },
   { name: "Transaction Disputes", href: "/support-cases", icon: ShieldAlert },
   { name: "Support", href: "/support", icon: HelpCircle },
