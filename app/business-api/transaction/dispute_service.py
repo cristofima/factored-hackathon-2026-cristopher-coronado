@@ -3,8 +3,10 @@
 State machine: OPEN -> WAITING_USER_APPROVAL -> IN_REVIEW -> RESOLVED. The AI agent
 only performs intake/triage; it never decides a dispute's legitimacy. Deterministic
 triage uses fraud_score (populated at ingestion, never computed by the agent) to
-fast-track low-risk cases and escalate higher-risk ones to a simulated human reviewer
-drawn from the existing ServiceAgent table. See
+classify low-risk cases and persist review routing using the existing ServiceAgent
+catalog. Every approved case stays IN_REVIEW until explicit resolution; no score
+triggers automatic closure. Catalog assignment is not operator adjudication, which is not yet implemented.
+No human investigation, legitimacy verdict, or financial effect is recorded. See
 app/business-api/data/scripts/evaluate_fraud_threshold.py for the threshold's offline
 precision/recall evidence.
 """
@@ -46,8 +48,8 @@ TRIAGE_FAST_TRACK = "fast_track"
 TRIAGE_ESCALATED = "escalated"
 TRIAGE_INSUFFICIENT_SIGNAL = "insufficient_signal"
 
-# Resolution outcomes that count as the dispute being ruled in the customer's favor.
-# A recommendation is only generated for these; a withdrawn or declined case gets none.
+# Legacy outcome codes retained for recommendation compatibility.
+# These codes do not establish a legitimacy verdict or an executed financial effect.
 FAVORABLE_RESOLUTION_OUTCOMES = {"fast_tracked_provisional_credit", "fraud_confirmed_refund_issued"}
 
 # Single guardrailed post-resolution recommendation: suggest enabling transaction
@@ -57,6 +59,14 @@ RECOMMENDATION_RATIONALE_TRANSACTION_ALERTS = (
     "This dispute involved an unrecognized charge. Enabling instant transaction "
     "alerts can help you spot similar charges sooner."
 )
+
+
+class ActiveDisputeError(ValueError):
+    """An existing active case prevents sequential duplicate intake."""
+
+
+class CardOnlyDisputeError(ValueError):
+    """New disputes are restricted to debit and credit card transactions."""
 
 
 class SupportCaseService:
@@ -78,8 +88,10 @@ class SupportCaseService:
         with self._session_factory() as session:
             transaction = _get_owned_transaction(session, transaction_id, customer_id)
             product = _get_active_product(session, transaction.product_id, customer_id)
+            if product.product_type not in CARD_PRODUCT_TYPES:
+                raise CardOnlyDisputeError("Only debit and credit card transactions can be disputed")
             _ensure_disputable_status(transaction)
-            _ensure_no_active_case(session, transaction_id)
+            _ensure_no_active_case(session, transaction_id, customer_id)
             _ensure_within_dispute_window(transaction.transaction_date)
 
             case = SupportCase(
@@ -104,7 +116,8 @@ class SupportCaseService:
                 case.case_id,
                 "APPROVAL_REQUESTED",
                 "system",
-                "Customer confirmation required to proceed with the dispute and card block",
+                "Customer confirmation required to proceed with the persisted dispute workflow; "
+                "card protection and financial effects are not implemented",
             )
             session.commit()
             session.refresh(case)
@@ -147,7 +160,8 @@ class SupportCaseService:
                 case.case_id,
                 "RESOLVED",
                 "agent",
-                resolution_notes or f"Case resolved: {resolution_outcome}",
+                resolution_notes or "Case closed by the current rule-based process; no financial or card-protection "
+                "effects were executed, and no human verdict is recorded",
             )
             session.add(case)
             session.commit()
@@ -230,41 +244,38 @@ def _grant_approval(session: Session, case: SupportCase) -> SupportCase:
         case.case_id,
         "APPROVAL_GRANTED",
         "customer",
-        "Customer approved the dispute and card block",
+        "Customer approved continuation of the persisted dispute workflow; "
+        "no card block or financial posting was performed",
     )
 
+    agent = _assign_review_agent(session)
+    case.assigned_agent_id = agent.agent_id if agent else None
     if triage_outcome == TRIAGE_FAST_TRACK:
         _add_event(
             session,
             case.case_id,
-            "FAST_TRACKED",
+            "REVIEW_REQUIRED",
             "system",
-            "Low fraud-risk score; fast-tracked without manual review",
-        )
-        _transition(case, "RESOLVED", resolution_outcome="fast_tracked_provisional_credit")
-        _apply_recommendation(case)
-        _add_event(
-            session,
-            case.case_id,
-            "RESOLVED",
-            "system",
-            "Provisional credit issued; case resolved without manual review",
+            "Low stored fraud-risk score; explicit resolution required. "
+            "The score does not authorize automatic closure or establish a legitimacy verdict",
         )
     else:
-        agent = _assign_review_agent(session)
-        case.assigned_agent_id = agent.agent_id if agent else None
         reason = (
             "Elevated fraud-risk score"
             if triage_outcome == TRIAGE_ESCALATED
             else "No fraud score available for this transaction"
         )
-        agent_note = f" (assigned to agent {agent.agent_id})" if agent else " (no agent available)"
+        agent_note = (
+            f" (catalog assignment: {agent.agent_id})"
+            if agent else " (no catalog agent available)"
+        )
         _add_event(
             session,
             case.case_id,
             "ESCALATED_TO_REVIEW",
             "system",
-            f"{reason}; routed to manual review{agent_note}",
+            f"{reason}; review routing{agent_note}; "
+            "no human investigation or verdict has occurred",
         )
 
     session.add(case)
@@ -315,14 +326,15 @@ def _ensure_disputable_status(transaction: TransactionRecord) -> None:
         raise ValueError(f"Only {DISPUTABLE_TRANSACTION_STATUS} transactions can be disputed")
 
 
-def _ensure_no_active_case(session: Session, transaction_id: str) -> None:
+def _ensure_no_active_case(session: Session, transaction_id: str, customer_id: str) -> None:
     statement = (
         select(SupportCase)
         .where(SupportCase.transaction_id == transaction_id)
+        .where(SupportCase.customer_id == customer_id)
         .where(SupportCase.status != "RESOLVED")
     )
     if session.exec(statement).first() is not None:
-        raise ValueError("Transaction already has an active dispute case")
+        raise ActiveDisputeError("Transaction already has an active dispute case")
 
 
 def _ensure_within_dispute_window(transaction_date: datetime) -> None:
@@ -440,9 +452,43 @@ def _to_dispute_case(case: SupportCase, product: Product | None) -> DisputeCase:
 
 
 def _to_dispute_case_event(event: SupportCaseEvent) -> DisputeCaseEvent:
+    legacy_messages = {
+        ("APPROVAL_REQUESTED", "system", "Customer confirmation required to proceed with the dispute and card block"):
+            "Customer confirmation requested for the persisted dispute workflow; "
+            "card protection and financial effects are not implemented",
+        ("APPROVAL_GRANTED", "customer", "Customer approved the dispute and card block"):
+            "Customer approved the dispute workflow; no card block or posting was performed",
+        ("FAST_TRACKED", "system", "Low fraud-risk score; fast-tracked without manual review"):
+            "Low stored fraud-risk score; rule-based fast-track, not a legitimacy verdict",
+        ("RESOLVED", "system", "Provisional credit issued; case resolved without manual review"):
+            "Case closed; no provisional credit, refund, balance change, or card protection was executed",
+    }
+    for outcome in FAVORABLE_RESOLUTION_OUTCOMES:
+        legacy_messages[("RESOLVED", "agent", f"Case resolved: {outcome}")] = (
+            "Case closed; no financial or card-protection effects were executed, "
+            "and no human verdict is recorded"
+        )
+    display_message = legacy_messages.get((event.event_type, event.actor, event.message), event.message)
+    legacy_review_prefixes = (
+        "Elevated fraud-risk score; routed to manual review",
+        "No fraud score available for this transaction; routed to manual review",
+    )
+    if event.event_type == "ESCALATED_TO_REVIEW" and event.actor == "system":
+        for prefix in legacy_review_prefixes:
+            suffix = event.message.removeprefix(prefix)
+            if event.message.startswith(prefix) and (
+                suffix == " (no agent available)"
+                or (suffix.startswith(" (assigned to agent ") and suffix.endswith(")"))
+            ):
+                display_message = (
+                    "Review routing and catalog assignment recorded; "
+                    "no human investigation or verdict is recorded"
+                )
+                break
     return DisputeCaseEvent(
         eventType=event.event_type,
         actor=event.actor,
         message=event.message,
+        displayMessage=display_message,
         createdAt=event.created_at.isoformat(),
     )

@@ -48,7 +48,8 @@ def get_last_transactions(
         "Open a transaction-dispute support case for a transaction the customer does not "
         "recognize or disputes. Use this after confirming the specific transaction with the "
         "customer. This only opens the case and requests the customer's approval; it never "
-        "decides whether the dispute is legitimate."
+        "decides whether the dispute is legitimate. The case is persisted; approval "
+        "does not block a card, issue credit or a refund, post a transaction, or change balances."
     ),
 )
 def report_transaction_dispute(
@@ -67,7 +68,9 @@ def report_transaction_dispute(
     name="respondToDisputeApproval",
     description=(
         "Record the customer's approval or decline for a dispute case awaiting approval. "
-        "Only call this after the customer has explicitly confirmed or declined."
+        "Only call this after the customer has explicitly confirmed or declined. Approval "
+        "continues persisted case processing, not a human investigation or verdict. Legacy "
+        "outcome codes do not establish credit, refund, balance, or card-protection effects."
     ),
 )
 def respond_to_dispute_approval(
@@ -95,7 +98,11 @@ def get_support_case(
 
 @mcp.tool(
     name="getSupportCaseTimeline",
-    description="Get the event timeline for a transaction-dispute support case",
+    description=(
+        "Get the event timeline for a persisted transaction-dispute support case. Prefer "
+        "displayMessage for user-facing text; message preserves original audit text. "
+        "Historical outcome words do not prove financial effects or a human verdict."
+    ),
 )
 def get_support_case_timeline(
     case_id: str,

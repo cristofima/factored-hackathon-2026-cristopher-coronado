@@ -11,12 +11,17 @@ from banking_shared.models import (
     ServiceAgent,
     SQLModel,
     SupportCase,
+    SupportCaseEvent,
     TransactionRecord,
 )
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, create_engine
+from sqlmodel import Session, create_engine, select
 
-from dispute_service import SupportCaseService
+import dispute_routers
+from dispute_service import CardOnlyDisputeError, SupportCaseService
+from jwt_identity import get_jwt_customer_id
 
 NOW = datetime.now(timezone.utc)
 
@@ -142,7 +147,103 @@ def session_factory() -> Callable[[], Session]:
     return lambda: Session(engine)
 
 
-def test_low_fraud_score_case_is_fast_tracked_and_resolved(
+@pytest.mark.parametrize("product_type", ["Checking Account", "Savings Account"])
+def test_account_dispute_rejected_without_writes_and_legacy_cases_readable(
+    session_factory: Callable[[], Session], monkeypatch: pytest.MonkeyPatch,
+    product_type: str,
+) -> None:
+    with session_factory() as session:
+        product = session.get(Product, "card-owned")
+        assert product is not None
+        product.product_type = product_type
+        session.add(product)
+        session.commit()
+    service = SupportCaseService(session_factory)
+    with pytest.raises(CardOnlyDisputeError):
+        service.open_transaction_dispute("tx-low-risk", "customer-owned", "Unrecognized")
+    monkeypatch.setattr(dispute_routers, "service", service)
+    app = FastAPI()
+    app.include_router(dispute_routers.router, prefix="/api/support-cases")
+    app.dependency_overrides[get_jwt_customer_id] = lambda: "customer-owned"
+    with TestClient(app) as client:
+        response = client.post("/api/support-cases", json={
+            "transactionId": "tx-low-risk", "reason": "Unrecognized",
+        })
+    assert response.status_code == 400
+    assert response.json() == {"detail": {"code": "DISPUTE_CARD_ONLY"}}
+    with session_factory() as session:
+        assert session.exec(select(SupportCase)).all() == []
+        assert session.exec(select(SupportCaseEvent)).all() == []
+        historical = SupportCase(
+            customer_id="customer-owned", product_id="card-owned",
+            transaction_id="tx-low-risk", reason="Historical account case",
+            status="WAITING_USER_APPROVAL",
+        )
+        session.add(historical)
+        session.commit()
+        session.refresh(historical)
+        case_id = historical.case_id
+    assert service.get_case(case_id, "customer-owned").reason == "Historical account case"
+    assert [case.caseId for case in service.list_cases("customer-owned")] == [case_id]
+    assert service.get_case_timeline(case_id, "customer-owned") == []
+    with pytest.raises(PermissionError):
+        service.get_case(case_id, "customer-foreign")
+
+
+@pytest.mark.parametrize("product_type", ["Debit Card", "Credit Card"])
+def test_new_disputes_accept_both_card_types(
+    session_factory: Callable[[], Session], product_type: str,
+) -> None:
+    with session_factory() as session:
+        product = session.get(Product, "card-owned")
+        assert product is not None
+        product.product_type = product_type
+        session.add(product)
+        session.commit()
+    opened = SupportCaseService(session_factory).open_transaction_dispute(
+        "tx-low-risk", "customer-owned", "Unrecognized",
+    )
+    assert opened.status == "WAITING_USER_APPROVAL"
+
+
+def test_duplicate_route_returns_controlled_conflict(
+    session_factory: Callable[[], Session], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = SupportCaseService(session_factory)
+    monkeypatch.setattr(dispute_routers, "service", service)
+    app = FastAPI()
+    app.include_router(dispute_routers.router, prefix="/api/support-cases")
+    app.dependency_overrides[get_jwt_customer_id] = lambda: "customer-owned"
+    payload = {"transactionId": "tx-low-risk", "reason": "Unrecognized charge"}
+
+    with TestClient(app) as client:
+        created = client.post("/api/support-cases", json=payload)
+        assert created.status_code == 201
+        duplicate = client.post("/api/support-cases", json=payload)
+        assert duplicate.status_code == 409
+        assert duplicate.json() == {"detail": {"code": "DISPUTE_ALREADY_ACTIVE"}}
+        assert len(service.list_cases("customer-owned")) == 1
+
+
+@pytest.mark.parametrize("transaction_id", ["tx-foreign", "tx-missing"])
+def test_open_route_preserves_resource_denial(
+    session_factory: Callable[[], Session], monkeypatch: pytest.MonkeyPatch,
+    transaction_id: str,
+) -> None:
+    monkeypatch.setattr(dispute_routers, "service", SupportCaseService(session_factory))
+    app = FastAPI()
+    app.include_router(dispute_routers.router, prefix="/api/support-cases")
+    app.dependency_overrides[get_jwt_customer_id] = lambda: "customer-owned"
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/support-cases",
+            json={"transactionId": transaction_id, "reason": "Unrecognized charge"},
+        )
+        assert response.status_code == 403
+
+
+def test_low_fraud_score_case_stays_in_review_until_explicit_resolution(
     session_factory: Callable[[], Session],
 ) -> None:
     service = SupportCaseService(session_factory)
@@ -152,9 +253,78 @@ def test_low_fraud_score_case_is_fast_tracked_and_resolved(
 
     resolved = service.respond_to_approval(opened.caseId, "customer-owned", approved=True)
 
-    assert resolved.status == "RESOLVED"
+    assert resolved.status == "IN_REVIEW"
     assert resolved.triageOutcome == "fast_track"
-    assert resolved.resolutionOutcome == "fast_tracked_provisional_credit"
+    assert resolved.resolutionOutcome is None
+    assert resolved.resolvedAt is None
+    assert resolved.recommendationType is None
+    assert service.get_case(opened.caseId, "customer-owned") == resolved
+    assert resolved.financialEffectsStatus == "NOT_IMPLEMENTED"
+    assert resolved.cardProtectionStatus == "NOT_IMPLEMENTED"
+    assert "workflowMode" not in resolved.model_dump()
+    timeline = service.get_case_timeline(opened.caseId, "customer-owned")
+    assert all("simulat" not in event.displayMessage.lower() for event in timeline)
+    assert [event.eventType for event in timeline] == [
+        "CASE_OPENED", "APPROVAL_REQUESTED", "APPROVAL_GRANTED", "REVIEW_REQUIRED",
+    ]
+    with session_factory() as session:
+        assert session.get(SupportCase, opened.caseId).assigned_agent_id == "agent-1"
+        assert session.get(Product, "card-owned").product_status == "Active"
+        assert session.get(TransactionRecord, "tx-low-risk").amount == Decimal("120.0000")
+
+    explicitly_resolved = service.resolve_case(
+        opened.caseId, "customer-owned", "no_fraud_found", "Explicit review decision",
+    )
+    assert explicitly_resolved.status == "RESOLVED"
+    assert explicitly_resolved.resolutionOutcome == "no_fraud_found"
+    assert explicitly_resolved.resolvedAt is not None
+    assert service.get_case(opened.caseId, "customer-owned") == explicitly_resolved
+
+
+@pytest.mark.parametrize(
+    ("event_type", "actor", "message", "projected"),
+    [
+        ("RESOLVED", "system",
+         "Provisional credit issued; case resolved without manual review", True),
+        ("RESOLVED", "agent", "Case resolved: fraud_confirmed_refund_issued", True),
+        ("ESCALATED_TO_REVIEW", "system",
+         "Elevated fraud-risk score; routed to manual review (assigned to agent agent-1)", True),
+        ("ESCALATED_TO_REVIEW", "system",
+         "No fraud score available for this transaction; routed to manual review (no agent available)",
+         True),
+        ("ESCALATED_TO_REVIEW", "system",
+         "Elevated fraud-risk score; routed to manual review: custom note", False),
+        ("RESOLVED", "agent", "Reviewed by agent-1", False),
+        ("RESOLVED", "customer",
+         "Provisional credit issued; case resolved without manual review", False),
+    ],
+)
+def test_historical_timeline_projects_only_known_generated_messages(
+    session_factory: Callable[[], Session],
+    event_type: str,
+    actor: str,
+    message: str,
+    projected: bool,
+) -> None:
+    service = SupportCaseService(session_factory)
+    opened = service.open_transaction_dispute("tx-low-risk", "customer-owned", "Reclamo")
+    with session_factory() as session:
+        session.add(SupportCaseEvent(
+            case_id=opened.caseId, event_type=event_type, actor=actor, message=message,
+        ))
+        session.commit()
+    event = service.get_case_timeline(opened.caseId, "customer-owned")[-1]
+    assert event.message == message
+    assert (event.displayMessage != message) is projected
+    if projected:
+        assert "simulat" not in event.displayMessage.lower()
+        assert "no " in event.displayMessage
+    with session_factory() as session:
+        stored = session.exec(select(SupportCaseEvent).where(
+            SupportCaseEvent.case_id == opened.caseId,
+            SupportCaseEvent.message == message,
+        )).one()
+        assert stored.message == message
 
 
 def test_high_fraud_score_case_is_escalated_to_a_fraud_agent(
@@ -171,6 +341,30 @@ def test_high_fraud_score_case_is_escalated_to_a_fraud_agent(
     with session_factory() as session:
         case = session.get(SupportCase, escalated.caseId)
         assert case.assigned_agent_id == "agent-1"
+
+
+@pytest.mark.parametrize("transaction_id", ["tx-low-risk", "tx-high-risk", "tx-no-score"])
+def test_approval_without_catalog_reviewer_remains_unresolved(
+    session_factory: Callable[[], Session], transaction_id: str,
+) -> None:
+    with session_factory() as session:
+        for agent in session.exec(select(ServiceAgent)).all():
+            session.delete(agent)
+        session.commit()
+
+    service = SupportCaseService(session_factory)
+    opened = service.open_transaction_dispute(transaction_id, "customer-owned", "Unrecognized charge")
+    reviewing = service.respond_to_approval(opened.caseId, "customer-owned", approved=True)
+
+    assert reviewing.status == "IN_REVIEW"
+    assert reviewing.resolutionOutcome is None
+    assert reviewing.resolvedAt is None
+    assert reviewing.recommendationType is None
+    with session_factory() as session:
+        assert session.get(SupportCase, opened.caseId).assigned_agent_id is None
+    assert "RESOLVED" not in [
+        event.eventType for event in service.get_case_timeline(opened.caseId, "customer-owned")
+    ]
 
 
 def test_missing_fraud_score_escalates_as_insufficient_signal(
@@ -292,11 +486,15 @@ def test_list_and_timeline_are_scoped_to_the_owning_customer(
     assert service.list_cases("customer-foreign") == []
 
 
-def test_fast_tracked_case_gets_a_recommendation(session_factory: Callable[[], Session]) -> None:
+def test_low_risk_case_gets_a_recommendation_only_after_explicit_resolution(
+    session_factory: Callable[[], Session],
+) -> None:
     service = SupportCaseService(session_factory)
     opened = service.open_transaction_dispute("tx-low-risk", "customer-owned", "Reclamo")
 
-    resolved = service.respond_to_approval(opened.caseId, "customer-owned", approved=True)
+    reviewing = service.respond_to_approval(opened.caseId, "customer-owned", approved=True)
+    assert reviewing.recommendationType is None
+    resolved = service.resolve_case(opened.caseId, "customer-owned", "fraud_confirmed_refund_issued")
 
     assert resolved.recommendationType == "transaction_alerts"
     assert resolved.recommendationRationale
@@ -315,7 +513,8 @@ def test_withdrawn_case_gets_no_recommendation(session_factory: Callable[[], Ses
 def test_customer_can_dismiss_the_recommendation(session_factory: Callable[[], Session]) -> None:
     service = SupportCaseService(session_factory)
     opened = service.open_transaction_dispute("tx-low-risk", "customer-owned", "Reclamo")
-    resolved = service.respond_to_approval(opened.caseId, "customer-owned", approved=True)
+    service.respond_to_approval(opened.caseId, "customer-owned", approved=True)
+    resolved = service.resolve_case(opened.caseId, "customer-owned", "fraud_confirmed_refund_issued")
 
     dismissed = service.dismiss_recommendation(resolved.caseId, "customer-owned")
 
@@ -338,7 +537,8 @@ def test_foreign_customer_cannot_dismiss_another_customers_recommendation(
 ) -> None:
     service = SupportCaseService(session_factory)
     opened = service.open_transaction_dispute("tx-low-risk", "customer-owned", "Reclamo")
-    resolved = service.respond_to_approval(opened.caseId, "customer-owned", approved=True)
+    service.respond_to_approval(opened.caseId, "customer-owned", approved=True)
+    resolved = service.resolve_case(opened.caseId, "customer-owned", "fraud_confirmed_refund_issued")
 
     with pytest.raises(PermissionError, match="authenticated customer"):
         service.dismiss_recommendation(resolved.caseId, "customer-foreign")
@@ -360,6 +560,9 @@ def test_triage_threshold_boundary(
     opened = service.open_transaction_dispute("tx-low-risk", "customer-owned", "Unrecognized charge")
     result = service.respond_to_approval(opened.caseId, "customer-owned", approved=True)
     assert result.triageOutcome == outcome
+    assert result.status == "IN_REVIEW"
+    assert result.resolutionOutcome is None
+    assert result.recommendationType is None
 
 
 @pytest.mark.parametrize("transaction_id", ["tx-low-risk", "tx-high-risk"])
