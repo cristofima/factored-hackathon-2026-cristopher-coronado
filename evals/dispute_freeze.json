@@ -1,0 +1,14 @@
+{
+  "dataset_version": "dispute-replay-v2",
+  "dataset_sha256": "daaff9a5ed2c3f43602799fe55dd14c030aa68cfeba34232533743ebe2e4b761",
+  "expanded_inputs_sha256": "35aa9d572db2d919aab5a13932663723ffb92adc3ada3c55c0f17698ece617f6",
+  "case_count": 25,
+  "exposure": "development-exposed-synthetic-confirmation; not untouched held-out evidence",
+  "dependencies": {
+    "evals/dispute_replay.py": "cc6f8ad07df8c10ebd63ca446eb7ac225f487210dcfbcc1e338caabdab19868e",
+    "evals/mcp_replay.py": "91c312cb09e51e952449b7b7ca2f04769ba27ab5b0b7df20c6ad5c926c066093",
+    "app/business-api/transaction/models.py": "a086149974b21fa3a3974178b213896bee8e6bd21d163321ef9ed29fcb7765c0"
+  },
+  "operator_adjudication": "blocked; unapproved contract; no assigned verdict behavior",
+  "dependency_hash_policy": "UTF-8 source bytes with CRLF normalized to LF; raw dataset bytes remain exact"
+}

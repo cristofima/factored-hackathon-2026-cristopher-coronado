@@ -2,7 +2,7 @@ import { createContext, type ReactNode, useCallback, useContext, useEffect, useM
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { type AuthenticatedUser, login as authenticate, restoreUser } from "@/api/authClient";
-import { AUTH_TOKEN_KEY } from "@/api/authToken";
+import { AUTH_TOKEN_KEY, getAuthToken, getTokenExpiry } from "@/api/authToken";
 import { resetToasts } from "@/hooks/use-toast";
 
 interface AuthContextValue {
@@ -66,6 +66,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       window.removeEventListener("storage", onStorage);
     };
   }, [reset]);
+
+  useEffect(() => {
+    if (!user || loading) return;
+    const token = getAuthToken();
+    const expiresAt = token ? getTokenExpiry(token) : null;
+    let timer: ReturnType<typeof setTimeout>;
+    const checkExpiry = () => {
+      if (getAuthToken() !== token) return;
+      if (expiresAt === null || expiresAt <= Date.now()) {
+        logout();
+        return;
+      }
+      clearTimeout(timer);
+      timer = setTimeout(checkExpiry, Math.min(expiresAt - Date.now(), 2_147_483_647));
+    };
+    checkExpiry();
+    window.addEventListener("focus", checkExpiry);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("focus", checkExpiry);
+    };
+  }, [user, loading, logout]);
 
   const login = useCallback(async (email: string, password: string) => {
     const controller = reset();

@@ -120,9 +120,13 @@ recommendation with an explicit opt-out after case resolution. Customer approval
 starts review: all fraud-score classifications remain `IN_REVIEW`, including low
 scores, until an explicit resolution operation. A low stored score is routing
 information, not a legitimacy verdict or authorization for automatic closure.
-Catalog reviewer assignment does not implement operator takeover or human review;
-the existing resolution endpoint remains customer-authenticated. No review timeout
-is implemented, and previously resolved cases are not reopened. See the
+Real operators now claim consented, unclaimed cases exclusively and rediscover their
+assigned cases after refresh at `/operator/support-cases`. Owner-only detail shares
+the customer timeline with operator-perspective wording and localized timestamps.
+The simulated ServiceAgent catalog is retired; archived assignments never become
+real ownership. Claim grants review responsibility only: operator verdicts,
+reassignment and review timeouts remain unavailable. The existing resolution
+endpoint remains customer-authenticated, and previously resolved cases are not reopened. See the
 [frontend guide](app/frontend/banking-web/README.md#transaction-disputes) and
 [business API guide](app/business-api/README.md) for the implementation.
 
@@ -147,10 +151,11 @@ The implemented dispute workflow and its evaluation evidence are separate:
   has a persistent comment and transcript artifacts; dispute quality
   and baseline comparison remain pending.
 
-The next functional priority is making claimed dispute actions effective and
-auditable, with an approved credit/blocking policy and duplicate protection.
+The next functional gates are an approved assigned-operator verdict contract and
+versioned evidence, followed by separately approved financial effects and duplicate
+protection. Existing review claims do not settle a dispute or change card state.
 Dispute-specific evaluation remains a separate priority for intake, customer approval,
-fast-track versus escalation, safe refusals, and grounded status explanations.
+low/high/missing-score review, safe refusals and grounded status explanations.
 Service authorization and persisted timelines require independent integration
 checks. See the [evaluation guide](evals/README.md) for coverage and limitations.
 
@@ -182,11 +187,11 @@ The React frontend streams OpenAI Responses events for account and transaction i
  Use [MAF](https://learn.microsoft.com/en-us/agent-framework/overview/agent-framework-overview) chat agents to flexibly support AzureOpenAI or Foundry Agent Service based agents
  - **Human-In-The-Loop (HITL) patterns** <br/>
  The transaction-dispute support case gates on a real customer approval step before
- routing to rule-based case closure or a persisted ServiceAgent catalog assignment,
- backed by a real case/event audit trail, not just generic protocol approval events.
- Banking inputs are synthetic; agent execution, customer consent and persistence are
- real. Catalog assignment is not operator adjudication, and case closure does not
- post credit, change balances or protect a card.
+ entering deterministic review and permitting an exclusive real-operator claim,
+ backed by a persisted case/event audit trail, not just generic protocol approvals.
+ Banking inputs are synthetic; customer consent and review ownership are persisted.
+ Claim is not adjudication, and case closure does not post credit, change balances
+ or protect a card. Historical ServiceAgent assignments remain archived only.
 - **Separate hosted agent and App Services** <br/>
 The Foundry hosted agent uses its own azd project; the root Terraform stack defines five App Services for Identity, the BFF, web frontend, and business APIs.
 - **Automated IaC and App build & Deployment**
@@ -360,8 +365,9 @@ Current limitations to keep explicit:
 - The BFF validates application identity and proxies upstream requests, but this does not replace per-resource authorization in business services.
 - The previous ChatKit-style direct browser-to-agent pattern is no longer the target architecture.
 - HITL approval widgets back a real business workflow for transaction disputes (case
-  creation, customer consent gate, triage, ServiceAgent catalog assignment, and a
-  single post-resolution recommendation with opt-out). Operator adjudication and
+  creation, customer consent gate, deterministic review routing, exclusive real
+  operator claims, and a single post-resolution recommendation with opt-out).
+  Simulated assignments are archived only. Operator final adjudication and
   financial/card effects remain unimplemented. The 365-day dispute window
   is a demo policy evaluated against the real system clock and will reject opening new
   disputes once the loaded dataset's transactions fall outside it.

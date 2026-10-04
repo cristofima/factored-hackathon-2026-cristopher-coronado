@@ -3,9 +3,9 @@
 State machine: OPEN -> WAITING_USER_APPROVAL -> IN_REVIEW -> RESOLVED. The AI agent
 only performs intake/triage; it never decides a dispute's legitimacy. Deterministic
 triage uses fraud_score (populated at ingestion, never computed by the agent) to
-classify low-risk cases and persist review routing using the existing ServiceAgent
-catalog. Every approved case stays IN_REVIEW until explicit resolution; no score
-triggers automatic closure. Catalog assignment is not operator adjudication, which is not yet implemented.
+classify low-risk cases and persist review routing. Every approved case stays
+IN_REVIEW until explicit resolution; no score triggers automatic closure.
+Real operator takeover is independent from the retained historical ServiceAgent catalog.
 No human investigation, legitimacy verdict, or financial effect is recorded. See
 app/business-api/data/scripts/evaluate_fraud_threshold.py for the threshold's offline
 precision/recall evidence.
@@ -20,7 +20,6 @@ from decimal import Decimal
 from banking_shared.database import create_session
 from banking_shared.models import (
     Product,
-    ServiceAgent,
     SupportCase,
     SupportCaseEvent,
     TransactionRecord,
@@ -41,8 +40,6 @@ DISPUTE_WINDOW_DAYS = 365
 
 DISPUTABLE_TRANSACTION_STATUS = "Approved"
 ACTIVE_PRODUCT_STATUS = "Active"
-REVIEW_AGENT_SPECIALTY = "Fraudes"
-REVIEW_AGENT_STATUS = "Active"
 
 TRIAGE_FAST_TRACK = "fast_track"
 TRIAGE_ESCALATED = "escalated"
@@ -248,8 +245,6 @@ def _grant_approval(session: Session, case: SupportCase) -> SupportCase:
         "no card block or financial posting was performed",
     )
 
-    agent = _assign_review_agent(session)
-    case.assigned_agent_id = agent.agent_id if agent else None
     if triage_outcome == TRIAGE_FAST_TRACK:
         _add_event(
             session,
@@ -265,16 +260,12 @@ def _grant_approval(session: Session, case: SupportCase) -> SupportCase:
             if triage_outcome == TRIAGE_ESCALATED
             else "No fraud score available for this transaction"
         )
-        agent_note = (
-            f" (catalog assignment: {agent.agent_id})"
-            if agent else " (no catalog agent available)"
-        )
         _add_event(
             session,
             case.case_id,
             "ESCALATED_TO_REVIEW",
             "system",
-            f"{reason}; review routing{agent_note}; "
+            f"{reason}; awaiting authenticated operator takeover; "
             "no human investigation or verdict has occurred",
         )
 
@@ -389,17 +380,6 @@ def _apply_recommendation(case: SupportCase) -> None:
         return
     case.recommendation_type = RECOMMENDATION_TYPE_TRANSACTION_ALERTS
     case.recommendation_rationale = RECOMMENDATION_RATIONALE_TRANSACTION_ALERTS
-
-
-def _assign_review_agent(session: Session) -> ServiceAgent | None:
-    statement = (
-        select(ServiceAgent)
-        .where(ServiceAgent.agent_status == REVIEW_AGENT_STATUS)
-        .where(ServiceAgent.specialty == REVIEW_AGENT_SPECIALTY)
-        .order_by(ServiceAgent.agent_id)
-        .limit(1)
-    )
-    return session.exec(statement).first()
 
 
 def _add_event(

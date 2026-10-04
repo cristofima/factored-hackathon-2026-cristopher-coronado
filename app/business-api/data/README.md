@@ -10,9 +10,30 @@ The loader upserts tables in dependency order:
 
 1. `branches`
 2. `customers`
-3. `service_agents`
-4. `products`
-5. `transactions`
+3. `products`
+4. `transactions`
+
+Revision `20261004_0010` retires the simulated reviewer catalog into
+`legacy_service_agents` and archives former operator mappings in
+`legacy_operator_service_agents`. Historical case IDs become
+`legacy_assigned_agent_id`; original audit text is unchanged. These snapshots have
+no operational ownership authority and are never reloaded from CSV. New loads do
+not require `service_agents.csv`; older manifests verify its recorded count against
+the archive, while still checking their original source checksums.
+
+Real case ownership references `operators.user_id`, a stable Identity user key.
+Migration preflight rejects orphan real ownership rather than inventing identities.
+The migration is forward-only and does not backfill real owners from simulated IDs.
+
+Authorized local PostgreSQL execution on 2026-10-04 upgraded `20261003_0008` through
+0009/0010 to `20261004_0010 (head)`. The custom-format backup passed catalog-readability
+and SHA256 checks; restore rehearsal was not run. Read-only verification preserved
+original business rows, five cases, 24 events, catalog/mapping archives, initial claim
+metadata, the Operator foreign key with `RESTRICT`, and the queue index. Identity
+audits increased from 62 to 63 during a concurrent login; comparison against the
+backup proved all original audits unchanged. No restore, corrective database write,
+downgrade or migration rerun was performed. This local evidence does not establish
+PostgreSQL claim concurrency, browser acceptance or remote rollout.
 
 The pipeline does not populate the `users` table. Create selected demo identities
 separately with `seed_demo_users.py` after their customer rows have been loaded.
@@ -25,8 +46,10 @@ country to 100. Ingestion trims and case-normalizes customer status to `Active`,
 Unknown statuses and overlength fields reject loading rather than truncate data.
 Customer business status does not change the independent User login policy.
 
-Revisions `20261003_0006` and `20261003_0007` incorporate the final
-schema directly; there is no intermediate string-role schema or revision 0008.
+Revisions `20261003_0006` and `20261003_0007` incorporate the integer-role
+identity schema directly, without an intermediate string-role migration.
+The subsequent `20261003_0008` revision and operator migrations 0009/0010 are
+separate changes; the current local head is `20261004_0010`.
 0006 preflights legacy identities, bounded fields, and canonical Customer statuses
 before any DDL, then creates integer role keys/memberships, bounded User/Customer
 fields, and nullable Operator components without invented backfill. Populated
@@ -84,7 +107,7 @@ removes only the added indexes and preserves legacy email indexes.
 | Existing Role name UNIQUE / id PK                                                                           | name / id                  | Role resolution and catalog CHECK coverage                                                                                       |
 | `ix_user_roles_role_user`                                                                                   | role_id, user_id           | `bootstrap.py` role filter; `service.py` operator-list role join followed by user lookup; email ordering remains a separate sort |
 | Existing CustomerUser PK / customer_id UNIQUE                                                               | user_id / customer_id      | Profile lookup and unique customer association                                                                                   |
-| Existing Operator PK / service_agent_id UNIQUE                                                              | user_id / service_agent_id | Profile lookup and optional reviewer association                                                                                 |
+| Existing Operator PK                                                                                        | user_id                    | Profile lookup and real support-case ownership; revision 0010 removes the optional simulated reviewer association                |
 | Existing Customer PK / `ix_customers_email`                                                                 | customer_id / email        | Account customer/email lookups, seeding and verification cohort filters                                                          |
 | `ix_users_status`, `ix_users_identity_version`, `ix_users_locale`, `ix_users_name`                          | Corresponding single field | Explicit CHECK-field coverage only; current authentication reads by PK/email then checks state in Python                         |
 | `ix_operators_first_name`, `ix_operators_last_name`                                                         | Corresponding single field | Explicit length-CHECK coverage only; no name search currently                                                                    |
@@ -221,13 +244,12 @@ not present in `customers.csv`.
 
 The filter affects these tables:
 
-| Table            | Filter behavior                                                     |
-| ---------------- | ------------------------------------------------------------------- |
-| `branches`       | Loads the complete shared catalog.                                  |
-| `customers`      | Loads only requested customer IDs.                                  |
-| `service_agents` | Loads the complete shared catalog.                                  |
-| `products`       | Loads products owned by requested customers.                        |
-| `transactions`   | Loads transactions owned by requested customers in the date window. |
+| Table          | Filter behavior                                                     |
+| -------------- | ------------------------------------------------------------------- |
+| `branches`     | Loads the complete shared catalog.                                  |
+| `customers`    | Loads only requested customer IDs.                                  |
+| `products`     | Loads products owned by requested customers.                        |
+| `transactions` | Loads transactions owned by requested customers in the date window. |
 
 Filtering reduces PostgreSQL writes, but the pipeline still scans the source CSV files to
 find matching rows. EDA profiles customer-owned tables using the same filter.

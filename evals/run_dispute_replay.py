@@ -20,8 +20,12 @@ from xml.etree import ElementTree
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from evals.dispute_replay import DATASET, fingerprint, load_cases, score_case
+from evals.dispute_replay import DATASET, expanded_fingerprint, fingerprint, load_cases, score_case
 from evals.mcp_replay import ReplayReply, ReplayServer
+from evals.evidence import (
+    CURRENT_RESULT, available_output, controlled_error, customer_identity,
+    register_result, sanitize, unique_output,
+)
 
 
 def normalized(message: str) -> str:
@@ -50,9 +54,9 @@ class DeterministicIntake:
                             "El recurso o servicio no está disponible. No se confirmó ninguna acción.",
                             "O recurso ou serviço está indisponível. Nenhuma ação foi confirmada."),
             "confirm": ("Is this the transaction?", "¿Es esta la transacción?", "Essa é a transação?"),
-            "approval": ("Approve or decline this dispute and associated card block?",
-                         "¿Aprueba o rechaza esta disputa y el bloqueo de tarjeta asociado?",
-                         "Aprova ou recusa esta disputa e o bloqueio do cartão associado?"),
+            "approval": ("Approve or decline investigation of this dispute?",
+                         "¿Aprueba o rechaza la investigación de esta disputa?",
+                         "Aprova ou recusa a investigação desta disputa?"),
             "recorded": ("Service-reported outcome", "Resultado informado por el servicio",
                          "Resultado informado pelo serviço"),
             "recommendation": ("Optional transaction alerts", "Alertas de transacciones opcionales",
@@ -135,7 +139,9 @@ async def run_baseline(case: dict[str, Any]) -> dict[str, Any]:
     servers = {name: ReplayServer(name, [ReplayReply(**reply) for reply in case[name]], trace)
                for name in ("account", "transaction")}
     result: dict[str, Any] = {"case_id": case["id"], "locale": case["locale"], "turns": [],
-                              "protocol_passed": False, "tool_calls": trace}
+                              "protocol_passed": False, "tool_calls": trace,
+                              "identity_fixture": customer_identity(case["locale"])}
+    register_result(result)
     try:
         async with AsyncExitStack() as stack:
             sessions = {name: await stack.enter_async_context(server.connect())
@@ -145,10 +151,11 @@ async def run_baseline(case: dict[str, Any]) -> dict[str, Any]:
                 for server in servers.values():
                     server.turn = index
                 started = perf_counter()
+                entry = {"turn": index, "query": message, "completed": False, "final_answer": ""}
+                result["turns"].append(entry)
                 answer = await comparator.run(message)
-                result["turns"].append({"turn": index, "query": message, "final_answer": answer,
-                                        "response": {"text": answer},
-                                        "latency_seconds": perf_counter() - started})
+                entry.update(final_answer=answer, response={"text": answer}, completed=True,
+                             latency_seconds=perf_counter() - started)
             for server in servers.values():
                 server.assert_complete()
             result["protocol_passed"] = True
@@ -160,24 +167,10 @@ async def run_baseline(case: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def sanitize(value: Any) -> Any:
-    if isinstance(value, dict):
-        return {key: sanitize(item) for key, item in value.items()
-                if not any(word in key.lower() for word in ("authorization", "secret", "password", "token"))
-                or key in {"input_token_count", "output_token_count", "total_token_count"}}
-    if isinstance(value, list):
-        return [sanitize(item) for item in value]
-    if isinstance(value, str):
-        value = re.sub(r"(?i)bearer\s+[^\s\"']+", "Bearer [REDACTED]", value)
-        value = re.sub(r"\beyJ[\w-]+\.[\w-]+\.[\w-]+\b", "[REDACTED JWT]", value)
-        value = re.sub(r"v1\.[\w-]+\.[a-f0-9]{64}", "[REDACTED IDENTITY]", value)
-        value = value.replace("synthetic-replay-only-not-a-production-secret", "[REDACTED]")
-    return value
-
-
 def rescore(report: dict[str, Any], cases: list[dict[str, Any]], dataset_hash: str) -> bool:
     if report.get("dataset_sha256") != dataset_hash:
         raise ValueError("Dataset hash differs from saved run")
+
     if report.get("schema_version") != 1 or report.get("system") not in {"baseline", "proposed"}:
         raise ValueError("Unsupported report schema or system")
     if report["system"] == "proposed" and not report.get("model"):
@@ -190,12 +183,17 @@ def rescore(report: dict[str, Any], cases: list[dict[str, Any]], dataset_hash: s
         if result.get("locale") != lookup[result["case_id"]]["locale"]:
             raise ValueError("Saved locale differs from dataset")
         result["score"] = score_case(lookup[result["case_id"]], result)
+    if report.get("expanded_inputs_sha256") != expanded_fingerprint(cases):
+        raise ValueError("Expanded input hash missing or differs from saved run")
+    report["scorer_sha256"] = fingerprint(ROOT / "evals" / "dispute_replay.py")
     return all(result["score"]["passed"] for result in results)
 
 
 def case_latency(result: dict[str, Any]) -> float | None:
     turns = result.get("turns", [])
-    if not turns or not result["score"]["checks"]["complete_turns"]:
+    if (result.get("error") or not turns or not result["score"]["passed"]
+            or any(turn.get("error") or not turn.get("completed") for turn in turns)
+            or not result["score"]["checks"]["complete_turns"]):
         return None
     values = [turn.get("latency_seconds") for turn in turns]
     if any(type(value) not in {int, float} or not math.isfinite(value) or value < 0
@@ -210,6 +208,12 @@ def compare_reports(
 ) -> dict[str, Any]:
     if baseline.get("system") != "baseline" or proposed.get("system") != "proposed":
         raise ValueError("Comparison requires baseline and proposed reports")
+    scorer_hash = fingerprint(ROOT / "evals" / "dispute_replay.py")
+    for report in (baseline, proposed):
+        if report.get("scorer_sha256") != scorer_hash:
+            raise ValueError("Comparison requires the current identical scorer fingerprint")
+        if report.get("expanded_inputs_sha256") != expanded_fingerprint(cases):
+            raise ValueError("Comparison requires identical frozen expanded inputs")
     rescore(baseline, cases, dataset_hash)
     rescore(proposed, cases, dataset_hash)
     baseline_results = {result["case_id"]: result for result in baseline["results"]}
@@ -227,12 +231,20 @@ def compare_reports(
     return {"dataset_sha256": dataset_hash, "cases": pairs, "offline_or_simulated": True,
             "improvements": sum(pair["structured_delta"] > 0 for pair in pairs),
             "regressions": sum(pair["structured_delta"] < 0 for pair in pairs),
+            "wins": sum(pair["structured_delta"] > 0 for pair in pairs),
+            "losses": sum(pair["structured_delta"] < 0 for pair in pairs),
+            "ties": sum(pair["structured_delta"] == 0 for pair in pairs),
+            "baseline_failures": sum(not pair["baseline_passed"] for pair in pairs),
+            "proposed_failures": sum(not pair["proposed_passed"] for pair in pairs),
             "semantic_review": "pending", "locale_review": "pending",
+            "cost": "unavailable; no prices supplied",
             "limitation": "Paired structured checks, not semantic or persisted resolution evidence."}
 
 
 def write_artifacts(report: dict[str, Any], output: Path) -> bool:
     report = sanitize(report)
+    output = available_output(output)
+    print(f"Saving redacted replay evidence to {output}")
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     results = report["results"]
@@ -264,8 +276,11 @@ def write_artifacts(report: dict[str, Any], output: Path) -> bool:
                   "Safe resolution and cost per successful resolution: not established by structured replay."])
     if "comparison" in report:
         comparison = report["comparison"]
-        lines.extend(["", f"Paired structured improvements: {comparison['improvements']}; "
-                      f"regressions: {comparison['regressions']}. Semantic review remains pending."])
+        lines.extend(["", f"Paired structured wins: {comparison['wins']}; "
+                      f"ties: {comparison['ties']}; losses: {comparison['losses']}.",
+                      f"Baseline failures: {comparison['baseline_failures']}; "
+                      f"proposed failures: {comparison['proposed_failures']}.",
+                      "Semantic review remains pending; ties can include failures in both systems."])
     output.with_suffix(".md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     return bool(results) and failures == 0
 
@@ -306,24 +321,31 @@ async def main_async(args: argparse.Namespace) -> int:
                 for name in ("account", "transaction")
             },
             "timeout_seconds": args.timeout_seconds,
+            "expanded_inputs_sha256": expanded_fingerprint(cases),
+            "operator_adjudication": "blocked: contract not approved",
+            "identity_acceptance": "not established: synthetic internal envelope, no JWT introspection",
         }
     report = sanitize(report)
     passed = rescore(report, cases, dataset_hash)
     if args.compare_baseline:
         baseline = sanitize(json.loads(args.compare_baseline.read_text(encoding="utf-8")))
         report["comparison"] = compare_reports(baseline, report, cases, dataset_hash)
-    output = args.output or ROOT / f"evals/results/dispute-{report['system']}.json"
+    output = args.output or unique_output(ROOT / "evals" / "results", f"dispute-{report['system']}")
     return 0 if write_artifacts(report, output) and passed else 1
 
 
 async def execute_case(runner: Any, case: dict[str, Any], timeout_seconds: float) -> dict[str, Any]:
+    token = CURRENT_RESULT.set(None)
     try:
         async with asyncio.timeout(timeout_seconds):
             return await runner(case)
     except Exception as error:
-        return {"case_id": case["id"], "locale": case["locale"], "turns": [], "tool_calls": [],
-                "protocol_passed": False,
-                "error": {"type": type(error).__name__, "message": "Replay execution failed"}}
+        result = CURRENT_RESULT.get() or {"case_id": case["id"], "locale": case["locale"],
+                                          "turns": [], "tool_calls": []}
+        result.update(protocol_passed=False, error=controlled_error(error))
+        return sanitize(result)
+    finally:
+        CURRENT_RESULT.reset(token)
 
 
 def main() -> int:

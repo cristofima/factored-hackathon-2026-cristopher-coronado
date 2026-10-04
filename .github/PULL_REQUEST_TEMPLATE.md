@@ -6,13 +6,15 @@
 
 <!-- Describe relevant changes grouped by scope. Keep only scopes that apply. -->
 
-- ## **Agent**:
-- ## **Responses BFF**:
-- ## **Frontend**:
-- ## **Business API**:
-- ## **Data**:
-- ## **Infra**:
-- ## **Docs**:
+- **Agent**:
+- **Identity**:
+- **Responses BFF**:
+- **Frontend**:
+- **Business API**:
+- **Data**:
+- **Evaluation/CI**:
+- **Infra**:
+- **Docs**:
 
 ## Type of Change
 
@@ -28,12 +30,18 @@
 - [ ] CI (`ci`)
 - [ ] Chore (`chore`)
 
-## Breaking Change
+## Compatibility and Risk
 
-<!-- Mark one. If yes, explain impact and migration required. -->
+<!-- Mark one compatibility status only when supported by evidence or author
+confirmation. Absence of ! or BREAKING CHANGE does not prove compatibility.
+Describe affected contracts, routes, authentication/ownership, data migrations,
+or deployment requirements, including mitigation or migration steps. -->
 
-- [ ] Yes
-- [ ] No
+- [ ] Breaking change
+- [ ] No breaking change confirmed
+- [ ] Pending confirmation
+
+<!-- Add relevant risks and limitations; do not infer "no risk" from commit history. -->
 
 <!-- Please prefix your PR title with one of the following:
   * `feat`: A new feature
@@ -50,51 +58,48 @@
   * !: A breaking change is indicated with a `!` after the listed prefixes above, e.g. `feat!`, `fix!`, `refactor!`, etc.
 -->
 
-## How to Test
+## Validation
 
-<!-- Provide exact commands and manual checks performed. -->
+<!-- Keep recommended checks separate from observed results. Commit messages,
+historical memory, and test configuration are not execution evidence for this HEAD.
+Use AGENTS.md and component guides for focused validation commands. -->
 
-### Commands Run
+### Recommended Checks
 
-```bash
-# Example:
-# uv run pytest app/agent/tests/test_hosted_workflow.py -q
-```
+<!-- List exact commands and manual scenarios relevant to the affected behavior.
+These are instructions, not claims that checks were executed. -->
 
-### Manual Validation
+### Available Results
 
-<!-- Example: login flow, account inquiry, transaction inquiry, locale behavior, UI checks. -->
+Validation evidence was not supplied for this draft.
 
--
-
-### Not Tested
-
-<!-- List intentionally untested areas and why. Use N/A if fully tested. -->
-
-## Evidence
-
-<!-- Add screenshots or recordings for frontend/UX changes. Use N/A if not applicable. -->
-
-- N/A
-
-## Impact and Risk
-
-<!-- Mark what applies and add short notes where needed. -->
-
-- [ ] Security/Auth impact
-- [ ] Data model or migration impact
-- [ ] API or contract impact
-- [ ] Infra/Deployment impact
-- [ ] No significant risk identified
+<!-- Replace the sentence above only with verified results. For each result, record:
+command/check | status | environment | tested commit | result or evidence link.
+Include exact commands with their outcomes, warnings, and coverage limitations.
+Statuses: Passed, Failed, Not run, Blocked, Evidence unavailable, Not applicable.
+"Not run" requires knowledge that the check was not executed; otherwise use
+"Evidence unavailable". Explain blocked checks and non-applicability.
+Add manual checks, screenshots/recordings for relevant UI changes, and CI run or
+artifact links here when available; do not add empty subsections or default to N/A.
+Distinguish local, CI, and hosted results. Tests or protocol smoke do not establish
+real-data parity, end-to-end authorization, or hosted identity transport.
+Never include credentials, tokens, customer data, or links to local-only handoffs. -->
 
 ## Checklist
 
-- [ ] Tests were added or updated for changed behavior, or a clear reason is provided
-- [ ] No secrets, passwords, or tokens were added to code/logs/config
+<!-- Author attestations: do not check these from commit-history inference. -->
+
+- [ ] Tests were added or updated for changed behavior, or a clear coverage limitation is provided
+- [ ] No secrets, passwords, tokens, or sensitive customer data were added to code/logs/config/evidence
 - [ ] Documentation was updated when behavior or workflows changed
 
-## Other Information
+## Related Issues
 
-<!-- Add any additional context reviewers should know. -->
+<!-- Include explicit issue references from commit footers or supplied context.
+Omit this section if none are available. -->
 
--
+## Limitations and Follow-up
+
+<!-- Include documented remaining verification gates, rollout requirements, or
+reviewer-relevant limitations. Missing evidence does not close an existing gate.
+Omit this section if no additional limitations are documented. -->

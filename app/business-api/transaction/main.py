@@ -11,6 +11,7 @@ import logging
 # import the transaction router we just added
 from routers import router as transaction_routers
 from dispute_routers import router as dispute_routers
+from operator_routers import router as operator_routers
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,7 @@ def create_app() -> FastAPI:
     # Include the transaction router
     app.include_router(transaction_routers, prefix="/api/transactions", tags=["transactions"]) 
     app.include_router(dispute_routers, prefix="/api/support-cases", tags=["support-cases"])
+    app.include_router(operator_routers, prefix="/api/operator/support-cases", tags=["operator-support-cases"])
 
     allowed_origins = [
         origin.strip()

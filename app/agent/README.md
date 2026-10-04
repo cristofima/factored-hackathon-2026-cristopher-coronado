@@ -8,6 +8,14 @@ reason, requests explicit approval, and explains tool-reported outcomes. The
 Transaction service owns policy, triage, ownership checks, and case events; the
 agent never determines dispute legitimacy or invents a missing fraud score.
 
+Existing-case consultations are read-only. Triage routes case lists, status,
+timelines, and follow-ups to Transaction. Ambiguous references require customer
+selection; status follow-ups refresh case details and event questions fetch the
+timeline. Missing and foreign cases are described equivalently as unavailable.
+Customer consent and `IN_REVIEW` do not establish operator takeover or a verdict.
+Deterministic instruction-contract tests verify these requirements are present,
+not that a real model follows them; persisted and browser validation remain separate.
+
 ## Runtime Flow
 
 ```mermaid
@@ -96,7 +104,7 @@ continuation, and hosted identity transport remain unverified end to end.
 
 ### Dispute Evaluation Coverage
 
-The [evaluation guide](../../evals/README.md) separates three evidence levels:
+The [evaluation guide](../../evals/README.md) separates evidence levels:
 
 - [Service regression tests](../business-api/transaction/tests/test_dispute_service.py)
   exercise seeded business rules, ownership, case events, and recommendations.
@@ -105,17 +113,30 @@ The [evaluation guide](../../evals/README.md) separates three evidence levels:
   SDK memory sessions into the existing workflow. A model run uses a real Foundry
   model and synthetic signed identity, without the BFF, database, real business
   APIs, or application JWT. Production HTTP/authentication defaults stay intact.
-- [Held-out scenarios](../../evals/scenarios.json) define 18 dispute cases, but
-  complete proposed-system results and persisted-state verification remain open.
+- [Dispute replay v2](../../evals/dispute_cases.json) contains 25 development-exposed
+  synthetic confirmation cases with frozen expanded inputs. Approval leaves every
+  score band IN_REVIEW; score routes review, not legitimacy or financial effects.
+- [Historical scenarios](../../evals/scenarios.json) preserve 18 obsolete-policy
+  diagnostics. Their label-derived baseline and keyword classifier are not current
+  acceptance or untouched held-out evidence.
 
-The replay's three current cases cover balance lookup, canned denial, and empty
-transactions, not disputes. Offline tests validate the harness; real-model
-execution is pending. `protocol_passed` checks calls and completion, not grounding,
-locale, approval correctness, or dispute success. Behavioral review is pending.
-[Hosted Agent CI](../../.github/workflows/ci-hosted-agent.yml) now configures a
-same-repository PR-only real-model protocol smoke check, sticky PR report, and
-synthetic transcript artifacts. Actual PR/OIDC/model execution remains unverified;
-this is not a dispute quality gate. See the [replay guide](../../evals/README.md#pr-smoke-check).
+The isolated MCP replay's three cases cover balance lookup, canned denial, and empty
+transactions, not disputes. Historical CI run 37089481802 verified 3/3 protocol cases,
+PR/OIDC/real-model execution, artifacts and PR reporting at commit
+f08d6aa2494e619df96883761f7cf73fa8e9c4cd. This does not verify the current worktree
+or v2 dispute CI. `protocol_passed` checks calls and completion, not grounding,
+locale, approval correctness, or dispute success. Behavioral review remains pending.
+See the [replay guide](../../evals/README.md#pr-smoke-check).
+
+Session checkpoints recorded 25 offline alignment tests, synthetic comparator and
+saved-evidence rescore results of 25/25 each, then 57 combined offline replay tests.
+Complete redacted per-turn evidence, controlled failures and fingerprint-checked
+pairing are implemented; these results predate subsequent contract changes and are
+not a current rerun or a paired real-model comparison. Consultation/session checks
+recorded 16 agent workflow, 23 BFF Responses, and 43 Transaction service tests passing.
+Instruction assertions and mocked Identity/upstream or SQLite checks do not establish
+model compliance, locale quality, live authorization, or PostgreSQL parity.
+Exact historical commands and limitations are in the evaluation guide.
 
 Next coverage must prioritize dispute identification, clarification, approval and
 decline across turns, low/high/missing-score tool outcomes, safe refusals, and

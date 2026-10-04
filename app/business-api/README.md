@@ -120,7 +120,9 @@ Each service exposes two parallel surfaces that never share an auth mechanism:
   `get_jwt_customer_id`, which validates the application JWT Identity issues through
   the BFF at login (HS256, `JWT_SECRET_KEY`/`JWT_ISSUER`/`JWT_AUDIENCE`) and verifies
   active customer status and the current identity version through protected Identity
-  introspection. CORS is enabled via
+  introspection. Operator review routes instead require `operator_identity.get_operator_principal`
+  and current active-operator introspection; they do not require a customer claim.
+  CORS is enabled via
   `CORS_ALLOWED_ORIGINS` (defaults to `http://localhost:5170`).
 
 ### Account Service (Port 8070)
@@ -170,13 +172,22 @@ exposed as an MCP tool; it is not an operator-only endpoint).
 Approval transitions every classification to `IN_REVIEW`. Low scores retain the
 `fast_track` routing classification and emit `REVIEW_REQUIRED`, but no longer close
 the case automatically or generate a resolution outcome/recommendation. High and
-missing scores retain their escalation classifications. All classifications assign
-a reviewer-catalog entry when available; absent catalog entries leave the case
-unassigned and in review. Assignment is not operator takeover or human adjudication.
+missing scores retain their escalation classifications. New cases do not assign a
+simulated reviewer. The live ServiceAgent catalog is retired; archived assignments
+remain historical evidence, never real operator ownership.
 
-Resolution requires a separate explicit operation on an owned `IN_REVIEW` case.
-Operator queues, takeover, adjudication, and automatic review timeouts are not
-implemented. Historical resolved records remain unchanged. Case resolution does
+Operators use a separate current-operator JWT dependency for
+`GET /api/operator/support-cases?view=available|assigned`, owner-only
+`GET /api/operator/support-cases/{case_id}`, and bodyless
+`POST /api/operator/support-cases/{case_id}/claim`. Available cases require customer
+consent and unclaimed `IN_REVIEW` status; assigned cases belong only to the caller,
+including resolved cases. Claim ownership, timestamp, version and audit commit
+atomically. See the [Transaction guide](transaction/README.md) for pagination,
+conflicts and authorization boundaries.
+
+Resolution still requires a separate explicit customer-authorized operation on an
+owned `IN_REVIEW` case. Operator takeover grants review responsibility only;
+operator adjudication, reassignment and automatic review timeouts are not implemented. Historical resolved records remain unchanged. Case resolution does
 not post credits, change balances, or block cards. The 365-day intake window is
 unchanged and remains independent of fraud-score triage.
 
@@ -251,12 +262,13 @@ filters before returning customer-owned resources. Keep those checks in the serv
 tool descriptions and agent instructions are not authorization boundaries.
 
 The browser calls Account and Transaction REST endpoints directly, authenticated with
-the application JWT issued by the [Responses BFF](../responses-bff/README.md) at
-login. The BFF itself only handles identity (`/auth/login`, `/auth/me`) and fronts the
-Responses agent; it does not read account, card, or transaction data from PostgreSQL.
+the application JWT issued by [Identity](identity/README.md) through the
+[Responses BFF](../responses-bff/README.md) at login. The DB-free BFF exposes
+allowlisted identity/admin operations and customer Responses chat; it does not read
+account, card, or transaction data from PostgreSQL.
 Browser application JWTs are not substitutes for the internal MCP bearer, and the two
-auth dependencies (`jwt_identity.get_jwt_customer_id` for REST, `internal_identity.get_customer_id`
-for MCP) are never interchangeable.
+auth dependencies (customer/operator application-JWT dependencies for REST,
+`internal_identity.get_customer_id` for MCP) are never interchangeable.
 
 ## 🐛 Development & Debugging
 

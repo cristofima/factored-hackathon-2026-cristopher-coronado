@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthenticatedUser } from "@/api/authClient";
 import { AUTH_TOKEN_KEY } from "@/api/authToken";
 import { AuthProvider } from "./AuthContext";
@@ -7,7 +7,8 @@ const harness = vi.hoisted(() => ({
   effects: [] as Array<() => void | (() => void)>,
   setters: [] as Array<ReturnType<typeof vi.fn>>,
   clear: vi.fn(), cancel: vi.fn(), dismiss: vi.fn(), resetToasts: vi.fn(),
-  login: vi.fn(), restore: vi.fn(), remove: vi.fn(),
+  login: vi.fn(), restore: vi.fn(), remove: vi.fn(), getToken: vi.fn(),
+  state: null as unknown[] | null,
   addEventListener: vi.fn(), removeEventListener: vi.fn(),
 }));
 // Exercise the provider's asynchronous session orchestration without a browser DOM.
@@ -20,7 +21,7 @@ vi.mock("react", async (original) => ({
   useState: (value: unknown) => {
     const setter = vi.fn();
     harness.setters.push(setter);
-    return [value, setter];
+    return [harness.state?.[harness.setters.length - 1] ?? value, setter];
   },
 }));
 vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({ clear: harness.clear, cancelQueries: harness.cancel }) }));
@@ -38,11 +39,73 @@ beforeEach(() => {
   harness.setters.length = 0;
   harness.cancel.mockResolvedValue(undefined);
   harness.restore.mockResolvedValue(null);
-  vi.stubGlobal("localStorage", { removeItem: harness.remove });
+  harness.state = null;
+  harness.getToken.mockReturnValue(null);
+  vi.stubGlobal("localStorage", { removeItem: harness.remove, getItem: harness.getToken });
   vi.stubGlobal("window", { addEventListener: harness.addEventListener, removeEventListener: harness.removeEventListener });
 });
 
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+const tokenExpiringAt = (expiry: number) => `header.${btoa(JSON.stringify({ exp: expiry / 1000 }))}.signature`;
+
  describe("session isolation orchestration", () => {
+  it("expires an idle customer session and resets all session state", () => {
+    vi.useFakeTimers();
+    harness.state = [{ ...profile, role: "customer", customerId: "customer" }, false, 5];
+    harness.getToken.mockReturnValue(tokenExpiringAt(Date.now() + 1000));
+    provider();
+    const cleanup = harness.effects[1]();
+    expect(harness.clear).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1000);
+    expect(harness.clear).toHaveBeenCalledOnce();
+    expect(harness.setters[0]).toHaveBeenCalledWith(null);
+    expect(harness.setters[2].mock.calls[0][0](5)).toBe(6);
+    expect(harness.remove).toHaveBeenCalledWith(AUTH_TOKEN_KEY);
+    if (typeof cleanup === "function") cleanup();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it("checks elapsed expiry on focus and removes the focus handler on teardown", () => {
+    vi.useFakeTimers();
+    const now = Date.now();
+    harness.state = [profile, false, 1];
+    harness.getToken.mockReturnValue(tokenExpiringAt(now + 1000));
+    provider();
+    const cleanup = harness.effects[1]();
+    vi.setSystemTime(now + 2000);
+    const check = harness.addEventListener.mock.calls[0][1];
+    check();
+    expect(harness.clear).toHaveBeenCalledOnce();
+    if (typeof cleanup === "function") cleanup();
+    expect(harness.removeEventListener).toHaveBeenCalledWith("focus", check);
+  });
+  it("never lets an old expiry timer remove a replacement role's token", () => {
+    vi.useFakeTimers();
+    harness.state = [profile, false, 1];
+    harness.getToken.mockReturnValue(tokenExpiringAt(Date.now() + 1000));
+    provider();
+    const cleanup = harness.effects[1]();
+    harness.getToken.mockReturnValue("replacement-token");
+    vi.advanceTimersByTime(1000);
+    expect(harness.remove).not.toHaveBeenCalled();
+    if (typeof cleanup === "function") cleanup();
+  });
+  it.each([null, "malformed-token"])("fails closed for a verified profile without usable expiry (%s)", (token) => {
+    harness.state = [profile, false, 1];
+    harness.getToken.mockReturnValue(token);
+    provider();
+    const cleanup = harness.effects[1]();
+    expect(harness.setters[0]).toHaveBeenCalledWith(null);
+    expect(harness.remove).toHaveBeenCalledWith(AUTH_TOKEN_KEY);
+    if (typeof cleanup === "function") cleanup();
+  });
+  it("keeps the user absent and ends loading after profile failure", async () => {
+    harness.restore.mockRejectedValue(new Error("Profile unavailable"));
+    provider();
+    harness.effects[0]();
+    await flush();
+    expect(harness.setters[0].mock.calls).toEqual([[null], [null]]);
+    expect(harness.setters[1].mock.calls).toEqual([[true], [false]]);
+  });
   it("clears queries, mutations and toasts and advances the shell epoch on logout", () => {
     const auth = provider();
     auth.logout();

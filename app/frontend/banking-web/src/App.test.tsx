@@ -10,7 +10,7 @@ import type { AuthenticatedUser } from "./api/authClient";
 const auth = vi.hoisted(() => ({ user: null as AuthenticatedUser | null, loading: false, sessionKey: 1, logout: vi.fn() }));
 const mounts = vi.hoisted(() => ({ customer: vi.fn() }));
 vi.mock("./context/AuthContext", () => ({ useAuth: () => auth }));
-vi.mock("./context/AgentResponseContext", () => ({ AgentResponseProvider: () => { mounts.customer(); return "CUSTOMER_CHAT"; } }));
+vi.mock("./context/AgentResponseContext", () => ({ AgentResponseProvider: ({ children }: { children: ReactNode }) => { mounts.customer(); return <>{"CUSTOMER_CHAT"}{children}</>; } }));
 vi.mock("./components/Navigation", () => ({ default: () => { mounts.customer(); return "CUSTOMER_NAVIGATION"; } }));
 vi.mock("./components/Sidebar", () => ({ default: () => { mounts.customer(); return "CUSTOMER_SIDEBAR"; } }));
 vi.mock("./components/AIAgent", () => ({ default: () => { mounts.customer(); return "CUSTOMER_AGENT"; } }));
@@ -29,6 +29,44 @@ const renderRoute = (path: string) => renderToStaticMarkup(
 );
 
 describe("role isolated routing", () => {
+  it("changes the shell identity for logout/login, user, role and identity-version transitions", () => {
+    const customer: AuthenticatedUser = { id: "customer-user", email: "customer@example.test", role: "customer", customerId: "customer", locale: "en", name: null, identityVersion: 1 };
+    const keys: Array<string | null> = [];
+    const Probe = () => {
+      const shell = RequireRole({ children: "session-local-chat", role: auth.user!.role });
+      keys.push(shell.key);
+      return shell;
+    };
+    for (const [user, sessionKey] of [
+      [customer, 1], [customer, 2], [{ ...customer, id: "other-user", customerId: "other-customer" }, 2],
+      [staff("operator"), 2], [{ ...staff("operator"), identityVersion: 2 }, 2],
+    ] as const) {
+      auth.user = user;
+      auth.sessionKey = sessionKey;
+      auth.loading = false;
+      renderToStaticMarkup(<MemoryRouter><UiLocaleProvider><Probe /></UiLocaleProvider></MemoryRouter>);
+    }
+    expect(keys).toEqual(["1:customer-user:customer:1", "2:customer-user:customer:1", "2:other-user:customer:1", "2:operator:operator:1", "2:operator:operator:2"]);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+  it.each(["/", "/account", "/product/owned-id", "/support", "/support-cases", "/support-cases/case-id", "/unknown"])("mounts customer chat on %s", (path) => {
+    auth.user = { ...staff("admin"), id: "customer-user", role: "customer", customerId: "customer" };
+    auth.loading = false;
+    const html = renderRoute(path);
+    expect(html).toContain("CUSTOMER_CHAT");
+    expect(html).toContain("CUSTOMER_AGENT");
+  });
+  it.each(["restoring", "anonymous", "failed-profile"])("keeps customer chat absent when %s", (state) => {
+    auth.user = state === "restoring" ? { ...staff("admin"), role: "customer", customerId: "customer" } : null;
+    auth.loading = state === "restoring";
+    mounts.customer.mockClear();
+    try {
+      expect(renderRoute("/support-cases/case-id")).not.toContain("CUSTOMER_");
+      expect(mounts.customer).not.toHaveBeenCalled();
+    } finally {
+      auth.loading = false;
+    }
+  });
   it.each(["credit-cards", "portfolio"])("redirects the removed %s page to the catalog", (path) => {
     const customerGroup = Children.toArray(AppRoutes().props.children).find(
       (node) => isValidElement<{ element?: ReactNode }>(node)
@@ -81,10 +119,26 @@ describe("role isolated routing", () => {
       auth.loading = false;
     }
   });
-  it("operator shell marks the reviewer workflow unavailable in Portuguese", () => {
+  it.each(["index", "*"])("redirects the operator %s route to the canonical queue", (path) => {
+    const group = Children.toArray(AppRoutes().props.children).find(
+      (node) => isValidElement<{ path?: string }>(node) && node.props.path === "/operator",
+    );
+    if (!isValidElement<{ children?: ReactNode }>(group)) throw new Error("Operator routes missing");
+    const route = Children.toArray(group.props.children).find(
+      (node) => isValidElement<{ index?: boolean; path?: string }>(node)
+        && (path === "index" ? node.props.index : node.props.path === path),
+    );
+    if (!isValidElement<{ element?: ReactNode }>(route)) throw new Error("Operator redirect missing");
+    if (!isValidElement<{ to: string; replace: boolean }>(route.props.element)) throw new Error("Redirect missing");
+    expect(route.props.element.type).toBe(Navigate);
+    expect(route.props.element.props.to).toBe(path === "index" ? "support-cases" : "/operator/support-cases");
+    expect(route.props.element.props.replace).toBe(true);
+  });
+  it("operator shell exposes the review queue in Portuguese without customer chat", () => {
     auth.user = staff("operator", "pt");
-    const html = renderRoute("/operator");
-    expect(html).toContain("Fluxo de revisão indisponível");
+    const html = renderRoute("/operator/support-cases");
+    expect(html).toContain("Fila de revisão de contestações");
+    expect(html).not.toContain("CUSTOMER_");
     expect(html).not.toContain("Create operator");
   });
   it("admin customer management stays isolated and localized", () => {
@@ -109,7 +163,7 @@ describe("role isolated routing", () => {
   it("customer cannot mount either staff shell", () => {
     auth.user = { ...staff("admin"), role: "customer", customerId: "customer" };
     expect(renderRoute("/admin/operators")).not.toContain("Create operator");
-    expect(renderRoute("/operator")).not.toContain("Reviewer workflow unavailable");
+    expect(renderRoute("/operator")).not.toContain("Dispute review queue");
   });
   it("does not mount a protected child while unauthenticated or restoring", () => {
     auth.user = null;

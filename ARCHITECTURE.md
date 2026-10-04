@@ -28,11 +28,12 @@ the BFF has no database connection.
 ### `app/frontend/banking-web/`
 
 React + Vite + shadcn-ui. `src/api/` holds `authClient.ts` (BFF login/profile),
-`financialClient.ts` (Account/Transaction direct reads), and `disputeClient.ts`
-(Transaction's `/api/support-cases`), each calling its service's absolute
-`VITE_*_API_URL` origin directly, never through a dev-server proxy. `src/pages/`
-holds one page per screen, including `SupportCases.tsx` and
-`SupportCaseDetail.tsx`. `src/locales/` holds the static `en`/`es`/`pt` UI catalogs
+`financialClient.ts` (Account/Transaction direct reads), `disputeClient.ts`
+(customer support cases), and `operatorDisputeClient.ts` (operator queue/detail and
+versioned exclusive claim). Transaction clients call its absolute `VITE_*_API_URL`
+origin directly with the application JWT, never through a dev-server proxy.
+`src/pages/` holds one page per screen, including `SupportCases.tsx`,
+`SupportCaseDetail.tsx` and role-guarded `OperatorCases.tsx`. `src/locales/` holds the static `en`/`es`/`pt` UI catalogs
 consumed by `UiLocaleProvider`.
 
 ### `app/responses-bff/bff/`
@@ -72,9 +73,12 @@ authenticated via `internal_identity.py`'s 60-second bearer), `routers.py` /
 `get_jwt_customer_id`, same HS256 secret/issuer/audience as the BFF),
 `services.py` (business logic and the customer-ownership authorization check), and
 `models.py` (Pydantic/SQLModel types). Transaction additionally owns
-`dispute_service.py` (the `SupportCaseService` state machine: `OPEN ->
-WAITING_USER_APPROVAL -> IN_REVIEW -> RESOLVED`, fast-track-vs-escalate triage
-against the dataset's `fraud_score`) and `dispute_routers.py` (`/api/support-cases`).
+`dispute_service.py` (customer consent, review classification against the dataset's
+`fraud_score`, and separately authorized resolution) and `dispute_routers.py`
+(`/api/support-cases`). Consent moves every classification to `IN_REVIEW`; a score
+never resolves a case. The approved operator ownership contract is documented in
+[ADR 0008](docs/adr/0008-operator-ownership-without-service-agent-catalog.md): exclusive
+claim records responsibility, not adjudication or financial authority.
 Both services enable `CORSMiddleware` via `CORS_ALLOWED_ORIGINS`.
 
 ### `app/business-api/shared/banking_shared/`
@@ -124,11 +128,12 @@ separately. Commands against the agent stack need `--cwd app/agent`.
   (`es`/`pt`/`en`, `en` fallback), injected once per request by a context provider,
   never inferred from the current message's language.
 - **Dispute legitimacy is never an LLM decision.** `dispute_service.py`'s triage
-  (fast-track vs. escalate to a simulated `ServiceAgent` reviewer) is a
-  deterministic threshold check against the dataset's precomputed `fraud_score`;
-  the agent's only job is intake (identify and confirm the transaction) and
-  routing, matching the pattern every competitor in the same hackathon track also
-  converged on independently.
+  is a deterministic routing check against the dataset's precomputed `fraud_score`;
+  missing scores stay in review without estimation. The agent's only job is intake
+  (identify and confirm the transaction), read-only case consultation and routing.
+  `operator_service.py` separately enforces available/assigned lists, owner-only
+  detail and atomic exclusive claims. Real ownership references `operators.user_id`;
+  retired simulated assignments remain archives, not authentication or verdicts.
 - **Testing is per-service, not repo-wide.** `pytest` (`pytest-asyncio`,
   `asyncio_mode = "auto"`) per Python service under its own `tests/`; `vitest` for
   the frontend. There is no single top-level test runner.

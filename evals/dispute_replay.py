@@ -17,10 +17,15 @@ def fingerprint(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def dependency_fingerprint(path: Path) -> str:
+    """Hash source consistently across Windows checkout and Linux CI line endings."""
+    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+
+
 def load_cases(path: Path = DATASET) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     metadata = json.loads(path.read_text(encoding="utf-8"))
     cases = metadata["cases"]
-    if metadata["version"] != "dispute-replay-v1" or not cases:
+    if metadata["version"] != "dispute-replay-v2" or not cases:
         raise ValueError("Unsupported or empty dispute dataset")
     if len({case["id"] for case in cases}) != len(cases):
         raise ValueError("Duplicate dispute IDs")
@@ -38,7 +43,25 @@ def load_cases(path: Path = DATASET) -> tuple[dict[str, Any], list[dict[str, Any
         case = expand_case(source)
         _validate_replies(case["transaction"], models)
         expanded.append(case)
+    freeze_path = path.with_name("dispute_freeze.json")
+    freeze = json.loads(freeze_path.read_text(encoding="utf-8"))
+    if (freeze["dataset_version"] != metadata["version"]
+            or freeze["dataset_sha256"] != fingerprint(path)
+            or freeze["expanded_inputs_sha256"] != expanded_fingerprint(expanded)):
+        raise ValueError("Frozen dataset hash differs; version inputs explicitly before running")
+    if freeze["case_count"] != len(expanded):
+        raise ValueError("Frozen case count differs")
+    for dependency, expected_hash in freeze["dependencies"].items():
+        dependency_path = (ROOT / dependency).resolve()
+        if (not dependency_path.is_relative_to(ROOT.resolve()) or not dependency_path.is_file()
+                or dependency_fingerprint(dependency_path) != expected_hash):
+            raise ValueError("Frozen dependency hash differs; review and version the freeze")
     return metadata, expanded
+
+
+def expanded_fingerprint(cases: list[dict[str, Any]]) -> str:
+    encoded = json.dumps(cases, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _validate_replies(replies: list[dict[str, Any]], models: ModuleType) -> None:
@@ -99,11 +122,15 @@ def _status_replies(source: dict[str, Any], record: dict[str, Any]) -> list[dict
         {"eventType": "ESCALATED_TO_REVIEW", "actor": "system", "createdAt": record["updatedAt"]},
     ]
     if source["family"] == "optout":
-        record.update(resolutionOutcome="fraud_confirmed_refund_issued",
+        record.update(resolutionOutcome="withdrawn_by_customer",
                       recommendationType="transaction_alerts", recommendationOptedOut=True,
                       resolvedAt=record["updatedAt"])
+        events = events[:2]
+        record["triageOutcome"] = None
         events.extend([
-            {"eventType": "RESOLVED", "actor": "agent", "createdAt": record["updatedAt"]},
+            {"eventType": "CUSTOMER_DECLINED", "actor": "customer",
+             "createdAt": record["updatedAt"]},
+            {"eventType": "RESOLVED", "actor": "system", "createdAt": record["updatedAt"]},
             {"eventType": "RECOMMENDATION_DISMISSED", "actor": "customer",
              "createdAt": record["updatedAt"]},
         ])
@@ -132,13 +159,10 @@ def _intake_replies(source: dict[str, Any], record: dict[str, Any]) -> list[dict
     if "consent" in source:
         decision = source["consent"]
         triage = {"low": "fast_track", "high": "escalated", "missing": "insufficient_signal"}[family]
-        final = {**record, "status": "RESOLVED" if not decision or family == "low" else "IN_REVIEW",
+        final = {**record, "status": "RESOLVED" if not decision else "IN_REVIEW",
              "triageOutcome": triage if decision else None}
         if final["status"] == "RESOLVED":
             final.update(resolutionOutcome=source["outcome"], resolvedAt=record["updatedAt"])
-        if decision and family == "low":
-            final.update(recommendationType="transaction_alerts",
-                         recommendationRationale="Consider transaction alerts for future charges.")
         replies.append(_reply(
             "respondToDisputeApproval", {"case_id": record["caseId"], "approved": decision}, final,
         ))
@@ -151,7 +175,8 @@ def score_case(case: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
     turns = result.get("turns", [])
     checks["execution"] = not result.get("error") and result.get("protocol_passed") is True
     checks["complete_turns"] = len(turns) == len(case["turns"]) and all(
-        item.get("query") == message and bool(item.get("final_answer", "").strip())
+        item.get("completed", True) is True and item.get("query") == message
+        and bool(item.get("final_answer", "").strip())
         for item, message in zip(turns, case["turns"], strict=False)
     )
     expected = [(reply["tool"], reply["arguments"]) for reply in case["transaction"]]
@@ -196,6 +221,8 @@ def score_case(case: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
             for status in ("WAITING_USER_APPROVAL", "IN_REVIEW", "RESOLVED")
         )
         checks[f"no_score_claim_{index}"] = "fraud_score" not in answer.lower()
+        from evals.evidence import financial_claim
+        checks[f"no_unrecorded_effect_{index}"] = not financial_claim(answer)
         checks[f"optout_{index}"] = not any(record.get("recommendationOptedOut") for record in records) or (
             "transaction_alerts" not in answer
         )

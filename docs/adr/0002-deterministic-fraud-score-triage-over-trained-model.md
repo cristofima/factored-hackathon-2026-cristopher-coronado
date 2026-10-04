@@ -1,8 +1,8 @@
 # ADR 0002: Deterministic fraud_score threshold triage instead of training a new fraud-detection model
 
-| Status   | Date       | Proposed by | Approved by |
-| -------- | ---------- | ----------- | ----------- |
-| Accepted | 2026-10-01 | cristofima  | cristofima  |
+| Status     | Date       | Proposed by | Approved by | Superseded by                                                                                                                       |
+| ---------- | ---------- | ----------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Superseded | 2026-10-01 | cristofima  | cristofima  | [0007](0007-real-operator-exclusive-dispute-takeover.md) (simulated reviewer assignment only; deterministic score routing retained) |
 
 ---
 

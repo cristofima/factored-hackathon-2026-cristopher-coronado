@@ -14,7 +14,7 @@ import { errorTranslationKey } from "@/api/errors";
 import { startDisputePolling } from "@/api/disputePolling";
 import { useAuth } from "@/context/AuthContext";
 import type { SupportCase, SupportCaseEvent } from "@/models/SupportCase";
-import { supportCaseEventMessageKey } from "@/models/SupportCase";
+import SupportCaseTimeline from "@/components/SupportCaseTimeline";
 
 export default function SupportCaseDetail() {
   const { t } = useTranslation();
@@ -241,40 +241,7 @@ export default function SupportCaseDetail() {
               </Card>
             )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">{t("Timeline")}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ol className="space-y-3">
-                {timeline.map((event, index) => (
-                  <li
-                    key={`${event.eventType}-${index}`}
-                    className="text-sm border-l-2 pl-3"
-                  >
-                    <p className="font-medium">
-                      {t(`support-cases.events.${event.eventType}`, {
-                        keySeparator: ".",
-                        defaultValue: event.eventType,
-                      })}
-                    </p>
-                    {(event.displayMessage ?? event.message) && (
-                      <p className="text-muted-foreground">
-                        {t(supportCaseEventMessageKey(event), {
-                          keySeparator: ".",
-                          transactionId: supportCase.transactionId,
-                          defaultValue: event.displayMessage ?? event.message ?? t("Not available"),
-                        })}
-                      </p>
-                    )}
-                    <p className="text-xs text-muted-foreground">
-                      {event.createdAt.slice(0, 19).replace("T", " ")}
-                    </p>
-                  </li>
-                ))}
-              </ol>
-            </CardContent>
-          </Card>
+          <SupportCaseTimeline events={timeline} transactionId={supportCase.transactionId} />
         </>
       )}
     </div>

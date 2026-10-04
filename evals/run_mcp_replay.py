@@ -28,6 +28,9 @@ from azure.identity.aio import AzureCliCredential
 
 from app.agents.azure_chat.hosted_workflow import build_hosted_workflow
 from evals.mcp_replay import ReplayReply, ReplayServer
+from evals.evidence import (
+    available_output, controlled_error, customer_identity, register_result, sanitize, unique_output,
+)
 
 
 def evaluation_names(agent_name: str, lane: str = "mcp-replay") -> tuple[str, str]:
@@ -36,20 +39,15 @@ def evaluation_names(agent_name: str, lane: str = "mcp-replay") -> tuple[str, st
 
 
 def error_details(error: BaseException) -> dict[str, Any]:
-    details: dict[str, Any] = {"type": type(error).__name__, "message": str(error)}
-    if isinstance(error, BaseExceptionGroup):
-        details["causes"] = [error_details(cause) for cause in error.exceptions]
-    return details
+    return controlled_error(error)
 
 
 async def run_case(
     client: BaseChatClient, case: dict[str, Any], timeout_seconds: float = 120,
 ) -> dict[str, Any]:
     secret = "synthetic-replay-only-not-a-production-secret"
-    claims = {
-        "sub": "synthetic-replay-user", "customer_id": "SYNTHETIC-CUSTOMER",
-        "email": "replay@example.invalid", "locale": case.get("locale", "en"),
-    }
+    identity = customer_identity(case.get("locale", "en"))
+    claims = {key: identity[key] for key in ("sub", "customer_id", "email", "locale")}
     payload = base64.urlsafe_b64encode(json.dumps(
         claims, sort_keys=True, separators=(",", ":"),
     ).encode()).rstrip(b"=").decode()
@@ -65,8 +63,10 @@ async def run_case(
         "model_execution": "caller-supplied", "expected_behavior": case["expected_behavior"],
         "query": case["query"], "locale": claims["locale"],
         "protocol_passed": False,
-        "turns": [],
+        "turns": [], "tool_calls": trace, "identity_fixture": identity,
+        "identity_acceptance": "synthetic envelope only; JWT/introspection not exercised",
     }
+    register_result(result)
     try:
         async with asyncio.timeout(timeout_seconds), AsyncExitStack() as stack:
             sessions = {
@@ -85,13 +85,18 @@ async def run_case(
                     server.turn = turn
                 started = perf_counter()
                 options = {"session": conversation} if conversation is not None else {}
-                response = await agent.run(message, stream=True, **options).get_final_response()
-                result["response"] = response.to_dict()
-                result["final_answer"] = response.text
-                result["turns"].append({
-                    "turn": turn, "query": message, "response": response.to_dict(),
-                    "final_answer": response.text, "latency_seconds": perf_counter() - started,
-                })
+                entry = {"turn": turn, "query": message, "completed": False,
+                         "final_answer": "", "stream_updates": []}
+                result["turns"].append(entry)
+                stream = agent.run(message, stream=True, **options)
+                async for update in stream:
+                    entry["stream_updates"].append(sanitize(update.to_dict()))
+                    entry["final_answer"] += update.text or ""
+                response = await stream.get_final_response()
+                result["response"] = sanitize(response.to_dict())
+                result["final_answer"] = sanitize(response.text)
+                entry.update(response=sanitize(response.to_dict()), final_answer=sanitize(response.text),
+                             completed=True, latency_seconds=perf_counter() - started)
                 if not response.text.strip():
                     raise AssertionError("Workflow returned an empty final answer")
             for server in servers.values():
@@ -103,15 +108,14 @@ async def run_case(
         result["error"] = error_details(error)
     finally:
         reset_request_context(token)
-    result["tool_calls"] = trace
-    result["replay_failures"] = {name: server.failures for name, server in servers.items()}
-    result["unconsumed_replies"] = {
-        name: len(server.replies) - len([
-            call for call in server.calls if "result" in call
-        ]) for name, server in servers.items()
-    }
-    result["behavior_review"] = "pending"
-    return result
+        result["replay_failures"] = {name: server.failures for name, server in servers.items()}
+        result["unconsumed_replies"] = {
+            name: len(server.replies) - server._position for name, server in servers.items()
+        }
+        result["behavior_review"] = "pending"
+        result["turns"] = sanitize(result["turns"])
+        result["tool_calls"] = sanitize(trace)
+    return sanitize(result)
 
 
 async def main_async(args: argparse.Namespace) -> int:
@@ -135,9 +139,10 @@ async def main_async(args: argparse.Namespace) -> int:
         "offline_or_simulated": True, "results": results,
         "foundry_submission": "not_submitted", "behavior_review": "pending",
     }
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"Saved {len(results)} synthetic replay transcripts to {args.output}")
+    output = available_output(args.output or unique_output(ROOT / "evals" / "results", "mcp-replay"))
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(sanitize(report), ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"Saved {len(results)} synthetic replay transcripts to {output}")
     return 0 if results and all(result["protocol_passed"] for result in results) else 1
 
 
@@ -147,7 +152,7 @@ def main() -> int:
     parser.add_argument("--model", required=True)
     parser.add_argument("--agent-name", default="home-banking-agent")
     parser.add_argument("--dataset", type=Path, default=ROOT / "evals" / "replay_cases.json")
-    parser.add_argument("--output", type=Path, default=ROOT / "evals" / "results" / "mcp-replay.json")
+    parser.add_argument("--output", type=Path)
     parser.add_argument("--case", action="append")
     parser.add_argument("--timeout-seconds", type=float, default=120)
     args = parser.parse_args()

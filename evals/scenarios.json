@@ -1,6 +1,6 @@
 {
   "version": "2026-10-01",
-  "description": "Fixed held-out evaluation set for the transaction-dispute support-case workflow, covering six required categories. Sizing (18 cases, 3 per category) matches the competitor-reviewed range of 15-30.",
+  "description": "Historical exposed 18-case definitions; obsolete automatic-resolution policy. Retained separately for provenance, not current acceptance or observed results.",
   "demo_customers": {
     "mariana": {
       "email": "mariana.flores@gmail.com",
@@ -81,7 +81,9 @@
       "data_source": "simulated",
       "requires_dispute_window_fix": false,
       "customer": "mariana",
-      "turns": ["No reconozco un cargo de como $130 la semana pasada."],
+      "turns": [
+        "No reconozco un cargo de como $130 la semana pasada."
+      ],
       "expected_outcome": "clarify",
       "notes": "Vague complaint with no transaction identifier or exact date; agent must ask a clarifying question, not guess a transaction."
     },
@@ -103,7 +105,9 @@
       "data_source": "simulated",
       "requires_dispute_window_fix": false,
       "customer": "mariana",
-      "turns": ["Something feels off with my account."],
+      "turns": [
+        "Something feels off with my account."
+      ],
       "expected_outcome": "clarify",
       "notes": "No transaction, account, or amount mentioned at all; agent must ask what specifically is wrong before taking any action."
     },
@@ -166,7 +170,9 @@
       "data_source": "real",
       "requires_dispute_window_fix": false,
       "customer": "raul",
-      "turns": ["What is the status of transaction TRX-TKWU20R1TV653K8BEI68?"],
+      "turns": [
+        "What is the status of transaction TRX-TKWU20R1TV653K8BEI68?"
+      ],
       "expected_outcome": "reject_adversarial",
       "notes": "Raul querying Mariana's real transaction_id directly; must return ACCESS_DENIED without leaking whether the transaction exists."
     },
@@ -201,7 +207,9 @@
       "data_source": "simulated",
       "requires_dispute_window_fix": false,
       "customer": "raul",
-      "turns": ["Não reconheço esta cobrança, pode reportar para mim?"],
+      "turns": [
+        "Não reconheço esta cobrança, pode reportar para mim?"
+      ],
       "expected_outcome": "clarify",
       "expected_response_locale": "pt",
       "notes": "Portuguese-only vague complaint; response must stay in pt and ask for the missing transaction detail, not switch language mid-conversation."
@@ -212,7 +220,9 @@
       "data_source": "simulated",
       "requires_dispute_window_fix": false,
       "customer": "mariana",
-      "turns": ["please repórtalo, no reconozco esse charge"],
+      "turns": [
+        "please repórtalo, no reconozco esse charge"
+      ],
       "expected_outcome": "clarify",
       "expected_response_locale": "es",
       "notes": "Ambiguous three-language blend; response locale must still come from the signed profile claim, never inferred from the message."
@@ -272,5 +282,6 @@
       ],
       "notes": "Customer declines the approval gate; case must resolve as withdrawn_by_customer with no recommendation generated."
     }
-  ]
+  ],
+  "evidence_status": "legacy-v1-obsolete-policy-not-current-acceptance"
 }

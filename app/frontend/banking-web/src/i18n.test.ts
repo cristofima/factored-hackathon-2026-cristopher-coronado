@@ -4,6 +4,31 @@ import { supportCaseEventMessageKey } from "./models/SupportCase";
 
 describe("profile UI locale", () => {
     it.each([
+        ["en", "Review cases", "Reason"],
+        ["es", "Casos en revisión", "Motivo"],
+        ["pt", "Casos em revisão", "Motivo"],
+    ])("localizes operator navigation and the reason label in %s", (locale, navigation, reason) => {
+        const instance = createUiI18n(locale);
+        expect(instance.exists("Review cases")).toBe(true);
+        expect(instance.t("Review cases")).toBe(navigation);
+        expect(instance.t("Reason")).toBe(reason);
+        for (const group of ["events", "messages"] as const) {
+            const catalog = locale === "en" ? english : translations[locale as "es" | "pt"];
+            expect(Object.keys(catalog["support-cases"].operator[group]).sort())
+                .toEqual(Object.keys(english["support-cases"].operator[group]).sort());
+        }
+    });
+    it.each(["en", "es", "pt"])("resolves operator views and nested claim/status keys in %s", locale => {
+        const instance = createUiI18n(locale);
+        for (const key of ["Case views", "Available cases", "Assigned cases", "View case", "No assigned cases"]) {
+            expect(instance.exists(key)).toBe(true);
+        }
+        for (const key of ["support-cases.status.IN_REVIEW", "support-cases.events.OPERATOR_CLAIMED", "support-cases.messages.OPERATOR_CLAIMED"]) {
+            expect(instance.exists(key, { keySeparator: "." })).toBe(true);
+            expect(instance.t(key, { keySeparator: "." })).not.toBe(key);
+        }
+    });
+    it.each([
         ["en", "Card Number", "remains in review"],
         ["es", "Número de tarjeta", "sigue en revisión"],
         ["pt", "Número do cartão", "permanece em revisão"],

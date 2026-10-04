@@ -6,7 +6,8 @@ on:
     paths:
       - "app/agent/**"
       - "!app/agent/**/*.md"
-      - "evals/*.py"
+      - "evals/**/*.py"
+      - "evals/dispute_freeze.json"
       - "evals/replay_cases.json"
       - "evals/dispute_cases.json"
       - "app/business-api/account/mcp_tools.py"
@@ -20,7 +21,8 @@ on:
     paths:
       - "app/agent/**"
       - "!app/agent/**/*.md"
-      - "evals/*.py"
+      - "evals/**/*.py"
+      - "evals/dispute_freeze.json"
       - "evals/replay_cases.json"
       - "evals/dispute_cases.json"
       - "app/business-api/account/mcp_tools.py"
@@ -71,12 +73,12 @@ jobs:
           enable-cache: true
       - name: Install agent dependencies
         run: uv sync --project app/agent --dev --frozen
-      - name: Run offline dispute regressions
-        run: uv run --project app/agent --frozen --no-sync python -m pytest app/agent/tests/test_dispute_replay.py app/agent/tests/test_mcp_replay.py -q --junitxml=evals/results/dispute-tests.xml
+      - name: Run offline dispute alignment regressions
+        run: uv run --project app/agent --frozen --no-sync python -m pytest evals/tests -q --junitxml=evals/results/dispute-tests.xml
       - name: Execute deterministic comparator
         run: uv run --project app/agent --frozen --no-sync python evals/run_dispute_replay.py --system baseline --timeout-seconds 10 --output evals/results/dispute-baseline.json
       - name: Rescore saved evidence
-        run: uv run --project app/agent --frozen --no-sync python evals/run_dispute_replay.py --rescore evals/results/dispute-baseline.json --output evals/results/dispute-baseline.json
+        run: uv run --project app/agent --frozen --no-sync python evals/run_dispute_replay.py --rescore evals/results/dispute-baseline.json --output evals/results/dispute-rescored.json
       - name: Publish structured summary
         if: always()
         shell: bash
@@ -94,9 +96,9 @@ jobs:
           name: dispute-offline-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             evals/results/dispute-tests.xml
-            evals/results/dispute-baseline.json
-            evals/results/dispute-baseline.xml
-            evals/results/dispute-baseline.md
+            evals/results/dispute-*.json
+            evals/results/dispute-*.xml
+            evals/results/dispute-*.md
           retention-days: 14
           if-no-files-found: error
 

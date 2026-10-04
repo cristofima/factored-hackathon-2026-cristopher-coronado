@@ -200,7 +200,30 @@
   "Checking active disputes...": "Checking active disputes...",
   "Dispute eligibility unavailable. Reporting is disabled.": "Dispute eligibility unavailable. Reporting is disabled.",
   "View existing dispute": "View existing dispute",
+  "Case views": "Case views",
+  "Available cases": "Available cases",
+  "Assigned cases": "Assigned cases",
+  "View case": "View case",
+  "No assigned cases": "No assigned cases",
+  "Review cases": "Review cases",
   "support-cases": {
+    "operator": {
+      "events": {
+        "APPROVAL_REQUESTED": "Customer approval requested",
+        "APPROVAL_GRANTED": "Customer approved the dispute",
+        "APPROVAL_DECLINED": "Customer declined the dispute",
+        "OPERATOR_CLAIMED": "Assigned to you",
+        "RECOMMENDATION_DISMISSED": "Customer dismissed the recommendation"
+      },
+      "messages": {
+        "APPROVAL_REQUESTED": "The customer’s consent is required to continue processing the case.",
+        "APPROVAL_GRANTED": "The customer’s consent to continue processing the case was recorded.",
+        "APPROVAL_DECLINED": "The customer declined to proceed with the dispute.",
+        "OPERATOR_CLAIMED": "You took exclusive responsibility for reviewing this case; no verdict or financial effect was recorded.",
+        "WITHDRAWN": "Case closed: withdrawn by the customer.",
+        "RECOMMENDATION_DISMISSED": "The customer dismissed the post-resolution recommendation."
+      }
+    },
     "status": {
       "OPEN": "Open",
       "WAITING_USER_APPROVAL": "Waiting for your approval",
@@ -216,6 +239,7 @@
       "transaction_alerts": "This dispute involved an unrecognized charge. Enabling instant transaction alerts can help you spot similar charges sooner."
     },
     "messages": {
+      "OPERATOR_CLAIMED": "An authenticated operator took exclusive ownership of the review; no verdict or financial effect was recorded.",
       "CASE_OPENED": "Dispute opened for transaction {{transactionId}}.",
       "APPROVAL_REQUESTED": "Your consent is required to continue processing the case.",
       "APPROVAL_GRANTED": "Your consent to continue processing the case was recorded.",
@@ -230,6 +254,7 @@
       "RECOMMENDATION_DISMISSED": "You dismissed the post-resolution recommendation."
     },
     "events": {
+      "OPERATOR_CLAIMED": "Operator assigned",
       "CASE_OPENED": "Dispute opened",
       "APPROVAL_REQUESTED": "Approval requested",
       "APPROVAL_GRANTED": "You approved the dispute",
@@ -302,5 +327,27 @@
   "Page {{page}} of {{count}}": "Page {{page}} of {{count}}",
   "Filter movements": "Filter movements",
   "About these totals": "About these totals",
-  "Movement window": "{{count}} movements · {{start}} – {{end}}"
+  "Movement window": "{{count}} movements · {{start}} – {{end}}",
+  "Dispute review queue": "Dispute review queue",
+  "Taking a case does not authorize a verdict or financial changes.": "Taking a case does not authorize a verdict or financial changes.",
+  "Operator subject": "Operator subject",
+  "Claimed at": "Claimed at",
+  "Case version": "Case version",
+  "Assigned to you": "Assigned to you",
+  "Assigned": "Assigned",
+  "Unassigned": "Unassigned",
+  "Taking case...": "Taking case...",
+  "Take case": "Take case",
+  "Back to review queue": "Back to review queue",
+  "Review queue unavailable": "Review queue unavailable",
+  "Case assigned to you": "Case assigned to you",
+  "Loading review queue...": "Loading review queue...",
+  "No cases awaiting review": "No cases awaiting review",
+  "Case event": "Case event",
+  "Case changed or already assigned. Refresh and try again.": "Case changed or already assigned. Refresh and try again.",
+  "Claim version": "Claim version",
+  "Review queue pages": "Review queue pages",
+  "Previous page": "Previous page",
+  "Total cases": "Total cases",
+  "Next page": "Next page"
 }
