@@ -155,12 +155,30 @@ MCP tools:
 REST endpoints (`/api/transactions` prefix):
 
 - **`GET /{product_number}`** - Last 5 transactions, or filtered by `payment_type`/`transaction_type`/`card_product_number`
-- **`GET /{product_number}/history`** - Paginated history with inclusive `start_date`/`end_date`, `limit`, `offset`
+- **`GET /{product_number}/history`** - Owned bank-account history with inclusive `start_date`/`end_date`, `limit`, `offset`
+- **`GET /products/{product_id}/history`** - Owned credit/debit-card history with the same date filters and pagination; the opaque product ID is not a card number
+
+New disputes accept card transactions only; historical account cases remain readable.
+No debit-card/account relationship is inferred from shared customer ownership.
 
 Support-case REST endpoints at `/api/support-cases` (same JWT auth) additionally expose
 `POST /{case_id}/approval`, `POST /{case_id}/recommendation/dismiss` (records the
 customer's explicit opt-out of the single post-resolution recommendation), and
-`POST /{case_id}/resolve` (simulated-reviewer-only, never exposed as an MCP tool).
+`POST /{case_id}/resolve` (ownership-checked and customer-authenticated, never
+exposed as an MCP tool; it is not an operator-only endpoint).
+
+Approval transitions every classification to `IN_REVIEW`. Low scores retain the
+`fast_track` routing classification and emit `REVIEW_REQUIRED`, but no longer close
+the case automatically or generate a resolution outcome/recommendation. High and
+missing scores retain their escalation classifications. All classifications assign
+a reviewer-catalog entry when available; absent catalog entries leave the case
+unassigned and in review. Assignment is not operator takeover or human adjudication.
+
+Resolution requires a separate explicit operation on an owned `IN_REVIEW` case.
+Operator queues, takeover, adjudication, and automatic review timeouts are not
+implemented. Historical resolved records remain unchanged. Case resolution does
+not post credits, change balances, or block cards. The 365-day intake window is
+unchanged and remains independent of fraud-score triage.
 
 ### Port Configuration
 
