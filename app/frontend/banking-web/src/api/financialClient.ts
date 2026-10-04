@@ -1,5 +1,6 @@
 import { getAuthToken } from "@/api/authToken";
 import { ApiError, readApiError } from "@/api/errors";
+import { maskedCardNumber } from "@/common/products";
 
 export interface FinancialTransaction {
     id: string;
@@ -47,17 +48,21 @@ const mapRecord = (record: TransactionRecord, accountId: string): FinancialTrans
 });
 
 export async function getTransactions(
-    accountId: string, start: string, end: string, signal: AbortSignal,
+    accountId: string, start: string, end: string, signal: AbortSignal, productId?: string,
 ): Promise<FinancialTransaction[]> {
     const token = getAuthToken();
     if (!token) throw new ApiError("AUTH_REQUIRED");
+    const historyPath = productId !== undefined
+        ? `/transactions/products/${encodeURIComponent(productId)}/history`
+        : `/transactions/${encodeURIComponent(accountId)}/history`;
+    const displayNumber = productId !== undefined ? maskedCardNumber(accountId) ?? "" : accountId;
     const records: FinancialTransaction[] = [];
     const ids = new Set<string>();
     let expectedTotal: number | undefined;
     while (true) {
         const query = new URLSearchParams({ start_date: start, end_date: end, limit: "100", offset: String(records.length) });
         const response = await fetch(
-            `${TRANSACTION_API_URL}/transactions/${encodeURIComponent(accountId)}/history?${query}`,
+            `${TRANSACTION_API_URL}${historyPath}?${query}`,
             { headers: { Authorization: `Bearer ${token}` }, signal },
         );
         if (!response.ok) {
@@ -68,7 +73,7 @@ export async function getTransactions(
             throw new ApiError("SERVICE_UNAVAILABLE");
         }
         expectedTotal = page.total;
-        const mapped = page.items.map((record) => mapRecord(record, accountId));
+        const mapped = page.items.map((record) => mapRecord(record, displayNumber));
         for (const record of mapped) {
             if (ids.has(record.id)) {
                 throw new ApiError("SERVICE_UNAVAILABLE");
