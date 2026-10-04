@@ -3,6 +3,60 @@ import { createUiI18n, english, resolveUiLocale, translations } from "./i18n";
 import { supportCaseEventMessageKey } from "./models/SupportCase";
 
 describe("profile UI locale", () => {
+    it.each([
+        ["en", "Card Number", "remains in review"],
+        ["es", "Número de tarjeta", "sigue en revisión"],
+        ["pt", "Número do cartão", "permanece em revisão"],
+    ])("localizes card identification and pending low-risk review in %s", (locale, label, review) => {
+        const instance = createUiI18n(locale);
+        expect(instance.t("Card Number")).toBe(label);
+        const key = supportCaseEventMessageKey({
+            eventType: "REVIEW_REQUIRED", message: "stored audit text", actor: "system", createdAt: "",
+        });
+        expect(instance.t(key, { keySeparator: "." })).toContain(review);
+        expect(instance.t("support-cases.events.REVIEW_REQUIRED", { keySeparator: "." }))
+            .not.toBe("support-cases.events.REVIEW_REQUIRED");
+    });
+    it.each([
+        ["en", "no credit", "In review", "pending review"],
+        ["es", "sin crédito", "En revisión", "pendiente de revisión"],
+        ["pt", "sem crédito", "Em revisão", "pendente de revisão"],
+    ])("preserves accurate dispute outcomes without implementation commentary in %s", (locale, noCredit, inReview, pendingReview) => {
+        const instance = createUiI18n(locale);
+        const catalog = (locale === "en" ? english : translations[locale as "es" | "pt"]);
+        expect(catalog).not.toHaveProperty("Dispute processing limitations");
+        for (const text of [instance.t("Dispute approval prompt"), instance.t("Support cases description"), JSON.stringify(catalog["support-cases"])]) {
+            expect(text).not.toMatch(/simulat|simulad|simulation/i);
+        }
+        expect(JSON.stringify(catalog)).not.toMatch(/not\s+implemented|no\s+(?:(?:está|están)\s+)?implementad[oa]s?|não\s+(?:(?:está|estão)\s+)?implementad[oa]s?/i);
+        expect(instance.t("support-cases.status.IN_REVIEW", { keySeparator: "." })).toBe(inReview);
+        expect(instance.t("support-cases.events.ESCALATED_TO_REVIEW", { keySeparator: "." }).toLowerCase()).toBe(pendingReview);
+        expect(instance.t("support-cases.messages.PROVISIONAL_CREDIT", { keySeparator: "." })).toContain(noCredit);
+        expect(instance.t("support-cases.resolution.fast_tracked_provisional_credit", { keySeparator: "." })).toContain(noCredit);
+        for (const key of ["ESCALATED_TO_REVIEW", "INSUFFICIENT_SIGNAL"]) {
+            expect(instance.t(`support-cases.messages.${key}`, { keySeparator: "." })).toContain(pendingReview);
+        }
+        const historical = { eventType: "RESOLVED", message: "Provisional credit issued; case resolved without manual review", actor: "system", createdAt: "" };
+        expect(instance.t(supportCaseEventMessageKey(historical), { keySeparator: "." })).toContain(noCredit);
+        expect(historical.message).toBe("Provisional credit issued; case resolved without manual review");
+    });
+    it.each(["en", "es", "pt"])("preserves projected and arbitrary timeline notes in %s", locale => {
+        const instance = createUiI18n(locale);
+        for (const event of [
+            { eventType: "RESOLVED", message: "Original reviewer note", displayMessage: "Safe projected note" },
+            { eventType: "RESOLVED", message: "Customer/reviewer note", displayMessage: null },
+            { eventType: "CUSTOM_EVENT", message: "Original note", displayMessage: "Safe projection" },
+            { eventType: "CUSTOM_EVENT", message: "Legacy note" },
+            { eventType: "CUSTOM_EVENT", message: "Original note", displayMessage: "" },
+        ]) {
+            const original = event.message;
+            const fallback = event.displayMessage ?? event.message;
+            expect(instance.t(supportCaseEventMessageKey({ ...event, actor: "system", createdAt: "" }), {
+                keySeparator: ".", defaultValue: fallback,
+            })).toBe(fallback);
+            expect(event.message).toBe(original);
+        }
+    });
     it.each(["en", "es", "pt"])("localizes dispute messages and recommendations in %s", (locale) => {
         const instance = createUiI18n(locale);
         const catalog = (locale === "en" ? english : translations[locale as "es" | "pt"])["support-cases"];
@@ -11,7 +65,8 @@ describe("profile UI locale", () => {
         for (const eventType of Object.keys(english["support-cases"].events)) {
             const key = supportCaseEventMessageKey({ eventType, message: "stored audit text", actor: "system", createdAt: "" });
             const message = instance.t(key, { keySeparator: ".", transactionId: "TX-DEMO" });
-            expect(message).not.toBe(key);
+            if (eventType === "RESOLVED") expect(key).toBe("support-cases.messages.CUSTOM_NOTE");
+            else expect(message).not.toBe(key);
             expect(message).not.toContain("{{");
             if (eventType === "CASE_OPENED") expect(message).toContain("TX-DEMO");
         }
