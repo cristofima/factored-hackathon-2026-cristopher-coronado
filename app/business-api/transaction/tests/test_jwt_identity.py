@@ -1,14 +1,15 @@
 """Synthetic application JWT revocation and customer-role boundary regressions."""
 from collections.abc import Callable
-from typing import Any
-
 from datetime import datetime, timedelta, timezone
+from typing import Any
+from unittest.mock import Mock
 
 import httpx
 import jwt
 import pytest
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
 
+import dispute_routers
 import jwt_identity
 
 pytestmark = pytest.mark.asyncio
@@ -160,3 +161,122 @@ async def test_invalid_json_fails_closed(monkeypatch: pytest.MonkeyPatch) -> Non
     with pytest.raises(HTTPException) as error:
         await invoke(claims())
     assert error.value.status_code == 503
+
+
+DISPUTE_REQUESTS = [
+    ("GET", "", None, "list_cases"),
+    (
+        "POST", "", {"transactionId": "tx-1", "reason": "Unrecognized purchase"},
+        "open_transaction_dispute",
+    ),
+    ("GET", "/case-1", None, "get_case"),
+    ("GET", "/case-1/timeline", None, "get_case_timeline"),
+    ("POST", "/case-1/approval", {"approved": True}, "respond_to_approval"),
+    ("POST", "/case-1/resolve", {"resolutionOutcome": "DECLINED"}, "resolve_case"),
+    ("POST", "/case-1/recommendation/dismiss", None, "dismiss_recommendation"),
+]
+
+
+def dispute_app(monkeypatch: pytest.MonkeyPatch) -> tuple[FastAPI, Mock]:
+    app = FastAPI()
+    app.include_router(dispute_routers.router, prefix="/api/support-cases")
+    service = Mock()
+    monkeypatch.setattr(dispute_routers, "service", service)
+    return app, service
+
+
+@pytest.mark.parametrize("method,path,body,service_method", DISPUTE_REQUESTS)
+@pytest.mark.parametrize("role", ["operator", "admin"])
+@pytest.mark.parametrize("customer_claim", [False, True])
+async def test_staff_cannot_enter_customer_dispute_routes(
+    monkeypatch: pytest.MonkeyPatch,
+    method: str,
+    path: str,
+    body: dict[str, Any] | None,
+    service_method: str,
+    role: str,
+    customer_claim: bool,
+) -> None:
+    app, service = dispute_app(monkeypatch)
+    transport(monkeypatch, lambda request: pytest.fail("Staff JWT reached introspection"))
+    payload = claims()
+    payload["role"] = role
+    if not customer_claim:
+        del payload["customer_id"]
+    token = jwt.encode(payload, SECRET, algorithm="HS256")
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://transaction"
+    ) as client:
+        response = await client.request(
+            method, "/api/support-cases" + path, json=body,
+            headers={"Authorization": "Bearer " + token},
+        )
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": {"code": "AUTH_REQUIRED"}}
+    assert response.headers["www-authenticate"] == "Bearer"
+    getattr(service, service_method).assert_not_called()
+    assert service.mock_calls == []
+
+
+@pytest.mark.parametrize("method,path,body,service_method", DISPUTE_REQUESTS)
+@pytest.mark.parametrize("change", ["operator", "admin", "version", "revoked", "outage"])
+async def test_dispute_routes_recheck_identity_before_every_service_call(
+    monkeypatch: pytest.MonkeyPatch,
+    method: str,
+    path: str,
+    body: dict[str, Any] | None,
+    service_method: str,
+    change: str,
+) -> None:
+    app, service = dispute_app(monkeypatch)
+    getattr(service, service_method).return_value = {
+        "caseId": "case-1", "transactionId": "tx-1", "reason": "Unrecognized purchase",
+        "status": "WAITING_USER_APPROVAL", "openedAt": "2026-10-01T00:00:00Z",
+        "updatedAt": "2026-10-01T00:00:00Z",
+    }
+    payload = claims()
+    profile = {key: value for key, value in payload.items() if key not in ("iss", "aud", "exp")}
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return httpx.Response(200, json=profile)
+        if change == "revoked":
+            return httpx.Response(401)
+        if change == "outage":
+            raise httpx.ReadTimeout("Synthetic Identity outage", request=request)
+        current = dict(profile)
+        if change == "version":
+            current["identity_version"] = 2
+        else:
+            current["role"] = change
+        return httpx.Response(200, json=current)
+
+    transport(monkeypatch, handler)
+    token = jwt.encode(payload, SECRET, algorithm="HS256")
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://transaction"
+    ) as client:
+        first = await client.request(
+            method, "/api/support-cases" + path, json=body,
+            headers={"Authorization": "Bearer " + token},
+        )
+        assert first.status_code == (201 if method == "POST" and not path else 200)
+        getattr(service, service_method).assert_called_once()
+        service.reset_mock()
+        second = await client.request(
+            method, "/api/support-cases" + path, json=body,
+            headers={"Authorization": "Bearer " + token},
+        )
+
+    assert second.status_code == (503 if change == "outage" else 401)
+    code = "SERVICE_UNAVAILABLE" if change == "outage" else "AUTH_REQUIRED"
+    assert second.json() == {"detail": {"code": code}}
+    if change != "outage":
+        assert second.headers["www-authenticate"] == "Bearer"
+    assert calls == 2
+    assert service.mock_calls == []
