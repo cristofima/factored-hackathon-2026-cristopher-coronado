@@ -158,7 +158,7 @@ export default function SupportCaseDetail() {
               {supportCase.productNumber && (
                 <p>
                   <span className="text-muted-foreground">
-                    {t("Account Number")}:{" "}
+                    {t("Card Number")}:{" "}
                   </span>
                   {supportCase.productNumber}
                 </p>
@@ -258,12 +258,12 @@ export default function SupportCaseDetail() {
                         defaultValue: event.eventType,
                       })}
                     </p>
-                    {event.message && (
+                    {(event.displayMessage ?? event.message) && (
                       <p className="text-muted-foreground">
                         {t(supportCaseEventMessageKey(event), {
                           keySeparator: ".",
                           transactionId: supportCase.transactionId,
-                          defaultValue: t("Not available"),
+                          defaultValue: event.displayMessage ?? event.message ?? t("Not available"),
                         })}
                       </p>
                     )}
