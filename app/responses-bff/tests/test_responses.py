@@ -191,6 +191,92 @@ def _authenticated_user(user_id: str) -> AuthenticatedUser:
     )
 
 
+@pytest.mark.parametrize(
+    ("identity_change", "expected_status", "expected_code"),
+    [
+        ("revoked", 401, "AUTH_REQUIRED"),
+        ("version", 401, "AUTH_REQUIRED"),
+        ("role", 401, "AUTH_REQUIRED"),
+        ("unavailable", 503, "SERVICE_UNAVAILABLE"),
+    ],
+)
+async def test_continuation_revalidates_identity_before_upstream(
+    identity_change: str, expected_status: int, expected_code: str,
+) -> None:
+    settings = _settings("local")
+    introspection_calls = 0
+    upstream_calls = 0
+
+    def introspect(request: httpx.Request) -> httpx.Response:
+        nonlocal introspection_calls
+        introspection_calls += 1
+        claims = jwt.decode(
+            json.loads(request.content)["token"], TEST_SECRET, algorithms=["HS256"],
+            audience=settings.jwt_audience, issuer=settings.jwt_issuer,
+        )
+        profile = {key: claims[key] for key in
+                   ("sub", "customer_id", "email", "locale", "role", "identity_version")}
+        if introspection_calls > 1:
+            if identity_change == "revoked":
+                return httpx.Response(401)
+            if identity_change == "unavailable":
+                raise httpx.ConnectError("Synthetic identity outage", request=request)
+            if identity_change == "version":
+                profile["identity_version"] = 2
+            if identity_change == "role":
+                profile["role"] = "operator"
+                profile.pop("customer_id")
+        return httpx.Response(200, json=profile)
+
+    def upstream(request: httpx.Request) -> httpx.Response:
+        nonlocal upstream_calls
+        upstream_calls += 1
+        return httpx.Response(200, json={"status": "completed"})
+
+    app = _create_app(
+        settings, auth_transport=httpx.MockTransport(introspect),
+        transport=httpx.MockTransport(upstream),
+    )
+    async with LifespanManager(app):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://bff") as client:
+            headers = {"Authorization": "Bearer " + _token("user-a", settings)}
+            first = await client.post("/responses", headers=headers, json={"input": "My cases"})
+            assert first.status_code == 200
+            second = await client.post("/responses", headers=headers, json={
+                "input": "Their current status", "conversation": first.headers["x-conversation-id"],
+            })
+    assert second.status_code == expected_status
+    assert second.json() == {"detail": {"code": expected_code}}
+    assert introspection_calls == 2
+    assert upstream_calls == 1
+
+
+@pytest.mark.parametrize("role", ["operator", "admin"])
+async def test_staff_responses_never_reaches_agent(role: str) -> None:
+    settings = _settings("local")
+    claims = jwt.decode(_token("staff", settings), TEST_SECRET, algorithms=["HS256"],
+                        audience=settings.jwt_audience, issuer=settings.jwt_issuer)
+    claims["role"] = role
+    claims.pop("customer_id")
+    profile = {key: claims[key] for key in
+               ("sub", "email", "locale", "role", "identity_version")}
+    upstream_calls = 0
+
+    def upstream(request: httpx.Request) -> httpx.Response:
+        nonlocal upstream_calls
+        upstream_calls += 1
+        return httpx.Response(200, json={"status": "completed"})
+
+    app = _create_app(
+        settings, auth_transport=httpx.MockTransport(lambda _: httpx.Response(200, json=profile)),
+        transport=httpx.MockTransport(upstream),
+    )
+    response = await _post(app, jwt.encode(claims, TEST_SECRET, algorithm="HS256"), {"input": "Cases"})
+    assert response.status_code == 403
+    assert response.json() == {"detail": {"code": "ACCESS_DENIED"}}
+    assert upstream_calls == 0
+
+
 async def test_conversation_cannot_cross_users() -> None:
     settings = _settings("local")
 
