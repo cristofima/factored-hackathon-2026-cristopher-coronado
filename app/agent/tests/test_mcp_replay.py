@@ -159,9 +159,11 @@ async def test_runner_preserves_signed_identity_and_records_failures() -> None:
     assert result["error"]["type"] == "ExceptionGroup"
     cause = result["error"]
     while "causes" in cause:
+        assert cause["message"] == "Replay execution failed"
         assert len(cause["causes"]) == 1
         cause = cause["causes"][0]
-    assert cause == {"type": "RuntimeError", "message": "controlled model failure"}
+    assert cause == {"type": "RuntimeError", "message": "Replay execution failed"}
+    assert "controlled model failure" not in json.dumps(result)
     assert result["behavior_review"] == "pending"
     assert get_request_context() is original_context
 
