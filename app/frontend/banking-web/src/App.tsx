@@ -28,7 +28,8 @@ import { UiLocaleProvider } from "@/context/UiLocaleProvider";
 import { useTranslation } from "react-i18next";
 import type { UserRole } from "@/api/authClient";
 import { roleHome } from "@/api/roleRoutes";
-import StaffShell, { OperatorUnavailable } from "@/components/StaffShell";
+import StaffShell from "@/components/StaffShell";
+import OperatorCases from "@/pages/OperatorCases";
 import OperatorManagement, { OperatorCreate } from "@/pages/OperatorManagement";
 import CustomerUserManagement from "@/pages/CustomerUserManagement";
 
@@ -99,8 +100,10 @@ export const AppRoutes = () => (
       <Route path="*" element={<Navigate to="/admin/operators" replace />} />
     </Route>
     <Route path="/operator" element={<RequireRole role="operator"><StaffShell /></RequireRole>}>
-      <Route index element={<OperatorUnavailable />} />
-      <Route path="*" element={<Navigate to="/operator" replace />} />
+      <Route index element={<Navigate to="support-cases" replace />} />
+      <Route path="support-cases" element={<OperatorCases />} />
+      <Route path="support-cases/:caseId" element={<OperatorCases />} />
+      <Route path="*" element={<Navigate to="/operator/support-cases" replace />} />
     </Route>
     <Route
       element={

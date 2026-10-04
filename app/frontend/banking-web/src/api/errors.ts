@@ -1,6 +1,6 @@
 const errorCodes = [
     "AUTH_REQUIRED", "INVALID_CREDENTIALS", "ACCESS_DENIED", "ACCOUNT_UNAVAILABLE",
-    "SERVICE_UNAVAILABLE", "INVALID_DATE_RANGE", "INVALID_REQUEST", "DISPUTE_ALREADY_ACTIVE", "DISPUTE_CARD_ONLY",
+    "SERVICE_UNAVAILABLE", "INVALID_DATE_RANGE", "INVALID_REQUEST", "DISPUTE_ALREADY_ACTIVE", "DISPUTE_CARD_ONLY", "OPERATOR_CLAIM_CONFLICT", "CASE_NOT_FOUND",
 ] as const;
 
 export type ApiErrorCode = typeof errorCodes[number];
@@ -30,6 +30,7 @@ export function errorTranslationKey(error: unknown, fallback: string): string {
         case "ACCESS_DENIED": return "Access denied";
         case "DISPUTE_ALREADY_ACTIVE": return "An active dispute already exists. Retry to open the existing case.";
         case "DISPUTE_CARD_ONLY": return "Only debit or credit card transactions can be disputed.";
+        case "OPERATOR_CLAIM_CONFLICT": return "Case changed or already assigned. Refresh and try again.";
         case "INVALID_DATE_RANGE": return "Choose a valid inclusive start and end date.";
         default: return fallback;
     }
