@@ -3,9 +3,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 import logging
 from typing import Annotated
 
-from dispute_service import support_case_service_singleton as service
+from dispute_service import (
+    ActiveDisputeError,
+    CardOnlyDisputeError,
+    support_case_service_singleton as service,
+)
 from jwt_identity import get_jwt_customer_id
-from models import DisputeApprovalRequest, OpenDisputeRequest, ResolveCaseRequest
+from models import DisputeApprovalRequest, DisputeCase, OpenDisputeRequest, ResolveCaseRequest
 
 logger = logging.getLogger(__name__)
 
@@ -22,12 +26,22 @@ def list_support_cases(customer_id: Annotated[str, Depends(get_jwt_customer_id)]
 def open_support_case(
     request: OpenDisputeRequest,
     customer_id: Annotated[str, Depends(get_jwt_customer_id)],
-):
+) -> DisputeCase:
     """Open a transaction-dispute support case from a direct report action."""
     try:
         return service.open_transaction_dispute(request.transactionId, customer_id, request.reason)
     except PermissionError as error:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(error)) from error
+    except ActiveDisputeError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "DISPUTE_ALREADY_ACTIVE"},
+        ) from error
+    except CardOnlyDisputeError as error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "DISPUTE_CARD_ONLY"},
+        ) from error
     except ValueError as ve:
         logger.exception("Validation error while opening a support case")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve)) from ve
