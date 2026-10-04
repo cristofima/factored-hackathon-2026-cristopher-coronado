@@ -83,12 +83,14 @@ export function useThreadStream({ url, request, onEvent, onConversation, onError
     }
 
     // Create a new AbortController for this stream
-    abortControllerRef.current = new AbortController();
-    const { signal } = abortControllerRef.current;
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    const { signal } = controller;
+    const token = getAuthToken();
+    const isCurrent = () => !signal.aborted && getAuthToken() === token;
 
     const startStream = async () => {
       try {
-        const token = getAuthToken();
         const response = await fetch(url, {
           method: "POST",
           headers: {
@@ -100,17 +102,20 @@ export function useThreadStream({ url, request, onEvent, onConversation, onError
           signal,
         });
 
+        if (!isCurrent()) return;
+
         if (!response.ok) {
           // Convert HTTP error to error event instead of throwing
           const retryableStatusCodes = retryConfigRef.current?.retryableStatusCodes ?? DEFAULT_RETRYABLE_STATUS_CODES;
           const error = await readApiError(response);
+          if (!isCurrent()) return;
           const errorEvent = createHttpErrorEvent(response.status, error.code, retryableStatusCodes);
 
           // Emit the error event so it's handled like SSE errors
           onEventRef.current(errorEvent);
 
           // Also call onComplete to clean up streaming state
-          onCompleteRef.current?.();
+          if (isCurrent()) onCompleteRef.current?.();
           return;
         }
 
@@ -130,6 +135,7 @@ export function useThreadStream({ url, request, onEvent, onConversation, onError
 
         while (true) {
           const { done, value } = await reader.read();
+          if (!isCurrent()) return;
 
           if (done) {
             onCompleteRef.current?.();
@@ -144,6 +150,7 @@ export function useThreadStream({ url, request, onEvent, onConversation, onError
           buffer = lines.pop() || ""; // Keep incomplete line in buffer
 
           for (const line of lines) {
+            if (!isCurrent()) return;
             const trimmed = line.trim();
 
             // SSE events start with "data: "
@@ -160,6 +167,7 @@ export function useThreadStream({ url, request, onEvent, onConversation, onError
           }
         }
       } catch (error) {
+        if (!isCurrent()) return;
         if (error instanceof Error) {
           if (error.name === "AbortError") {
             console.log("Stream aborted");
@@ -175,7 +183,7 @@ export function useThreadStream({ url, request, onEvent, onConversation, onError
 
     // Cleanup function
     return () => {
-      abortControllerRef.current?.abort();
+      controller.abort();
     };
   }, [url, request, enabled]); // Only depend on url, request, and enabled - callbacks are stable via refs
 

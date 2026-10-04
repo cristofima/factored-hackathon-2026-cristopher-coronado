@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
 import { useAgentResponse } from "@/context/AgentResponseContext";
+import { useAuth } from "@/context/AuthContext";
 
 import {
   ChatProvider,
@@ -26,6 +27,7 @@ import type { StarterPrompt } from "@/components/chat/types";
 
 export default function AIAgent() {
   const { t } = useTranslation();
+  const { logout } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [showInvitation, setShowInvitation] = useState(true);
@@ -323,6 +325,9 @@ export default function AIAgent() {
           maxVisibleAttachments={3}
           composerConfig={composerConfig}
           shellContainerConfig={shellContainerConfig}
+          onError={({ code }) => {
+            if (code === "AUTH_REQUIRED" || code === "ACCESS_DENIED") logout();
+          }}
           onResponseEnd={handleResponseEnd}
           onThreadStarted={handleThreadStarted}
         >
