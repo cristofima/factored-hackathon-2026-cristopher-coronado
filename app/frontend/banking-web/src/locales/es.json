@@ -1,4 +1,12 @@
 {
+  "Loading products...": "Cargando productos...",
+  "Products are unavailable": "Los productos no están disponibles",
+  "No products are registered for this customer.": "No hay productos registrados para este cliente.",
+  "Select a product": "Seleccionar un producto",
+  "Selected product": "Producto seleccionado",
+  "Selected product is unavailable.": "El producto seleccionado no está disponible.",
+  "History for selected product": "Historial del producto seleccionado",
+  "Dispute actions": "Acciones de disputa",
   "Dashboard": "Resumen",
   "Credit Cards": "Tarjetas",
   "Investment Portfolio": "Inversiones",
@@ -37,6 +45,7 @@
   "Retry": "Reintentar",
   "Not available": "No disponible",
   "Number unavailable": "Número no disponible",
+  "Pending": "Pendiente",
   "Status unavailable": "Estado no disponible",
   "Account Overview": "Resumen de cuenta",
   "Account help": "Consulta tus datos de cuenta, acuerdos y políticas. Para cualquier pregunta, contacta con",
@@ -51,6 +60,7 @@
   "Currency": "Moneda",
   "Account Codes": "Datos de cuenta",
   "Account Number": "Número de cuenta",
+  "Card Number": "Número de tarjeta",
   "Agreements": "Acuerdos",
   "Terms of Service": "Condiciones de servicio",
   "Electronic Communications Agreement": "Acuerdo de comunicaciones electrónicas",
@@ -88,7 +98,7 @@
   "Choose a valid inclusive start and end date.": "Selecciona fechas inicial y final válidas e inclusivas.",
   "Transactions are unavailable": "Los movimientos no están disponibles",
   "Loading the complete transaction window...": "Cargando todos los movimientos del período...",
-  "Window context": "{{count}} movimientos entre {{start}} y {{end}} (inclusive). Todas las páginas se cargaron; los cambios simultáneos pueden requerir actualizar.",
+  "Window context": "{{count}} movimientos entre {{start}} y {{end}} (ambas fechas incluidas). Todas las páginas se cargaron; los cambios simultáneos pueden requerir actualizar.",
   "Movement policy": "Totales derivados de movimientos, no categorías de ingresos o gastos: solo aprobados; depósitos como entradas; pagos, compras, transferencias y retiros como salidas. Se excluyen ajustes, tipos desconocidos, otros estados e importes negativos. No se suman monedas distintas. Las transferencias siguen esta política, no el signo del importe.",
   "Excluded records": "{{count}} registros excluidos de los totales.",
   "Classified records": "{{count}} registros clasificados",
@@ -138,7 +148,7 @@
   "Access denied": "No tienes permiso para realizar esta solicitud.",
   "Transaction Disputes": "Reclamos de transacciones",
   "Refresh": "Actualizar",
-  "Support cases description": "Da seguimiento a los reclamos que abriste, responde a las solicitudes de aprobación y revisa la línea de tiempo del caso.",
+  "Support cases description": "Sigue tus disputas persistidas, solicitudes de consentimiento y la cronología del caso.",
   "Loading support cases...": "Cargando reclamos...",
   "Support cases are unavailable": "Los reclamos no están disponibles",
   "No support cases yet.": "Aún no hay reclamos.",
@@ -148,7 +158,7 @@
   "Reason": "Motivo",
   "Resolution": "Resolución",
   "Approval Needed": "Se requiere tu aprobación",
-  "Dispute approval prompt": "Confirma que deseas continuar con este reclamo. Al aprobar, la tarjeta relacionada se bloqueará mientras se revisa el caso.",
+  "Dispute approval prompt": "Confirma que deseas continuar el procesamiento de este caso. Tu consentimiento queda registrado.",
   "Approve dispute": "Aprobar reclamo",
   "Decline": "Rechazar",
   "Recommendation": "Recomendación",
@@ -161,6 +171,8 @@
   "Describe why you don't recognize this charge": "Describe por qué no reconoces este cargo",
   "Submit dispute": "Enviar reclamo",
   "Could not open the dispute": "No se pudo abrir el reclamo",
+  "An active dispute already exists. Retry to open the existing case.": "Ya existe un reclamo activo. Reintenta para abrir el caso existente.",
+  "Only debit or credit card transactions can be disputed.": "Solo se pueden reclamar transacciones de tarjetas de débito o crédito.",
   "transactions": {
     "types": {
       "Payment": "Pago",
@@ -185,16 +197,19 @@
       "Pending": "Pendiente"
     }
   },
+  "Checking active disputes...": "Comprobando disputas activas...",
+  "Dispute eligibility unavailable. Reporting is disabled.": "Elegibilidad de disputa no disponible. No se pueden reportar disputas.",
+  "View existing dispute": "Ver disputa existente",
   "support-cases": {
     "status": {
       "OPEN": "Abierto",
       "WAITING_USER_APPROVAL": "Esperando tu aprobación",
       "IN_REVIEW": "En revisión",
-      "RESOLVED": "Resuelto"
+      "RESOLVED": "Flujo cerrado"
     },
     "resolution": {
-      "fast_tracked_provisional_credit": "Resuelto automáticamente: crédito provisional emitido",
-      "fraud_confirmed_refund_issued": "Fraude confirmado: reembolso emitido",
+      "fast_tracked_provisional_credit": "Cierre automático del caso; sin crédito registrado",
+      "fraud_confirmed_refund_issued": "Etiqueta de cierre registrada; fraude y reembolso no verificados",
       "withdrawn_by_customer": "Retirado por ti"
     },
     "recommendations": {
@@ -202,15 +217,16 @@
     },
     "messages": {
       "CASE_OPENED": "Reclamo abierto para la transacción {{transactionId}}.",
-      "APPROVAL_REQUESTED": "Se requiere tu confirmación para continuar con el reclamo y el bloqueo de la tarjeta.",
-      "APPROVAL_GRANTED": "Aprobaste el reclamo y el bloqueo de la tarjeta.",
+      "APPROVAL_REQUESTED": "Se requiere tu consentimiento para continuar el procesamiento del caso.",
+      "APPROVAL_GRANTED": "Tu consentimiento para continuar el procesamiento del caso quedó registrado.",
       "APPROVAL_DECLINED": "Rechazaste continuar con el reclamo.",
-      "FAST_TRACKED": "Puntuación de riesgo de fraude baja; enviado a resolución automática sin revisión manual.",
-      "ESCALATED_TO_REVIEW": "Puntuación de riesgo de fraude elevada; enviado a revisión manual.",
-      "INSUFFICIENT_SIGNAL": "No hay una puntuación de fraude para esta transacción; enviado a revisión manual.",
-      "PROVISIONAL_CREDIT": "Crédito provisional emitido; caso resuelto sin revisión manual.",
+      "FAST_TRACKED": "Puntuación de riesgo baja del conjunto de datos de demostración; derivado al cierre automático del caso. No es un veredicto de fraude.",
+      "REVIEW_REQUIRED": "Puntuación de riesgo almacenada baja; el caso sigue en revisión hasta una resolución explícita. La puntuación no autoriza el cierre automático ni determina la validez del reclamo.",
+      "ESCALATED_TO_REVIEW": "Puntuación de riesgo almacenada elevada; el caso está pendiente de revisión.",
+      "INSUFFICIENT_SIGNAL": "No hay puntuación de fraude; el caso está pendiente de revisión.",
+      "PROVISIONAL_CREDIT": "Cierre automático del caso registrado; sin crédito ni movimiento financiero registrado.",
       "WITHDRAWN": "Caso cerrado: retirado por ti.",
-      "RESOLVED": "Se registró la resolución del caso.",
+      "RESOLVED": "Cierre del flujo registrado; sin efecto financiero o de tarjeta verificado.",
       "RECOMMENDATION_DISMISSED": "Descartaste la recomendación posterior a la resolución."
     },
     "events": {
@@ -218,9 +234,10 @@
       "APPROVAL_REQUESTED": "Aprobación solicitada",
       "APPROVAL_GRANTED": "Aprobaste el reclamo",
       "APPROVAL_DECLINED": "Rechazaste el reclamo",
-      "FAST_TRACKED": "Enviado a resolución automática",
-      "ESCALATED_TO_REVIEW": "Escalado a revisión manual",
-      "RESOLVED": "Caso resuelto",
+      "FAST_TRACKED": "Derivado al cierre automático del caso",
+      "REVIEW_REQUIRED": "Resolución explícita pendiente",
+      "ESCALATED_TO_REVIEW": "Pendiente de revisión",
+      "RESOLVED": "Flujo cerrado",
       "RECOMMENDATION_DISMISSED": "Recomendación descartada"
     }
   },
@@ -247,6 +264,10 @@
   "Portuguese": "Portugués",
   "Active": "Activo",
   "Inactive": "Inactivo",
+  "Blocked": "Bloqueado",
+  "Suspended": "Suspendido",
+  "Closed": "Cerrado",
+  "Expired": "Vencido",
   "Activate": "Activar",
   "Deactivate": "Desactivar",
   "Reset password": "Restablecer contraseña",
@@ -268,5 +289,18 @@
   "Customer operation unavailable": "Operación de usuario cliente no disponible",
   "No customer users": "No hay usuarios clientes",
   "Confirm customer operation": "Confirmar operación de usuario cliente",
-  "Changing sign-in access revokes existing sessions. The customer must sign in again after activation.": "Cambiar el acceso revoca las sesiones existentes. El cliente debe iniciar sesión de nuevo después de la activación."
+  "Changing sign-in access revokes existing sessions. The customer must sign in again after activation.": "Cambiar el acceso revoca las sesiones existentes. El cliente debe iniciar sesión de nuevo después de la activación.",
+  "My products": "Mis productos",
+  "Product category": "Categoría de producto",
+  "All": "Todos",
+  "Accounts": "Cuentas",
+  "Cards": "Tarjetas",
+  "No products in this category.": "No hay productos en esta categoría.",
+  "View product movements": "Ver movimientos del producto",
+  "Product movements": "Movimientos del producto",
+  "Movement pagination": "Paginación de movimientos",
+  "Page {{page}} of {{count}}": "Página {{page}} de {{count}}",
+  "Filter movements": "Filtrar movimientos",
+  "About these totals": "Sobre estos totales",
+  "Movement window": "{{count}} movimientos · {{start}} – {{end}}"
 }

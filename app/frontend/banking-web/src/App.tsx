@@ -15,9 +15,7 @@ import Sidebar from "./components/Sidebar";
 import Navigation from "./components/Navigation";
 import AIAgent from "./components/AIAgent";
 import Dashboard from "./pages/Dashboard";
-import CreditCardManagement from "./pages/CreditCardManagement";
-import InvestmentPortfolio from "./pages/InvestmentPortfolio";
-import TransactionAnalytics from "./pages/TransactionAnalytics";
+import ProductDetail from "./pages/ProductDetail";
 import Account from "./pages/Account";
 import Support from "./pages/Support";
 import SupportCases from "./pages/SupportCases";
@@ -112,9 +110,10 @@ export const AppRoutes = () => (
       }
     >
       <Route index element={<Dashboard />} />
-      <Route path="credit-cards" element={<CreditCardManagement />} />
-      <Route path="portfolio" element={<InvestmentPortfolio />} />
-      <Route path="analytics" element={<TransactionAnalytics />} />
+      <Route path="credit-cards" element={<Navigate to="/" replace />} />
+      <Route path="portfolio" element={<Navigate to="/" replace />} />
+      <Route path="product/:productId" element={<ProductDetail />} />
+      <Route path="analytics" element={<Navigate to="/" replace />} />
       <Route path="account" element={<Account />} />
       <Route path="support" element={<Support />} />
       <Route path="support-cases" element={<SupportCases />} />

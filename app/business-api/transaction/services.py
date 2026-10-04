@@ -108,18 +108,51 @@ class TransactionService:
         )
         with self._session_factory() as session:
             product = _get_owned_product(session, account_id, customer_id)
-            statement = _transaction_statement(product.product_id, customer_id)
-            if start_date is not None:
-                statement = statement.where(
-                    TransactionRecord.transaction_date >= datetime.combine(start_date, time.min)
-                )
-            if end_date is not None:
-                statement = statement.where(
-                    TransactionRecord.transaction_date <= datetime.combine(end_date, time.max)
-                )
-            total = session.exec(select(func.count()).select_from(statement.subquery())).one()
-            records = session.exec(statement.limit(limit).offset(offset)).all()
-            return [_to_transaction(record, product) for record in records], total
+            return _history_page(session, product, customer_id, start_date, end_date, limit, offset)
+
+    def get_card_transaction_history(
+        self,
+        product_id: str,
+        customer_id: str,
+        start_date: date | None,
+        end_date: date | None,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[Transaction], int]:
+        _require_identifier(product_id, "ProductId")
+        with self._session_factory() as session:
+            product = session.exec(
+                select(Product)
+                .where(Product.product_id == product_id)
+                .where(Product.customer_id == customer_id)
+                .where(Product.product_type.in_(CARD_PRODUCT_TYPES))
+            ).first()
+            if product is None:
+                raise PermissionError("Product does not belong to the authenticated customer")
+            return _history_page(session, product, customer_id, start_date, end_date, limit, offset)
+
+
+def _history_page(
+    session: Session,
+    product: Product,
+    customer_id: str,
+    start_date: date | None,
+    end_date: date | None,
+    limit: int,
+    offset: int,
+) -> tuple[list[Transaction], int]:
+    statement = _transaction_statement(product.product_id, customer_id)
+    if start_date is not None:
+        statement = statement.where(
+            TransactionRecord.transaction_date >= datetime.combine(start_date, time.min)
+        )
+    if end_date is not None:
+        statement = statement.where(
+            TransactionRecord.transaction_date <= datetime.combine(end_date, time.max)
+        )
+    total = session.exec(select(func.count()).select_from(statement.subquery())).one()
+    records = session.exec(statement.limit(limit).offset(offset)).all()
+    return [_to_transaction(record, product) for record in records], total
 
 
 transaction_service_singleton = TransactionService()

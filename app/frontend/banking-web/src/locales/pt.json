@@ -1,4 +1,12 @@
 {
+  "Loading products...": "Carregando produtos...",
+  "Products are unavailable": "Os produtos estão indisponíveis",
+  "No products are registered for this customer.": "Nenhum produto registrado para este cliente.",
+  "Select a product": "Selecionar um produto",
+  "Selected product": "Produto selecionado",
+  "Selected product is unavailable.": "O produto selecionado está indisponível.",
+  "History for selected product": "Histórico do produto selecionado",
+  "Dispute actions": "Ações de contestação",
   "Dashboard": "Resumo",
   "Credit Cards": "Cartões",
   "Investment Portfolio": "Investimentos",
@@ -37,6 +45,7 @@
   "Retry": "Tentar novamente",
   "Not available": "Indisponível",
   "Number unavailable": "Número indisponível",
+  "Pending": "Pendente",
   "Status unavailable": "Estado indisponível",
   "Account Overview": "Resumo da conta",
   "Account help": "Consulte os dados da conta, acordos e políticas. Para qualquer dúvida, entre em contato com",
@@ -51,6 +60,7 @@
   "Currency": "Moeda",
   "Account Codes": "Dados da conta",
   "Account Number": "Número da conta",
+  "Card Number": "Número do cartão",
   "Agreements": "Acordos",
   "Terms of Service": "Termos de serviço",
   "Electronic Communications Agreement": "Acordo de comunicações eletrônicas",
@@ -138,7 +148,7 @@
   "Access denied": "Você não tem permissão para realizar esta solicitação.",
   "Transaction Disputes": "Contestações de transações",
   "Refresh": "Atualizar",
-  "Support cases description": "Acompanhe as contestações que você abriu, responda às solicitações de aprovação e siga a linha do tempo do caso.",
+  "Support cases description": "Acompanhe suas contestações persistidas, solicitações de consentimento e a linha do tempo do caso.",
   "Loading support cases...": "Carregando contestações...",
   "Support cases are unavailable": "As contestações estão indisponíveis",
   "No support cases yet.": "Ainda não há contestações.",
@@ -148,7 +158,7 @@
   "Reason": "Motivo",
   "Resolution": "Resolução",
   "Approval Needed": "Sua aprovação é necessária",
-  "Dispute approval prompt": "Confirme que deseja prosseguir com esta contestação. Ao aprovar, o cartão relacionado será bloqueado enquanto o caso é revisado.",
+  "Dispute approval prompt": "Confirme que deseja continuar o processamento deste caso. Seu consentimento é registrado.",
   "Approve dispute": "Aprovar contestação",
   "Decline": "Recusar",
   "Recommendation": "Recomendação",
@@ -161,6 +171,8 @@
   "Describe why you don't recognize this charge": "Descreva por que você não reconhece esta cobrança",
   "Submit dispute": "Enviar contestação",
   "Could not open the dispute": "Não foi possível abrir a contestação",
+  "An active dispute already exists. Retry to open the existing case.": "Já existe uma contestação ativa. Tente novamente para abrir o caso existente.",
+  "Only debit or credit card transactions can be disputed.": "Somente transações de cartões de débito ou crédito podem ser contestadas.",
   "transactions": {
     "types": {
       "Payment": "Pagamento",
@@ -185,16 +197,19 @@
       "Pending": "Pendente"
     }
   },
+  "Checking active disputes...": "Verificando contestações ativas...",
+  "Dispute eligibility unavailable. Reporting is disabled.": "Elegibilidade da contestação indisponível. O envio está desabilitado.",
+  "View existing dispute": "Ver contestação existente",
   "support-cases": {
     "status": {
       "OPEN": "Aberto",
       "WAITING_USER_APPROVAL": "Aguardando sua aprovação",
       "IN_REVIEW": "Em revisão",
-      "RESOLVED": "Resolvido"
+      "RESOLVED": "Fluxo encerrado"
     },
     "resolution": {
-      "fast_tracked_provisional_credit": "Resolvido automaticamente: crédito provisório emitido",
-      "fraud_confirmed_refund_issued": "Fraude confirmada: reembolso emitido",
+      "fast_tracked_provisional_credit": "Encerramento automático do caso; sem crédito registrado",
+      "fraud_confirmed_refund_issued": "Rótulo de encerramento registrado; fraude e reembolso não verificados",
       "withdrawn_by_customer": "Retirado por você"
     },
     "recommendations": {
@@ -202,15 +217,16 @@
     },
     "messages": {
       "CASE_OPENED": "Contestação aberta para a transação {{transactionId}}.",
-      "APPROVAL_REQUESTED": "Sua confirmação é necessária para prosseguir com a contestação e o bloqueio do cartão.",
-      "APPROVAL_GRANTED": "Você aprovou a contestação e o bloqueio do cartão.",
+      "APPROVAL_REQUESTED": "Seu consentimento é necessário para continuar o processamento do caso.",
+      "APPROVAL_GRANTED": "Seu consentimento para continuar o processamento do caso foi registrado.",
       "APPROVAL_DECLINED": "Você recusou prosseguir com a contestação.",
-      "FAST_TRACKED": "Pontuação de risco de fraude baixa; enviado para resolução automática sem revisão manual.",
-      "ESCALATED_TO_REVIEW": "Pontuação de risco de fraude elevada; enviado para revisão manual.",
-      "INSUFFICIENT_SIGNAL": "Não há uma pontuação de fraude para esta transação; enviado para revisão manual.",
-      "PROVISIONAL_CREDIT": "Crédito provisório emitido; caso resolvido sem revisão manual.",
+      "FAST_TRACKED": "Pontuação de risco baixa do conjunto de dados de demonstração; encaminhado para encerramento automático do caso. Não é um veredicto de fraude.",
+      "REVIEW_REQUIRED": "Pontuação de risco armazenada baixa; o caso permanece em revisão até uma resolução explícita. A pontuação não autoriza o encerramento automático nem determina a validade da contestação.",
+      "ESCALATED_TO_REVIEW": "Pontuação de risco armazenada elevada; o caso está pendente de revisão.",
+      "INSUFFICIENT_SIGNAL": "Nenhuma pontuação de fraude disponível; o caso está pendente de revisão.",
+      "PROVISIONAL_CREDIT": "Encerramento automático do caso registrado; sem crédito ou movimento financeiro registrado.",
       "WITHDRAWN": "Caso encerrado: retirado por você.",
-      "RESOLVED": "A resolução do caso foi registrada.",
+      "RESOLVED": "Encerramento do fluxo registrado; nenhum efeito financeiro ou de cartão verificado.",
       "RECOMMENDATION_DISMISSED": "Você descartou a recomendação após a resolução."
     },
     "events": {
@@ -218,9 +234,10 @@
       "APPROVAL_REQUESTED": "Aprovação solicitada",
       "APPROVAL_GRANTED": "Você aprovou a contestação",
       "APPROVAL_DECLINED": "Você recusou a contestação",
-      "FAST_TRACKED": "Enviado para resolução automática",
-      "ESCALATED_TO_REVIEW": "Escalado para revisão manual",
-      "RESOLVED": "Caso resolvido",
+      "FAST_TRACKED": "Encaminhado para encerramento automático do caso",
+      "REVIEW_REQUIRED": "Resolução explícita pendente",
+      "ESCALATED_TO_REVIEW": "Pendente de revisão",
+      "RESOLVED": "Fluxo encerrado",
       "RECOMMENDATION_DISMISSED": "Recomendação descartada"
     }
   },
@@ -247,6 +264,10 @@
   "Portuguese": "Português",
   "Active": "Ativo",
   "Inactive": "Inativo",
+  "Blocked": "Bloqueado",
+  "Suspended": "Suspenso",
+  "Closed": "Encerrado",
+  "Expired": "Expirado",
   "Activate": "Ativar",
   "Deactivate": "Desativar",
   "Reset password": "Redefinir senha",
@@ -268,5 +289,18 @@
   "Customer operation unavailable": "Operação de usuário cliente indisponível",
   "No customer users": "Nenhum usuário cliente",
   "Confirm customer operation": "Confirmar operação de usuário cliente",
-  "Changing sign-in access revokes existing sessions. The customer must sign in again after activation.": "Alterar o acesso revoga as sessões existentes. O cliente deve entrar novamente após a ativação."
+  "Changing sign-in access revokes existing sessions. The customer must sign in again after activation.": "Alterar o acesso revoga as sessões existentes. O cliente deve entrar novamente após a ativação.",
+  "My products": "Meus produtos",
+  "Product category": "Categoria de produto",
+  "All": "Todos",
+  "Accounts": "Contas",
+  "Cards": "Cartões",
+  "No products in this category.": "Nenhum produto nesta categoria.",
+  "View product movements": "Ver movimentações do produto",
+  "Product movements": "Movimentações do produto",
+  "Movement pagination": "Paginação de movimentações",
+  "Page {{page}} of {{count}}": "Página {{page}} de {{count}}",
+  "Filter movements": "Filtrar movimentos",
+  "About these totals": "Sobre estes totais",
+  "Movement window": "{{count}} movimentos · {{start}} – {{end}}"
 }

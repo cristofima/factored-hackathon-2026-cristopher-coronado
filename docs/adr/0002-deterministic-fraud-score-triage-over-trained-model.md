@@ -46,6 +46,19 @@ submission materials must explicitly justify why a tuned, evaluated threshold
 counts as the rubric's required "learned component vs. baseline" evidence, since a
 grader skimming quickly could otherwise expect a trained classifier specifically.
 
+## Review-policy amendment
+
+Customer approval now leaves every new case in `IN_REVIEW`, including cases below 32. The threshold remains a routing classification, not permission to close a case
+or a verdict on the dispute. Resolution requires a separate explicit operation;
+no investigation timeout or automatic resolution is introduced.
+
+A `ServiceAgent` catalog entry may be assigned for any classification. That
+assignment is not operator takeover or evidence of human review: the existing
+resolution endpoint is customer-authenticated, and operator adjudication is not
+implemented. Historical resolved cases are unchanged. This amendment replaces the
+original automatic low-score resolution behavior without changing threshold tuning
+or its offline evaluation evidence.
+
 ## Related
 
 - [0001](0001-single-workflow-scope-with-dispute-support-case.md) is the parent

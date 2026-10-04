@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { productPath, productStatusKey } from "@/common/products";
 import { Card } from "@/components/ui/card";
 import { AccountSummary, getAccounts } from "@/api/authClient";
 import { errorTranslationKey } from "@/api/errors";
@@ -9,8 +11,10 @@ import { useTranslation } from "react-i18next";
 
 export default function Account() {
   const { t, i18n } = useTranslation();
-  const { user } = useAuth();
-  const [accounts, setAccounts] = useState<AccountSummary[]>([]);
+  const { user, sessionKey } = useAuth();
+  const scope = JSON.stringify([user?.id, sessionKey]);
+  const [storedScope, setStoredScope] = useState("");
+  const [storedAccounts, setAccounts] = useState<AccountSummary[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -26,6 +30,7 @@ export default function Account() {
       .then((result) => {
         if (!controller.signal.aborted) {
           setAccounts(result);
+          setStoredScope(scope);
           setSelectedId(result.find((item) => item.number)?.number ?? "");
         }
       })
@@ -40,8 +45,9 @@ export default function Account() {
         }
       });
     return () => controller.abort();
-  }, [user?.id, attempt]);
+  }, [scope, attempt]);
 
+  const accounts = storedScope === scope ? storedAccounts : [];
   const account = accounts.find((item) => item.number === selectedId);
   const opened = account?.opened
     ? new Intl.DateTimeFormat(i18n.language, {
@@ -109,6 +115,7 @@ export default function Account() {
           </select>
         </div>
       )}
+      {account?.product_id && <Link to={productPath(account.product_id)} className="inline-block text-sm text-primary hover:underline">{t("View product movements")}</Link>}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-start">
         {/* General Information */}
         <Card className="p-5 shadow-sm md:col-start-1">
@@ -133,7 +140,7 @@ export default function Account() {
                   </div>
                   <div className="grid grid-cols-[8rem_minmax(0,1fr)] gap-3">
                     <dt className="text-muted-foreground">{t("Status")}</dt>
-                    <dd>{account.status || t("Not available")}</dd>
+                    <dd>{t(productStatusKey(account.status))}</dd>
                   </div>
                   <div className="grid grid-cols-[8rem_minmax(0,1fr)] gap-3">
                     <dt className="text-muted-foreground">{t("Opened")}</dt>

@@ -50,6 +50,7 @@ export function mapUser(value: unknown): AuthenticatedUser {
 const loginSchema = z.object({ access_token: z.string().min(1), user: z.unknown() });
 
 export interface AccountSummary {
+    product_id: string;
     type: string;
     status: string | null;
     opened: string | null;
@@ -74,6 +75,7 @@ export const getAccounts = async (signal?: AbortSignal): Promise<AccountSummary[
 };
 
 export interface CardSummary extends AccountSummary {
+    product_id: string;
     expires: string | null;
     credit_limit: string | null;
 }

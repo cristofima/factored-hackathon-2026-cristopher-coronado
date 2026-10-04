@@ -134,46 +134,46 @@ Account uses a stable two-column desktop layout, compact panels, and aligned
 label/value rows. Account Codes keeps its position when present; missing codes
 do not cause the agreements and policy panels to change columns.
 
-## Credit and Debit Cards
+## My products and product movements
 
-The [card page](src/pages/CreditCardManagement.tsx) at `/credit-cards` reads
-`GET /cards` on the Account API directly, authenticated with the same application JWT.
-It displays the verified customer's
-credit and debit products, not cards inferred from the selected bank account.
-Each card has a separate read-only panel with its stored type, masked number, product
-ID, and status, followed by a prominent balance, a separate credit limit, and opening
-and expiration dates. Amounts include their currency and thousands separators without
-converting decimal strings to floating-point numbers. Card numbers are masked by the
-Account API before reaching the browser. Nullable fields display `Not available`; decimal
-strings are preserved without estimating debt, available credit, or utilization.
+Dashboard is an owned account/card catalog with All, Accounts, and Cards category
+filters; it does not fetch movement history or invent loans/investments. Product
+tiles navigate to `/product/:productId`.
+The account overview also links its selected account to that route. Standalone
+Analytics navigation is removed; legacy `/analytics` redirects home.
 
-The card grid retains empty column tracks: one card has the same width as each
-card in a two-card desktop layout rather than expanding across the entire row.
+[FinancialOverview](src/components/FinancialOverview.tsx) is reused exclusively by
+product detail. The route ID must resolve uniquely against both owned catalogs
+(`GET /accounts` and `GET /cards`). Missing, foreign, and ambiguous IDs show a
+generic unavailable state without a history lookup. Missing or ambiguous bank
+numbers also fail closed. Bank history uses the owned catalog bank number at
+`GET /transactions/{product_number}/history`; card history uses only its opaque
+ID at `GET /transactions/products/{product_id}/history`. There is no arbitrary
+ID/number/PAN fallback or inferred card-to-account relationship. Bank numbers are
+shown in full; card numbers remain masked even when their last four digits match.
 
-Loading, no-card, error, retry, and rejected-session messages are explicit. User
-changes and retries clear previous rows and abort old requests. A `401` message
-asks the user to sign in again but does not itself clear the authentication context.
-The page is read-only: payments, recharge, blocking, and limit changes remain
-unavailable, with no simulated operations or financial fallback.
+Product detail uses
+[ProductSummaryCard](src/components/ProductSummaryCard.tsx): translated type/status,
+full bank number or masked card number, recorded balance, and opening date. Card
+summaries also show expiry; only credit cards show a credit limit. The detail page
+places this summary above a bordered movement-filter panel, responsive currency
+totals, and the movement table. Totals methodology is available in an expandable
+section. Labels and exact monetary display follow the authenticated en/es/pt locale;
+display formatting does not change calculation precision or canonical filters.
+Standalone Cards and Investments pages and navigation entries are removed. Legacy
+`/credit-cards` and `/portfolio` URLs redirect home. Card numbers show the first
+and last four digits (`4111 **** **** 1234`); legacy last-four-only masks are
+preserved without inventing a prefix. The Account API masks card numbers before
+returning them to the browser.
 
-## Dashboard and Analytics
-
-Both screens use [FinancialOverview](src/components/FinancialOverview.tsx) with
-direct, JWT-authenticated Account and Transaction reads. Account selection uses
-`GET /accounts`; transactions use `GET /{product_number}/history` on the Transaction
-API directly. The default date window covers today
-and the preceding 29 calendar days. The Analytics link carries the selected account
-and inclusive date window; an account URL parameter must match an owned account.
-
-The [financial client](src/api/financialClient.ts) fetches all pages in batches of
-100 before exposing records. It rejects changing totals, duplicate IDs, foreign
-account records, and incomplete pagination rather than falling back to fixtures.
-Account/window changes abort old requests and clear previous rows. Dashboard shows
-up to five records; Analytics shows the complete fetched window.
-
-The shared view uses aligned account/date controls, a compact current-balance
-panel, and right-aligned tabular transaction amounts. These presentation changes
-do not alter date filters, pagination, precision, or movement classifications.
+The default inclusive date window covers today and the preceding 29 calendar days.
+Date query parameters carry only `start` and `end`, not product selection.
+The [financial client](src/api/financialClient.ts) fetches every transport page in
+batches of 100 before exposing records. It rejects changing totals, duplicate IDs,
+foreign account records, and incomplete pagination. The detail table then pages
+those complete records in groups of 25; summaries always use the full window.
+Product/window and session changes abort old requests and suppress stale rows and
+report controls immediately. There is no first-product fallback.
 
 Balances are stored current balances, not balances reconstructed for the selected
 window. Transaction dates display the calendar date returned by the service without
@@ -181,14 +181,14 @@ browser timezone conversion. Missing fields remain unavailable. Loading, empty,
 invalid-window, failure, retry, and rejected-session messages are explicit; a
 financial `401` message does not itself clear the authentication context.
 
-Analytics derives movement totals with exact four-decimal arithmetic, separately
+Product detail derives movement totals with exact four-decimal arithmetic, separately
 for each currency. Only `Approved` records qualify: `Deposit` is inflow, while
 `Payment`, `Purchase`, `Transfer`, and `Withdrawal` are outflow. Adjustments, unknown
 types, other statuses, and negative amounts are excluded and counted. These are
 dataset-policy movements, not income/spending classifications or historical balances.
 No mixed-currency total or estimated monthly snapshot is displayed.
 
-Dashboard and Analytics have no mock financial fallback. Payments, investments,
+Dashboard and product detail have no mock financial fallback. Payments, investments,
 beneficiaries, and card mutations remain unavailable rather than simulating data
 or operations.
 
@@ -200,18 +200,37 @@ The [support-cases list](src/pages/SupportCases.tsx) and
 surface directly through [disputeClient.ts](src/api/disputeClient.ts), authenticated
 with the same application JWT as the rest of the direct reads above, never through the
 BFF. A [`ReportDisputeDialog`](src/components/ReportDisputeDialog.tsx) is wired into
-the Analytics transaction table for `Approved` rows and opens a new case from a
+the selected-card product movement table for `Approved` rows and opens a new case from a
 customer-entered reason.
 
 Reporting is hidden for transactions older than the approved 365-day window,
-using the real clock, and uses a light-blue outline trigger. It does not yet hide
-the trigger for an existing active case; the backend rejects that submission.
+using the real clock, and uses a light-blue outline trigger. The selected-card detail fetches the
+complete customer-scoped support-case list once, not per transaction row. Every
+non-`RESOLVED` case replaces the report action with an existing-case link. Reporting
+fails closed while that list loads or fails, with a retry action. Requests abort and
+eligibility resets on identity/session changes. Submission rechecks the complete list,
+redirects to an existing active case, and refreshes eligibility after creation.
+Failed submissions retain controlled error feedback; retry rechecks the complete list
+before any creation request. A controlled `DISPUTE_ALREADY_ACTIVE` conflict reloads the
+complete list and opens the existing active case. If that reload fails or finds no active
+case, localized conflict feedback remains visible and retry revalidates eligibility.
+The case contract accepts workflow/effects metadata without adding an evidence UI.
+Timeline fallback prefers the backend's optional `displayMessage` projection over the
+unchanged original `message`; arbitrary resolution notes remain visible. Known legacy
+generated messages retain truthful localized display templates.
+The backend remains authoritative; frontend suppression is not a database concurrency
+or duplicate-credit guarantee.
 Resolved transactions can currently be reported again. Eligibility also accepts
-approved deposits; restricting transaction types requires an explicit policy decision.
+approved card deposits; restricting transaction types requires an explicit policy decision.
 
 Case outcomes currently do not create financial movements, update balances, or
-block cards. The approval and provisional-credit wording must not be treated as
-evidence that those actions occurred. Any future credit should appear as a separate,
+block cards. Financial movements and card protection are not implemented.
+The en/es/pt approval, status, outcome, and timeline templates describe recorded consent,
+routing, and case closure, not verified human review, fraud verdicts, credits, refunds,
+or card blocks. Catalog reviewer assignment is persisted routing, not actual human
+review; operator adjudication is pending/not implemented. The financial-effects and
+card-protection metadata remain available. Historical stored records and machine codes
+remain unchanged. Any future credit should appear as a separate,
 case-linked movement on its posting date, not rewrite the original transaction.
 
 Recommendation and timeline message templates are localized in en/es/pt, while the
@@ -221,8 +240,16 @@ remains persisted. On 2026-10-02, 52 frontend tests (including 16 focused locali
 tests), edited-file lint, and the production build passed. The existing bundle-size
 warning remains. These checks do not establish authenticated three-language browser parity.
 
-The detail page shows the case status, an approve/decline gate while
-`WAITING_USER_APPROVAL`, the full event timeline, and the single post-resolution
+The detail page labels the product number as Card Number, localized in en/es/pt.
+The approve/decline gate appears while `WAITING_USER_APPROVAL`. Approval starts
+review, not closure: low, high, and missing fraud scores all remain `IN_REVIEW`
+until explicit resolution. Low-score cases show the localized `REVIEW_REQUIRED`
+event; a low score neither determines legitimacy nor authorizes automatic closure.
+Catalog assignment does not implement operator takeover or adjudication. The existing
+resolution endpoint remains customer-authenticated; no review timeout is implemented.
+Previously resolved cases remain unchanged.
+
+The detail page also shows the full event timeline and the single post-resolution
 recommendation card with an explicit dismiss action once a case resolves favorably. All
 status, resolution, and event values are machine-readable codes translated for display
 through a dedicated `support-cases.*` i18n namespace in all three locale catalogs.

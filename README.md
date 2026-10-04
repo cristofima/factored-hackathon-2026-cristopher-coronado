@@ -70,8 +70,8 @@ The case lifecycle is persisted, but its financial actions are not yet implement
 the provisional-credit outcome does not create a transaction or update a balance,
 and approval does not block a card. These labels are prototype workflow results,
 not evidence of a refund or card protection. The backend rejects an existing active
-case, but the transaction table does not hide reporting for that case, concurrent
-creation is not database-protected, and resolved transactions can be disputed again.
+case, and the transaction UI checks reporting eligibility. Concurrent creation is
+not database-protected, and resolved card transactions can be disputed again.
 
 Even if specific to banking scenarios, this sample can be used for other business use cases as technical reference architecture concerning customer support chatbots or virtual assistants using Microsoft Agent Framework to implement supervisor based orchestration for multiple domains agents that need to integrate with business domains API through MCP. AI-powered assistants in other domains by adapting the agents tools and backend services to your specific business needs.
 
@@ -96,11 +96,33 @@ Business scenario
 
 Users can converse with the assistant to inquire about account balances and review recent transactions instead of navigating traditional menus. The active workflow does not execute payments.
 
+The dashboard presents an owned-product catalog with All, Accounts, and Cards
+filters. Selecting a product opens `/product/:productId`, where date and movement
+filters, totals, and transaction history are scoped to that product. The standalone
+movement-analysis navigation is retired; `/analytics` redirects to the catalog.
+Product detail reuses the card-style summary for accounts and cards. Standalone
+Cards and Investments pages are removed; `/credit-cards` and `/portfolio` redirect
+to the catalog. Card numbers display the first and last four digits with the middle
+masked; existing last-four-only masks remain unchanged.
+New support-case disputes are restricted to card transactions by the Transaction
+service; existing account cases remain readable. No card-to-account association is
+inferred. Account and card summaries expose an opaque `product_id`; card numbers
+remain masked. JWT-authenticated card history uses
+`GET /api/transactions/products/{product_id}/history`; bank account history retains
+`GET /api/transactions/{product_number}/history`. Both support inclusive date
+filters and pagination, and enforce customer ownership.
+
 The submission MVP extends this flow into support operations: users can open a
 transaction-dispute support case from conversation context or directly from a
 transaction row, track its status through `OPEN -> WAITING_USER_APPROVAL -> IN_REVIEW
 -> RESOLVED`, approve or decline the dispute, and receive a single contextual product
-recommendation with an explicit opt-out after case resolution. See the
+recommendation with an explicit opt-out after case resolution. Customer approval
+starts review: all fraud-score classifications remain `IN_REVIEW`, including low
+scores, until an explicit resolution operation. A low stored score is routing
+information, not a legitimacy verdict or authorization for automatic closure.
+Catalog reviewer assignment does not implement operator takeover or human review;
+the existing resolution endpoint remains customer-authenticated. No review timeout
+is implemented, and previously resolved cases are not reopened. See the
 [frontend guide](app/frontend/banking-web/README.md#transaction-disputes) and
 [business API guide](app/business-api/README.md) for the implementation.
 
@@ -160,8 +182,11 @@ The React frontend streams OpenAI Responses events for account and transaction i
  Use [MAF](https://learn.microsoft.com/en-us/agent-framework/overview/agent-framework-overview) chat agents to flexibly support AzureOpenAI or Foundry Agent Service based agents
  - **Human-In-The-Loop (HITL) patterns** <br/>
  The transaction-dispute support case gates on a real customer approval step before
- routing to automatic fast-tracking or a simulated human reviewer, backed by a
- persisted case/event audit trail, not just generic protocol approval events.
+ routing to rule-based case closure or a persisted ServiceAgent catalog assignment,
+ backed by a real case/event audit trail, not just generic protocol approval events.
+ Banking inputs are synthetic; agent execution, customer consent and persistence are
+ real. Catalog assignment is not operator adjudication, and case closure does not
+ post credit, change balances or protect a card.
 - **Separate hosted agent and App Services** <br/>
 The Foundry hosted agent uses its own azd project; the root Terraform stack defines five App Services for Identity, the BFF, web frontend, and business APIs.
 - **Automated IaC and App build & Deployment**
@@ -335,9 +360,10 @@ Current limitations to keep explicit:
 - The BFF validates application identity and proxies upstream requests, but this does not replace per-resource authorization in business services.
 - The previous ChatKit-style direct browser-to-agent pattern is no longer the target architecture.
 - HITL approval widgets back a real business workflow for transaction disputes (case
-  creation, customer approval gate, triage, simulated reviewer assignment, and a
-  single post-resolution recommendation with opt-out), but the 365-day dispute window
-  is a mock policy evaluated against the real system clock and will reject opening new
+  creation, customer consent gate, triage, ServiceAgent catalog assignment, and a
+  single post-resolution recommendation with opt-out). Operator adjudication and
+  financial/card effects remain unimplemented. The 365-day dispute window
+  is a demo policy evaluated against the real system clock and will reject opening new
   disputes once the loaded dataset's transactions fall outside it.
 - Prompt-injection resilience is bounded by deterministic authorization checks and does not rely on model instruction following alone.
 - Logging and tracing are useful for diagnostics, but sensitive-data controls and retention governance must be reviewed before production.

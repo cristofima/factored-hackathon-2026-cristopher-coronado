@@ -50,6 +50,28 @@ describe("Transaction API pagination", () => {
             channel: "CreditCard", merchant: "Contoso Store", status: "approved",
         });
     });
+    it.each(["opaque/one", "opaque-two"])("uses opaque card ID %s and masks the display number across pages", async (productId) => {
+        const fetch = vi.fn().mockResolvedValueOnce(page([record("1")], 2)).mockResolvedValueOnce(page([record("2")], 2));
+        vi.stubGlobal("fetch", fetch);
+        const signal = new AbortController().signal;
+        const transactions = await getTransactions("4111111111111234", "2026-06-01", "2026-06-17", signal, productId);
+        expect(transactions.map((item) => item.product_number)).toEqual(["4111 **** **** 1234", "4111 **** **** 1234"]);
+        for (const [url, options] of fetch.mock.calls) {
+            expect(url).toContain(`/transactions/products/${encodeURIComponent(productId)}/history?`);
+            expect(url).not.toContain("4111111111111234"); expect(options.signal).toBe(signal);
+        }
+        expect(fetch.mock.calls[1][0]).toContain("offset=1");
+    });
+    it.each([401, 404, 503])("fails closed for card HTTP %s", async (status) => {
+        vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status })));
+        await expect(getTransactions("**** 1234", "2026-06-01", "2026-06-17", new AbortController().signal, "opaque")).rejects.toThrow();
+    });
+    it("supports card empty history and cancellation", async () => {
+        vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(page([], 0)).mockRejectedValueOnce(new DOMException("Aborted", "AbortError")));
+        const signal = new AbortController().signal;
+        expect(await getTransactions("", "2026-06-01", "2026-06-17", signal, "opaque")).toEqual([]);
+        await expect(getTransactions("", "2026-06-01", "2026-06-17", signal, "opaque")).rejects.toMatchObject({ name: "AbortError" });
+    });
     it("propagates request cancellation", async () => {
         vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new DOMException("Aborted", "AbortError")));
         await expect(getTransactions("account", "2026-06-01", "2026-06-17", new AbortController().signal)).rejects.toMatchObject({ name: "AbortError" });

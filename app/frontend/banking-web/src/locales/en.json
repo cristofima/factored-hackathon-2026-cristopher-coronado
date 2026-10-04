@@ -1,4 +1,12 @@
 {
+  "Loading products...": "Loading products...",
+  "Products are unavailable": "Products are unavailable",
+  "No products are registered for this customer.": "No products are registered for this customer.",
+  "Select a product": "Select a product",
+  "Selected product": "Selected product",
+  "Selected product is unavailable.": "Selected product is unavailable.",
+  "History for selected product": "History for selected product",
+  "Dispute actions": "Dispute actions",
   "Dashboard": "Dashboard",
   "Credit Cards": "Credit Cards",
   "Investment Portfolio": "Investment Portfolio",
@@ -37,6 +45,7 @@
   "Retry": "Retry",
   "Not available": "Not available",
   "Number unavailable": "Number unavailable",
+  "Pending": "Pending",
   "Status unavailable": "Status unavailable",
   "Account Overview": "Account Overview",
   "Account help": "Access your account details, agreements and policies. For questions, contact",
@@ -51,6 +60,7 @@
   "Currency": "Currency",
   "Account Codes": "Account Codes",
   "Account Number": "Account Number",
+  "Card Number": "Card Number",
   "Agreements": "Agreements",
   "Terms of Service": "Terms of Service",
   "Electronic Communications Agreement": "Electronic Communications Agreement",
@@ -138,7 +148,7 @@
   "Access denied": "You do not have permission to make this request.",
   "Transaction Disputes": "Transaction Disputes",
   "Refresh": "Refresh",
-  "Support cases description": "Track transaction-dispute cases you opened, respond to approval requests, and follow the review timeline.",
+  "Support cases description": "Track your persisted transaction disputes, consent requests, and case timeline.",
   "Loading support cases...": "Loading support cases...",
   "Support cases are unavailable": "Support cases are unavailable",
   "No support cases yet.": "No support cases yet.",
@@ -148,7 +158,7 @@
   "Reason": "Reason",
   "Resolution": "Resolution",
   "Approval Needed": "Approval Needed",
-  "Dispute approval prompt": "Confirm you want to proceed with this dispute. Approving will block the related card while the dispute is reviewed.",
+  "Dispute approval prompt": "Confirm you want to continue processing this case. Your consent is recorded.",
   "Approve dispute": "Approve dispute",
   "Decline": "Decline",
   "Recommendation": "Recommendation",
@@ -161,6 +171,8 @@
   "Describe why you don't recognize this charge": "Describe why you don't recognize this charge",
   "Submit dispute": "Submit dispute",
   "Could not open the dispute": "Could not open the dispute",
+  "An active dispute already exists. Retry to open the existing case.": "An active dispute already exists. Retry to open the existing case.",
+  "Only debit or credit card transactions can be disputed.": "Only debit or credit card transactions can be disputed.",
   "transactions": {
     "types": {
       "Payment": "Payment",
@@ -185,16 +197,19 @@
       "Pending": "Pending"
     }
   },
+  "Checking active disputes...": "Checking active disputes...",
+  "Dispute eligibility unavailable. Reporting is disabled.": "Dispute eligibility unavailable. Reporting is disabled.",
+  "View existing dispute": "View existing dispute",
   "support-cases": {
     "status": {
       "OPEN": "Open",
       "WAITING_USER_APPROVAL": "Waiting for your approval",
       "IN_REVIEW": "In review",
-      "RESOLVED": "Resolved"
+      "RESOLVED": "Workflow closed"
     },
     "resolution": {
-      "fast_tracked_provisional_credit": "Fast-tracked: provisional credit issued",
-      "fraud_confirmed_refund_issued": "Fraud confirmed: refund issued",
+      "fast_tracked_provisional_credit": "Fast-track case closure; no credit recorded",
+      "fraud_confirmed_refund_issued": "Recorded closure label; fraud and refund not verified",
       "withdrawn_by_customer": "Withdrawn by you"
     },
     "recommendations": {
@@ -202,15 +217,16 @@
     },
     "messages": {
       "CASE_OPENED": "Dispute opened for transaction {{transactionId}}.",
-      "APPROVAL_REQUESTED": "Your confirmation is required to proceed with the dispute and card block.",
-      "APPROVAL_GRANTED": "You approved the dispute and card block.",
+      "APPROVAL_REQUESTED": "Your consent is required to continue processing the case.",
+      "APPROVAL_GRANTED": "Your consent to continue processing the case was recorded.",
       "APPROVAL_DECLINED": "You declined to proceed with the dispute.",
-      "FAST_TRACKED": "Low fraud-risk score; routed to automatic resolution without manual review.",
-      "ESCALATED_TO_REVIEW": "Elevated fraud-risk score; routed to manual review.",
-      "INSUFFICIENT_SIGNAL": "No fraud score is available for this transaction; routed to manual review.",
-      "PROVISIONAL_CREDIT": "Provisional credit issued; case resolved without manual review.",
+      "FAST_TRACKED": "Low fraud-risk score from the demo dataset; routed to fast-track case closure. This is not a fraud verdict.",
+      "REVIEW_REQUIRED": "Low stored fraud-risk score; the case remains in review pending explicit resolution. The score does not authorize automatic closure or determine whether the dispute is valid.",
+      "ESCALATED_TO_REVIEW": "Elevated stored fraud-risk score; the case is pending review.",
+      "INSUFFICIENT_SIGNAL": "No fraud score is available; the case is pending review.",
+      "PROVISIONAL_CREDIT": "Fast-track case closure recorded; no credit or financial movement recorded.",
       "WITHDRAWN": "Case closed: withdrawn by you.",
-      "RESOLVED": "The case resolution was recorded.",
+      "RESOLVED": "Workflow closure recorded; no financial or card effect verified.",
       "RECOMMENDATION_DISMISSED": "You dismissed the post-resolution recommendation."
     },
     "events": {
@@ -218,9 +234,10 @@
       "APPROVAL_REQUESTED": "Approval requested",
       "APPROVAL_GRANTED": "You approved the dispute",
       "APPROVAL_DECLINED": "You declined the dispute",
-      "FAST_TRACKED": "Fast-tracked for automatic resolution",
-      "ESCALATED_TO_REVIEW": "Escalated to manual review",
-      "RESOLVED": "Case resolved",
+      "FAST_TRACKED": "Routed to fast-track case closure",
+      "REVIEW_REQUIRED": "Pending explicit resolution",
+      "ESCALATED_TO_REVIEW": "Pending review",
+      "RESOLVED": "Workflow closed",
       "RECOMMENDATION_DISMISSED": "Recommendation dismissed"
     }
   },
@@ -247,6 +264,10 @@
   "Portuguese": "Portuguese",
   "Active": "Active",
   "Inactive": "Inactive",
+  "Blocked": "Blocked",
+  "Suspended": "Suspended",
+  "Closed": "Closed",
+  "Expired": "Expired",
   "Activate": "Activate",
   "Deactivate": "Deactivate",
   "Reset password": "Reset password",
@@ -268,5 +289,18 @@
   "Customer operation unavailable": "Customer operation unavailable",
   "No customer users": "No customer users",
   "Confirm customer operation": "Confirm customer operation",
-  "Changing sign-in access revokes existing sessions. The customer must sign in again after activation.": "Changing sign-in access revokes existing sessions. The customer must sign in again after activation."
+  "Changing sign-in access revokes existing sessions. The customer must sign in again after activation.": "Changing sign-in access revokes existing sessions. The customer must sign in again after activation.",
+  "My products": "My products",
+  "Product category": "Product category",
+  "All": "All",
+  "Accounts": "Accounts",
+  "Cards": "Cards",
+  "No products in this category.": "No products in this category.",
+  "View product movements": "View product movements",
+  "Product movements": "Product movements",
+  "Movement pagination": "Movement pagination",
+  "Page {{page}} of {{count}}": "Page {{page}} of {{count}}",
+  "Filter movements": "Filter movements",
+  "About these totals": "About these totals",
+  "Movement window": "{{count}} movements · {{start}} – {{end}}"
 }

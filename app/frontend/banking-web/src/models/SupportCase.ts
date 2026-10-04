@@ -13,12 +13,15 @@ export interface SupportCase {
     openedAt: string;
     updatedAt: string;
     resolvedAt: string | null;
+    financialEffectsStatus?: string;
+    cardProtectionStatus?: string;
 }
 
 export interface SupportCaseEvent {
     eventType: string;
     actor: string;
     message: string | null;
+    displayMessage?: string | null;
     createdAt: string;
 }
 
@@ -30,6 +33,7 @@ export function supportCaseEventMessageKey(event: SupportCaseEvent): string {
         if (event.message === "Case closed: withdrawn by customer") {
             return "support-cases.messages.WITHDRAWN";
         }
+        return "support-cases.messages.CUSTOM_NOTE";
     }
     if (event.eventType === "ESCALATED_TO_REVIEW" &&
         event.message?.startsWith("No fraud score available for this transaction;")) {

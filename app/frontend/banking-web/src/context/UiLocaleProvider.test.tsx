@@ -3,7 +3,6 @@ import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import { UiLocaleProvider } from "./UiLocaleProvider";
 import Sidebar from "../components/Sidebar";
-import InvestmentPortfolio from "../pages/InvestmentPortfolio";
 import Login from "../pages/Login";
 
 const auth = vi.hoisted(() => ({ user: null as { locale: string } | null }));
@@ -17,7 +16,6 @@ describe("authenticated UI localization", () => {
       <MemoryRouter>
         <UiLocaleProvider>
           <Sidebar />
-          <InvestmentPortfolio />
         </UiLocaleProvider>
       </MemoryRouter>,
     );
@@ -25,10 +23,11 @@ describe("authenticated UI localization", () => {
   it("renders profile languages, user switches and logout without retained locale", () => {
     auth.user = { locale: "es" };
     expect(renderWorkspace()).toContain("Resumen");
-    expect(renderWorkspace()).toContain("Las inversiones no están disponibles");
+    expect(renderWorkspace()).not.toContain('href="/portfolio"');
+    expect(renderWorkspace()).not.toContain('href="/credit-cards"');
     auth.user = { locale: "pt" };
     expect(renderWorkspace()).toContain("Resumo");
-    expect(renderWorkspace()).not.toContain("Las inversiones");
+    expect(renderWorkspace()).not.toContain("Resumen");
     auth.user = { locale: "fr" };
     expect(renderWorkspace()).toContain("Dashboard");
     auth.user = null;

@@ -270,3 +270,78 @@ def test_transaction_history_rest_endpoint_requires_jwt_identity(
     assert denied.status_code == 401
     assert allowed.status_code == 200
     assert allowed.json()["total"] == 6
+
+
+@pytest.mark.parametrize("product_id", ["card-foreign", "missing", "account-owned"])
+def test_card_history_denies_foreign_missing_and_account_ids(
+    session_factory: Callable[[], Session], product_id: str,
+) -> None:
+    with pytest.raises(PermissionError, match="authenticated customer"):
+        TransactionService(session_factory).get_card_transaction_history(
+            product_id, "customer-owned", None, None, 100, 0,
+        )
+
+
+@pytest.mark.parametrize("product_type", ["Debit Card", "Credit Card"])
+def test_card_history_uses_id_and_inclusive_dates_with_owner_filter(
+    session_factory: Callable[[], Session], product_type: str,
+) -> None:
+    with session_factory() as session:
+        session.add(Product(
+            product_id="same-last-four", product_number="5555555555551111",
+            customer_id="customer-owned", product_type=product_type, currency="USD",
+        ))
+        for transaction_id, timestamp, customer_id in [
+            ("start", datetime(2026, 6, 11, 0), "customer-owned"),
+            ("end", datetime(2026, 6, 11, 23, 59, 59, 999999), "customer-owned"),
+            ("outside", datetime(2026, 6, 12, 0), "customer-owned"),
+            ("wrong-owner", datetime(2026, 6, 11, 12), "customer-foreign"),
+        ]:
+            session.add(TransactionRecord(
+                transaction_id=transaction_id, transaction_date=timestamp,
+                process_date=date(2026, 6, 11), product_id="same-last-four",
+                customer_id=customer_id, amount=Decimal("1"), currency="USD",
+            ))
+        session.commit()
+    service = TransactionService(session_factory)
+    first, total = service.get_card_transaction_history(
+        "same-last-four", "customer-owned", date(2026, 6, 11), date(2026, 6, 11), 1, 0,
+    )
+    second, _ = service.get_card_transaction_history(
+        "same-last-four", "customer-owned", date(2026, 6, 11), date(2026, 6, 11), 1, 1,
+    )
+    original, _ = service.get_card_transaction_history(
+        "card-owned", "customer-owned", None, None, 100, 0,
+    )
+    empty, empty_total = service.get_card_transaction_history(
+        "same-last-four", "customer-owned", date(2027, 1, 1), None, 100, 0,
+    )
+    assert total == 2
+    assert [item.id for item in first + second] == ["end", "start"]
+    assert [item.id for item in original] == ["card-tx-1"]
+    assert all(item.product_number == "**** 1111" for item in first + original)
+    assert (empty, empty_total) == ([], 0)
+
+
+def test_card_history_rest_jwt_validation_and_resource_denial(
+    session_factory: Callable[[], Session], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(routers, "service", TransactionService(session_factory))
+    app = FastAPI()
+    app.include_router(routers.router, prefix="/api/transactions")
+    path = "/api/transactions/products/card-owned/history"
+    with TestClient(app) as client:
+        assert client.get(path).status_code == 401
+        app.dependency_overrides[get_jwt_customer_id] = lambda: "customer-owned"
+        response = client.get(path)
+        assert response.status_code == 200
+        assert response.json()["total"] == 1
+        assert response.json()["items"][0]["product_number"] == "**** 1111"
+        assert "4111111111111111" not in response.text
+        denials = [client.get(f"/api/transactions/products/{product_id}/history")
+                   for product_id in ("card-foreign", "missing", "account-owned")]
+        assert all(item.status_code == 403 for item in denials)
+        assert len({item.text for item in denials}) == 1
+        assert client.get(path, params={"start_date": "2026-06-12", "end_date": "2026-06-11"}).status_code == 422
+        assert client.get(path, params={"limit": 101}).status_code == 422
+        assert client.get(path, params={"offset": -1}).status_code == 422
