@@ -20,11 +20,20 @@ from app.agents.azure_chat.hosted_workflow import (
     _has_completed_agent_response,
     build_hosted_workflow,
 )
+from app.agents.azure_chat.transaction_agent import TransactionHistoryAgent
 from app.helpers.no_history_provider import NoHistoryProvider
 from app.helpers.handoff_middleware import HandoffNarrationMiddleware
 from app.helpers.tool_error_middleware import OwnershipErrorMiddleware
 from app.helpers.isolated_responses_host import IsolatedResponsesHostServer
 from app.helpers.user_profile_provider import UserProfileProvider
+
+
+def test_transaction_instructions_scope_new_disputes_to_cards() -> None:
+    instructions = " ".join(TransactionHistoryAgent.instructions.split())
+    assert "only for Debit Card and Credit Card transactions, not bank account transactions" in instructions
+    assert "Verify the product type before reporting a dispute" in instructions
+    assert "Never infer a card-to-account relationship" in instructions
+    assert "Existing support cases remain available" in instructions
 
 
 @pytest.mark.parametrize("denied", [False, True])
