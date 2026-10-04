@@ -10,6 +10,7 @@ import { startDisputePolling } from "@/api/disputePolling";
 import { errorTranslationKey } from "@/api/errors";
 import type { SupportCase } from "@/models/SupportCase";
 import { useAuth } from "@/context/AuthContext";
+import { formatDateTime } from "@/common/dateTime";
 
 export default function SupportCases() {
   const { t } = useTranslation();
@@ -96,7 +97,7 @@ export default function SupportCases() {
                 <CardContent className="text-sm text-muted-foreground space-y-1">
                   <p className="break-words">{item.reason}</p>
                   <p>
-                    {t("Opened")}: {item.openedAt.slice(0, 10)}
+                    {t("Opened")}: {formatDateTime(item.openedAt, user?.locale, "date-time")}
                     {item.productNumber ? ` · ${item.productNumber}` : ""}
                   </p>
                 </CardContent>

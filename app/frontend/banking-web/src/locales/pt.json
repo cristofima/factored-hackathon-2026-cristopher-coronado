@@ -200,7 +200,30 @@
   "Checking active disputes...": "Verificando contestações ativas...",
   "Dispute eligibility unavailable. Reporting is disabled.": "Elegibilidade da contestação indisponível. O envio está desabilitado.",
   "View existing dispute": "Ver contestação existente",
+  "Case views": "Visualizações de casos",
+  "Available cases": "Casos disponíveis",
+  "Assigned cases": "Casos atribuídos",
+  "View case": "Ver caso",
+  "No assigned cases": "Nenhum caso atribuído",
+  "Review cases": "Casos em revisão",
   "support-cases": {
+    "operator": {
+      "events": {
+        "APPROVAL_REQUESTED": "Aprovação solicitada ao cliente",
+        "APPROVAL_GRANTED": "O cliente aprovou a contestação",
+        "APPROVAL_DECLINED": "O cliente recusou a contestação",
+        "OPERATOR_CLAIMED": "Atribuído a você",
+        "RECOMMENDATION_DISMISSED": "O cliente descartou a recomendação"
+      },
+      "messages": {
+        "APPROVAL_REQUESTED": "O consentimento do cliente é necessário para continuar o processamento do caso.",
+        "APPROVAL_GRANTED": "O consentimento do cliente para continuar o processamento do caso foi registrado.",
+        "APPROVAL_DECLINED": "O cliente recusou prosseguir com a contestação.",
+        "OPERATOR_CLAIMED": "Você assumiu a responsabilidade exclusiva de revisar este caso; nenhum veredito ou efeito financeiro foi registrado.",
+        "WITHDRAWN": "Caso encerrado: retirado pelo cliente.",
+        "RECOMMENDATION_DISMISSED": "O cliente descartou a recomendação após a resolução."
+      }
+    },
     "status": {
       "OPEN": "Aberto",
       "WAITING_USER_APPROVAL": "Aguardando sua aprovação",
@@ -216,6 +239,7 @@
       "transaction_alerts": "Esta contestação envolveu uma cobrança não reconhecida. Ativar alertas instantâneos de transações pode ajudar você a identificar cobranças semelhantes mais cedo."
     },
     "messages": {
+      "OPERATOR_CLAIMED": "Um operador autenticado assumiu a revisão exclusiva do caso; nenhum veredito ou efeito financeiro foi registrado.",
       "CASE_OPENED": "Contestação aberta para a transação {{transactionId}}.",
       "APPROVAL_REQUESTED": "Seu consentimento é necessário para continuar o processamento do caso.",
       "APPROVAL_GRANTED": "Seu consentimento para continuar o processamento do caso foi registrado.",
@@ -230,6 +254,7 @@
       "RECOMMENDATION_DISMISSED": "Você descartou a recomendação após a resolução."
     },
     "events": {
+      "OPERATOR_CLAIMED": "Operador atribuído",
       "CASE_OPENED": "Contestação aberta",
       "APPROVAL_REQUESTED": "Aprovação solicitada",
       "APPROVAL_GRANTED": "Você aprovou a contestação",
@@ -302,5 +327,27 @@
   "Page {{page}} of {{count}}": "Página {{page}} de {{count}}",
   "Filter movements": "Filtrar movimentos",
   "About these totals": "Sobre estes totais",
-  "Movement window": "{{count}} movimentos · {{start}} – {{end}}"
+  "Movement window": "{{count}} movimentos · {{start}} – {{end}}",
+  "Dispute review queue": "Fila de revisão de contestações",
+  "Taking a case does not authorize a verdict or financial changes.": "Assumir uma contestação não autoriza um veredito nem alterações financeiras.",
+  "Operator subject": "Identificador do operador",
+  "Claimed at": "Atribuído em",
+  "Case version": "Versão da contestação",
+  "Assigned to you": "Atribuído a você",
+  "Assigned": "Atribuído",
+  "Unassigned": "Não atribuído",
+  "Taking case...": "Assumindo contestação...",
+  "Take case": "Assumir contestação",
+  "Back to review queue": "Voltar à fila de revisão",
+  "Review queue unavailable": "Fila de revisão indisponível",
+  "Case assigned to you": "Contestação atribuída a você",
+  "Loading review queue...": "Carregando fila de revisão...",
+  "No cases awaiting review": "Nenhuma contestação aguardando revisão",
+  "Case event": "Evento da contestação",
+  "Case changed or already assigned. Refresh and try again.": "A contestação mudou ou já está atribuída. Atualize e tente novamente.",
+  "Claim version": "Versão de atribuição",
+  "Review queue pages": "Páginas da fila de revisão",
+  "Previous page": "Página anterior",
+  "Total cases": "Total de contestações",
+  "Next page": "Próxima página"
 }
