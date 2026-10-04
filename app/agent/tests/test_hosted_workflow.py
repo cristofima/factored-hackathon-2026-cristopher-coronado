@@ -17,6 +17,7 @@ from agent_framework_foundry_hosting import ResponsesHostServer
 from agent_framework.exceptions import ToolExecutionException
 
 from app.agents.azure_chat.hosted_workflow import (
+    TRIAGE_INSTRUCTIONS,
     _has_completed_agent_response,
     build_hosted_workflow,
 )
@@ -34,6 +35,20 @@ def test_transaction_instructions_scope_new_disputes_to_cards() -> None:
     assert "Verify the product type before reporting a dispute" in instructions
     assert "Never infer a card-to-account relationship" in instructions
     assert "Existing support cases remain available" in instructions
+
+
+def test_dispute_consultation_instruction_contract() -> None:
+    triage = " ".join(TRIAGE_INSTRUCTIONS.split())
+    instructions = " ".join(TransactionHistoryAgent.instructions.split())
+    assert "case status, timelines, and follow-up questions about a dispute" in triage
+    assert "handoff_to_TransactionHistoryAgent" in triage
+    assert "Existing-case consultations are read-only" in instructions
+    assert "never guess an ID or select the newest case" in instructions
+    assert "getSupportCase again on each status follow-up" in instructions
+    assert "getSupportCaseTimeline for event questions" in instructions
+    assert "report an empty result as no available cases" in instructions
+    assert "do not reveal whether another customer owns it" in instructions
+    assert "not that an operator has taken over or issued a verdict" in instructions
 
 
 @pytest.mark.parametrize("denied", [False, True])
