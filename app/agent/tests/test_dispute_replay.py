@@ -4,7 +4,9 @@ from copy import deepcopy
 
 import pytest
 
-from evals.dispute_replay import DATASET, fingerprint, load_cases, score_case
+from evals.dispute_replay import (
+    DATASET, ROOT, expanded_fingerprint, fingerprint, load_cases, score_case,
+)
 from evals.run_dispute_replay import (
     case_latency, compare_reports, execute_case, rescore, run_baseline, sanitize,
 )
@@ -128,8 +130,12 @@ async def test_execution_failure_preserves_case_identity_without_raw_error() -> 
 
 async def test_paired_comparison_rescores_evidence_and_rejects_wrong_system() -> None:
     _, cases = load_cases()
-    baseline = {"schema_version": 1, "system": "baseline", "dataset_sha256": fingerprint(DATASET),
-                "results": [await run_baseline(case) for case in cases]}
+    baseline = {
+        "schema_version": 1, "system": "baseline", "dataset_sha256": fingerprint(DATASET),
+        "scorer_sha256": fingerprint(ROOT / "evals" / "dispute_replay.py"),
+        "expanded_inputs_sha256": expanded_fingerprint(cases),
+        "results": [await run_baseline(case) for case in cases],
+    }
     proposed = deepcopy(baseline)
     proposed.update(system="proposed", model="synthetic-test-only")
     proposed["results"][0]["turns"][0]["final_answer"] = "RESOLVED"
@@ -137,6 +143,18 @@ async def test_paired_comparison_rescores_evidence_and_rejects_wrong_system() ->
     assert comparison["regressions"] == 1
     assert comparison["improvements"] == 0
     assert len(comparison["cases"]) == 25
+    for field, message in (
+        ("scorer_sha256", "current identical scorer fingerprint"),
+        ("expanded_inputs_sha256", "identical frozen expanded inputs"),
+    ):
+        for value in (None, "outdated"):
+            incompatible = deepcopy(proposed)
+            if value is None:
+                incompatible.pop(field)
+            else:
+                incompatible[field] = value
+            with pytest.raises(ValueError, match=message):
+                compare_reports(baseline, incompatible, cases, fingerprint(DATASET))
     with pytest.raises(ValueError, match="requires"):
         compare_reports(baseline, baseline, cases, fingerprint(DATASET))
 

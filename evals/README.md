@@ -1,330 +1,162 @@
-# Held-Out Evaluation: Transaction-Dispute Workflow
+# Offline Evaluation and Synthetic Confirmation
 
-A fixed dispute scenario set, an offline policy baseline, and an isolated MCP
-replay harness. These are evaluation building blocks, not evidence of a completed
-transaction-dispute workflow evaluation.
+## Current dispute contract
 
-## Coverage and Evidence
+[dispute_cases.json](dispute_cases.json) is the 25-case **dispute-replay-v2**
+development-exposed synthetic confirmation set, not untouched held-out evidence.
+[dispute_freeze.json](dispute_freeze.json) freezes exact dataset bytes, canonical
+expanded inputs, case count, and source dependencies. Dependency hashing normalizes
+CRLF to LF for portability; dataset hashing remains exact. Workload or expansion
+changes require a new documented version/freeze.
 
-### Hackathon Baseline Requirement
+Customer approval authorizes investigation only: every fraud-score band remains
+IN_REVIEW. Low scores route to fast-track review, high scores escalate, and missing
+scores require insufficient-signal review. Decline resolves as withdrawn_by_customer.
+Fixtures assert no posting, refund, credit, balance change, or product blocking.
+Reviewer assignment is not a verdict. The frozen replay records the authority boundary
+at alignment time: no approved operator adjudication and no simulated assigned verdict.
+Later approved operator queue/detail and exclusive claim work does not expand this
+workload's coverage or approve adjudication, reassignment, or financial effects.
 
-The organizer brief requires baseline and proposed system to run on the same
-held-out workload, including failures, case mix, label quality, model/prompt
-versions, and repeated-run variability where relevant. It also requires evaluating
-at least one learned component against an appropriate baseline; training a new
-model is not mandatory. For this project, the pretrained agent's dispute intent,
-tool selection, and workflow behavior are the learned-component evaluation target.
+## Offline comparator and scoring
 
-The legacy `run_held_out_eval.py` baseline is a policy simulation derived from each scenario's
-`expected_outcome`, with safe denials inherited and unsafe outcomes set to false.
-It is not an independently executed baseline and cannot establish measured safety,
-latency, cost, or improvement over customer support. Implement and freeze an
-executable, justified rules-based intake/routing comparator, with the same permitted
-facts, business approval constraints, fixtures, workload, and outcome checks as the
-proposed agent. A same-model ablation is a separate optional diagnostic, not a
-replacement for the main workflow comparison.
+[run_dispute_replay.py](run_dispute_replay.py) implements finite-state intake from
+customer turns and synthetic MCP replies, not expected labels. Separate transaction
+confirmation precedes opening; explicit consent precedes approval. Its narrow
+en/es/pt grammar and dollar-prefixed amounts do not prove general language understanding.
+[dispute_replay.py](dispute_replay.py) validates response models and checks complete
+turns, ordered tool arguments/results, consent, selection, status grounding, and
+unsupported actions. Financial-effect phrase checks are lexical, not semantic;
+negation and mixed clauses still require human review.
 
-The fraud-score threshold analysis is separate policy/signal evidence. Its tuned
-in-sample figures do not by themselves prove a held-out learned-component baseline
-comparison or improved dispute resolution. Do not change production triage policy
-to satisfy this evaluation requirement.
-
-| Surface                                                                        | Existing coverage                                                                         | What it does not establish                                                        |
-| ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| [Service tests](../app/business-api/transaction/tests/test_dispute_service.py) | Deterministic seeded-fixture checks for lifecycle, triage, ownership, and recommendations | Real-model behavior or deployed PostgreSQL parity                                 |
-| [MCP replay cases](replay_cases.json)                                          | Three Account/Transaction smoke cases: balance, denial, and empty transactions            | Dispute intake, approval, escalation, or resolution                               |
-| [Held-out scenarios](scenarios.json)                                           | 18 dispute-focused scenario definitions across six categories                             | Executed proposed-system results or observed state transitions                    |
-| [Held-out runner](run_held_out_eval.py)                                        | Offline policy baseline and live-response collection                                      | Automatic verification of persisted states, approval events, or tool trajectories |
-
-The next quality priority is dispute-specific replay using the real workflow and
-model, with automatic checks over tool arguments, per-turn outputs, and approval
-boundaries. Real service authorization, persistence, and hosted continuation stay
-in a separate integration lane. No complete proposed-system dispute evaluation is
-verified yet.
-
-The reporting targets are Safe Automated Resolution, Containment, Escalation
-Quality, Unsafe Outcomes, and Operating Efficiency. The current runner calculates
-outcome metrics from policy labels or final-text heuristics; latency is collected
-for live runs. Model cost and verified workflow-state metrics remain pending.
-
-## Files
-
-- [`scenarios.json`](scenarios.json): 18 fixed cases (3 per category) across six
-  categories: normal resolution, ambiguous/unsupported, human-required,
-  adversarial, multilingual ambiguity, and workflow progression.
-- [`run_held_out_eval.py`](run_held_out_eval.py): computes the baseline offline (no
-  running services needed) and, when the local stack is up, sends proposed-system
-  turns through the Responses BFF. Hosted mode is an unverified direct diagnostic
-  path, not evidence of browser-to-BFF end-to-end behavior.
-
-## Dispute Replay
-
-[The dispute dataset](dispute_cases.json) contains 25 synthetic, development-exposed
-cases mapping all 18 original scenario IDs without replacing
-[the original scenarios](scenarios.json). It covers intake, explicit confirmation
-and consent, decline, triage outcomes, pre-checks, ownership denials, mixed-language
-input, service failure, status/timeline, and recommendation opt-out.
-
-[The comparator and runner](run_dispute_replay.py) execute a finite-state intake
-using customer turns and MCP replies, not outcome labels. Account number, merchant,
-and dollar amount identify a transaction; a separate confirmation precedes opening,
-and explicit approval or decline precedes the approval tool. Both paths use the same
-synthetic tool contracts and replies. The comparator uses a narrow English/Spanish/
-Portuguese grammar, requires a dollar-prefixed amount, and does not provide the
-agent's general language understanding or Account-tool routing. These limitations,
-the exposed case set, and exact reason/call matching prevent an unseen-quality claim.
-Reserve untouched confirmation cases before tuning or claiming generalization.
-
-Run these credential-free commands from the repository root:
+Run from repository root using the existing agent uv environment:
 
 ```powershell
-uv run --project app/agent python -m pytest app/agent/tests/test_dispute_replay.py app/agent/tests/test_mcp_replay.py -q
-uv run --project app/agent python evals/run_dispute_replay.py --system baseline --timeout-seconds 10
-uv run --project app/agent python evals/run_dispute_replay.py --rescore evals/results/dispute-baseline.json
+$env:PYTHONPATH = (Get-Location).Path
+$env:OTEL_SDK_DISABLED = "true"
+rtk proxy uv run --project app\agent --frozen --no-sync python -m pytest evals\tests -q --tb=short
+rtk proxy uv run --project app\agent --frozen --no-sync python evals\run_dispute_replay.py --system baseline --timeout-seconds 10 --output evals\results\dispute-alignment-baseline.json
+rtk proxy uv run --project app\agent --frozen --no-sync python evals\run_dispute_replay.py --rescore evals\results\dispute-alignment-baseline.json --output evals\results\dispute-alignment-rescored.json
 ```
 
-The last verified offline run passed all 25 structured cases. Local regressions
-passed 32 replay checks and 27 Transaction service/contract checks. SQLite service
-tests independently exercise threshold boundaries, repeated approval rejection,
-ownership, and event order. Local FastMCP discovery checks compare tool declarations
-and input schemas; production response models validate fixture outputs. Neither
-test lane proves deployed tool parity or PostgreSQL persistence.
-
-After explicit model-run authorization, the proposed path accepts `--system proposed`,
-`--project-endpoint`, and `--model`. It constructs the production workflow with
-synthetic signed identity and retains one session per multi-turn case. It does not
-start services, deploy, or submit remote Foundry evaluations. Default outputs are
-ignored `evals/results/dispute-baseline.json` and `dispute-proposed.json`, with
-Markdown and JUnit siblings. Use unique `--output` paths to retain repeated runs.
-
-Compare saved proposed evidence without a new model call:
+Verified locally: **25 tests passed**, offline comparator **25/25 structured passes**,
+and saved-evidence rescoring **25/25 passes**. These are synthetic results only.
+The existing replay tests now bind paired fixtures to the current scorer and frozen
+expanded inputs, reject missing/stale fingerprints, and check controlled nested
+errors without retaining arbitrary exception text. The combined offline regression
+command passed **57 tests** (32 existing replay tests and 25 alignment tests):
 
 ```powershell
-uv run --project app/agent python evals/run_dispute_replay.py --rescore evals/results/dispute-proposed.json --compare-baseline evals/results/dispute-baseline.json --output evals/results/dispute-paired.json
+rtk proxy uv run --project app\agent --frozen --no-sync python -m pytest app\agent\tests\test_dispute_replay.py app\agent\tests\test_mcp_replay.py evals\tests -q --tb=short
 ```
 
-[Structured scoring](dispute_replay.py) checks complete turns, tool arguments and
-returned replies, turn attribution, consent/selection ordering, denial handling,
-canonical status grounding, and unsupported actions. Saved reports are rescored;
-dataset hash, workload IDs, and locale must match. Reports include runtime, model,
-prompt, contract, comparator, and scorer fingerprints, per-turn answers/responses,
-timing, controlled failures, and sanitized evidence. Incomplete or invalid case
-timing is unavailable and excluded from percentiles, never counted as zero.
-Execution failures can lose
-partial transcripts. Semantic and locale review, complete usage/pricing, repeated-run
-variability, and independently verified safe-resolution metrics remain pending.
-Review every transcript of the first authorized real-model dispute run.
+The comparator's 25/25 is synthetic comparator completion, not model-quality evidence.
+These are historical session results recorded before subsequent operator/model-contract
+changes, not a rerun against the current worktree. Validate the freeze before reuse.
 
-[Hosted Agent CI](../.github/workflows/ci-hosted-agent.yml) now also configures a
-credential-free `dispute-offline` job: focused tests, all 25 baseline cases,
-saved-report rescoring, Markdown summary, and 14-day artifacts. It has a 10-minute
-job bound and 10-second case timeout. No dispute model gate or branch protection
-was configured or executed; choose its workload and billable budget separately.
-Local YAML structure checks passed; actionlint was unavailable in this session.
+## Consultation safeguards and session evidence
 
-## Isolated MCP Replay
+Existing-case inquiries are read-only. Triage routes case lists, status, timelines,
+and follow-ups to Transaction. Use customer/tool-supplied IDs, request selection for
+ambiguous references rather than choosing the newest case, refresh detail on status
+follow-ups, and read timeline events for event questions. Empty lists are truthful;
+missing and foreign cases remain equivalently unavailable. Consent or IN_REVIEW
+never establishes operator takeover or a verdict. User-facing prose follows the
+signed locale; underscore/hyphen machine codes remain unchanged.
 
-[`mcp_replay.py`](mcp_replay.py) runs separate Account and Transaction MCP servers
-over SDK memory sessions. [`run_mcp_replay.py`](run_mcp_replay.py) injects those
-sessions into the existing workflow and uses a real Foundry model. No business
-API, BFF, database, production identity secret, or application JWT is required.
-Model access still requires Azure authentication and incurs model usage.
-Production callers keep their HTTP transports and authentication unchanged.
+Historical session validation recorded:
 
-```mermaid
-flowchart LR
-  Runner[Replay runner] --> Workflow[Production handoff workflow]
-  Workflow --> Model[Real Foundry model]
-  Workflow --> Account[In-memory Account MCP]
-  Workflow --> Transaction[In-memory Transaction MCP]
-```
+| Focused command from repository root                                                                          | Result    | Evidence boundary                                                |
+| ------------------------------------------------------------------------------------------------------------- | --------- | ---------------------------------------------------------------- |
+| `rtk proxy uv run --directory app\responses-bff pytest tests\test_responses.py -q`                            | 23 passed | Mock Identity/upstream continuation and staff-denial regressions |
+| `rtk proxy uv run --directory app\agent python -m pytest tests\test_hosted_workflow.py -q`                    | 16 passed | Instruction-contract and mocked workflow checks                  |
+| `rtk proxy uv run --directory app\business-api\transaction python -m pytest tests\test_dispute_service.py -q` | 43 passed | Seeded SQLite lifecycle/ownership checks                         |
 
-Run the offline protocol checks from the repository root:
+The agent command used repository-root PYTHONPATH and OTEL_SDK_DISABLED=true.
+Continuation tests re-introspected Identity and stopped revoked/version/role changes
+or outages before a second agent request; operator/admin denial made zero agent
+upstream calls. Instruction assertions prove safeguards are present, not real-model
+compliance. These results are not live service/authz, PostgreSQL parity, browser,
+locale-quality, or hosted-transport acceptance; no such run was performed for this
+documentation update.
 
-```powershell
-uv run --project app/agent python -m pytest app/agent/tests/test_mcp_replay.py -q
-```
+[Hosted Agent CI](../.github/workflows/ci-hosted-agent.yml) configures offline dispute
+tests, comparator execution, separate rescoring artifacts, and 14-day retention.
+Configuration is not proof of a successful CI run.
 
-For an explicitly requested model run, use an existing Azure CLI login with model
-access and supply the project endpoint and deployment name:
+## Evidence and paired reporting
 
-```powershell
-uv run --project app/agent python evals/run_mcp_replay.py --project-endpoint https://ACCOUNT.services.ai.azure.com/api/projects/PROJECT --model gpt-4.1-mini
-```
+Default artifact names include timestamp/UUID. Occupied explicit paths are redirected
+to unused names, including JSON/Markdown/JUnit sibling collisions. Use the printed
+saved path rather than assuming overwrite. Complete redacted answers, SDK responses,
+stream updates, ordered calls, pending turns, unused replies, timeout evidence, and
+nested controlled failures are retained. Credential-like keys and token/secret
+strings are removed; nonsecret text is not truncated. Inspect redaction before sharing.
 
-`--case REPLAY-ACCOUNT-1` selects one case; repeat it for multiple cases.
-`--timeout-seconds` defaults to 120 per case. `--output` defaults to the ignored
-`evals/results/mcp-replay.json`; subsequent runs overwrite that path unless a
-different output is supplied. The CLI does not start services or create Foundry
-evaluations/runs. Its Azure credential is model-only; the workflow receives a
-synthetic signed identity and an isolated synthetic signing secret.
+Saved proposed evidence supports offline --rescore and --compare-baseline. Pairing
+requires identical frozen expanded inputs, dataset hash, case IDs/locales, and
+current scorer fingerprint. Reports include model, prompt, comparator, contract,
+and runtime metadata. Structured wins/ties/losses and failures are reported; a tie
+can mean both failed. Only completed valid nonfailed timings enter percentiles.
+Missing, negative, Boolean, NaN/infinite, incomplete, or failed timing is excluded,
+not zero. No prices are assumed; cost and safe-resolution economics are unavailable.
+Pairing does not establish semantics, locale quality, real authorization, persisted
+effects, or improvement over human operations.
 
-[`replay_cases.json`](replay_cases.json) contains three synthetic cases: a balance
-lookup, an ownership-denial response, and an empty transaction lookup. These are
-not the 18 real-data held-out cases. The recorder stores the complete SDK response,
-final answer, ordered cross-server calls, fixture failures, unused replies, and
-nested error causes. Unexpected calls or unused replies fail the protocol check;
-an empty answer or a lifecycle error also fails. `protocol_passed` does not grade
-grounding, locale, or business behavior: compare the complete transcript with
-`expected_behavior` before marking `behavior_review` complete.
+Proposed dispute replay calls a real model through in-memory MCP sessions and needs
+explicit endpoint/model and billable-run authorization. No model run was executed
+for this offline alignment.
 
-Tool names/descriptions and supported string/boolean schemas are derived from
-production declarations without importing database services. This is not yet an
-independent comparison against the deployed FastMCP `tools/list` response, and
-fixture outputs are synthetic rather than validated database records. Model
-routing can vary; exact expected call sequences intentionally expose deviations.
+## Identity fixture boundaries
 
-Every report carries `offline_or_simulated: true`, even when model execution is
-real. A canned ownership denial tests the model's reaction, not service-layer
-authorization. Keep real BFF/identity, PostgreSQL parity, dispute policy, and
-hosted end-to-end verification in a separate integration/authz lane.
+Synthetic customer metadata carries role=customer and strict positive integer
+identity_version=1. It is not a JWT. The signed agent envelope contains only sub,
+customer_id, email, and locale; its v1 format is independent of JWT identity version.
+Production JWTs additionally require role/version, issuer, audience, expiry, and
+introspection checks. Offline fixtures prove no crypto, revocation/introspection,
+role enforcement, service ownership, or BFF/hosted identity transport.
 
-### Foundry Display Names
+## Isolated MCP replay
 
-Use the reference repository's agent-first display-name convention:
+[mcp_replay.py](mcp_replay.py), [run_mcp_replay.py](run_mcp_replay.py), and
+[replay_cases.json](replay_cases.json) exercise three synthetic balance, canned-denial,
+and empty-transaction protocol cases using the production workflow and real model.
+They do not test disputes or real service authorization. Caller-supplied sessions
+stay separate from production HTTP/header providers. Full evidence and controlled
+failures are retained; behavioral review is separate from protocol passes.
 
-- Evaluation: `<agent-id>-<lane>-eval`.
-- Run: `<evaluation-name> run`.
+## PR smoke check
 
-The reference trace lane uses `<agent-name>:<version>-trace-eval`. Replay uses
-`home-banking-agent-mcp-replay-eval` because it constructs the local workflow,
-not a deployed agent version. These are display names, not service-generated IDs.
-The local report records both names but remains `foundry_submission: not_submitted`.
-Existing remote objects and the native azd evaluation recipe are unchanged.
+[replay_summary.py](replay_summary.py) rejects missing/partial reports, duplicate
+cases, protocol errors, unused replies, and missing transcript/answer evidence.
+CI uses Development OIDC for same-repository PRs to main/develop, retains 14-day
+artifacts, and publishes controlled statuses in a persistent PR comment. Fork model
+replay is explicitly not executed. This is not a dispute quality/authz gate.
+Historical [CI run 37089481802](https://github.com/cristofima/factored-hackathon-2026-cristopher-coronado/actions/runs/37089481802)
+verified offline tests, PR/OIDC/real-model execution, artifact upload and PR reporting
+at commit f08d6aa2494e619df96883761f7cf73fa8e9c4cd: all three cases passed protocol
+checks. It did not validate the v2 dispute alignment or current worktree, semantics,
+real ownership, business approval, persistence, or hosted identity transport.
+No runner creates a remote Foundry evaluation; local display names are not remote IDs.
 
-### Verification Status
+## Historical diagnostics
 
-Twenty offline replay/report tests passed in the CI implementation session. A
-real-model run and manual behavioral review remain pending; offline tests do not
-establish measured agent quality.
+[scenarios.json](scenarios.json) preserves 18 **historical obsolete-policy** diagnostic
+definitions. [run_held_out_eval.py](run_held_out_eval.py) keeps its label-derived
+baseline and keyword classifier for historical diagnostics only. Obsolete automatic
+resolution labels are not current acceptance expectations. Full redacted per-turn
+responses are retained, and execution continues after controlled failures.
+Local live mode requires an explicitly supplied password and an existing BFF stack;
+hosted direct mode is diagnostic, not browser/BFF topology acceptance. Neither live
+mode ran for this alignment. Historical numbers are not v2 results.
 
-### PR Smoke Check
+## Remaining acceptance gates
 
-[Hosted Agent CI](../.github/workflows/ci-hosted-agent.yml) runs the three committed
-smoke cases after offline tests for same-repository PRs targeting `main` or
-`develop`. Changes to the replay harness and MCP tool contracts also trigger it.
-It uses Azure OIDC in the `Development` environment, with `AZURE_CLIENT_ID`,
-`AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `FOUNDRY_PROJECT_ENDPOINT`, and
-`MODEL_DEPLOYMENT_NAME`. The federated identity needs access to the model; no
-production identity secrets, BFF, database, or real MCP service are used.
-
-[The report gate](replay_summary.py) rejects missing/invalid reports, empty or
-duplicate datasets, partial case execution, protocol errors, unused replies, and
-missing answer/transcript evidence. CI writes a job summary, updates one marked
-PR comment, and retains synthetic transcripts and reports as artifacts for 14
-days. The comment contains controlled statuses, not model answers or raw errors.
-The job has a 15-minute limit; superseded PR runs are cancelled. Fork PRs receive
-an explicit non-execution notice, without Azure credentials or write permissions.
-
-This is a protocol smoke check, not `eval-quality` or `eval-authz`. Branch protection,
-OIDC/model access, comment publication, and an actual PR run still require runtime
-verification. The workflow does not submit Foundry evaluation runs or measure
-dispute quality or baseline improvement.
-
-## Held-Out Status
-
-- **Baseline (offline, reproducible now):**
-
-  ```powershell
-  python evals/run_held_out_eval.py --system baseline
-  ```
-
-  Sample size 18, fully offline. Result as of 2026-10-01: Safe Automated Resolution
-  0.0 (the baseline never fast-tracks by design), Containment 0.667, Escalation
-  Quality 1.0, Unsafe Outcomes 0/18. This is a "triage disabled" policy: every
-  dispute either asks a clarifying question or escalates to the simulated human
-  reviewer; security/ownership denials and pre-check rejections are unaffected
-  because they sit outside the triage policy.
-
-- **Proposed system (not yet run):** requires the full local stack (Account,
-  Transaction, agent, BFF) already running, which this script does not start itself.
-  Run it with:
-
-  ```powershell
-  python evals/run_held_out_eval.py --system proposed --bff-base-url http://localhost:8080
-  ```
-
-  Real-data scenarios tagged `requires_dispute_window_fix: true` are blocked at the dispute-window
-  pre-check regardless of agent behavior, because the loaded cohort's most recent
-  transaction is already outside the live `DISPUTE_WINDOW_DAYS=90` check against the
-  real clock. That is an expected, documented rejection, not an evaluation harness
-  bug.
-
-- **Classification caveat:** `_classify_response` in `run_held_out_eval.py` is a
-  keyword heuristic over only the last turn's final text, not a judge model or a
-  state-machine assertion. The runner retains only a 200-character snippet in
-  `detail`, not complete per-turn transcripts. It does not query persisted cases
-  or timelines. Expected status paths in the dataset are not observed transitions;
-  full transcript capture and independent state checks are required before citing
-  workflow-success numbers.
-
-## Labeling discipline
-
-Every number this script prints carries `sample_size` and `offline_or_simulated`.
-Never present the baseline numbers above as a measured production result, and never
-report proposed-system workflow numbers without executing the intended path,
-retaining complete transcripts, and verifying the expected service outcomes.
-Containment is not equivalent to resolution. The offline policy baseline is not a
-measured human-support operation; transaction activity does not establish dispute
-volume, support costs, or economic savings. Any business-impact estimate must state
-its assumptions separately from measured evaluation results.
-
-## Against the deployed hosted agent (`home-banking-agent`)
-
-A hosted deployment was confirmed in an earlier session, but deployment success
-does not prove identity transport, multi-turn continuation, or dispute correctness.
-The following records describe two attempted evaluation paths, not current verified
-quality results:
-
-- **Native (`azd ai agent eval`)**: blocked even for identity-independent prompts.
-  Tried against `app/agent/datasets/held-out-identity-independent.jsonl`
-  (the three `ambiguous_unsupported` cases, `AU-1`/`AU-2`/`AU-3`) via
-  `azd ai agent eval generate --agent home-banking-agent --dataset datasets/held-out-identity-independent.jsonl ...`
-  then `azd ai agent eval run` (the recipe and hand-written dataset live under
-  `app/agent/eval.yaml` and `app/agent/datasets/`; generated evaluators and
-  `.agent_configs/` are gitignored and must not be committed). Result: **3 total, 0 passed, 0 failed,
-  3 errored**. Root cause: every agent turn (not just tool calls) runs through
-  `UserProfileProvider`, which calls `get_internal_principal()` unconditionally; with no
-  `x-ms-user-identity` header, that raises before the agent produces any response.
-  `azd ai agent invoke`/`eval` has no flag to inject a custom header (only
-  `--user-isolation-key`/`--chat-isolation-key`, a different Foundry feature our agent
-  doesn't use), so this errors on _every_ scenario, not just ones needing real customer
-  data. Open the `Report:` URL the command prints for the raw per-row error if you want
-  to confirm this directly in the portal.
-- **Custom (`--target hosted`)**: `run_held_out_eval.py --system proposed --target hosted`
-  bypasses the azd invoke path entirely and calls the deployed agent's `/responses`
-  endpoint directly, self-minting the same `x-ms-user-identity` envelope the BFF would
-  (`_sign_internal_identity`, mirroring `app/responses-bff/bff/internal_identity.py`
-  exactly) and fetching an AAD token via the already-logged-in `az` CLI
-  (`https://ai.azure.com` resource). This is an implemented attempt, not a verified
-  unblock: the signed hosted smoke returned HTTP 403 before the agent handler.
-  Hosted platform identity permissions and envelope compatibility remain unresolved.
-
-  Requires `INTERNAL_IDENTITY_SECRET` (the same value `cd-hosted-agent.yaml` deployed)
-  in your shell environment and an `az login` session with access to the
-  `foundry-development` project. **Set the secret yourself and run this directly in
-  your own terminal** — never paste it into chat or a shared terminal session:
-
-  ```powershell
-  $env:INTERNAL_IDENTITY_SECRET = "<value>"
-  python evals/run_held_out_eval.py --system proposed --target hosted --only-category ambiguous_unsupported
-  ```
-
-  Secret parity alone does not establish hosted identity transport or clear the
-  independent database-migration gate. Once hosted identity is verified, the
-  scenario data dependencies are:
-  - **Clean, no DB dependency (5):** `AU-1`/`AU-2`/`AU-3` (no tool call needed at all)
-    and `ML-2`/`ML-3` (response locale comes from the self-minted envelope's `locale`
-    claim, never a DB lookup). These still require a successful hosted turn before
-    their results can be cited.
-  - **Runs, but weak evidence until the DB has real data (3):** `AD-1`/`AD-2`/`AD-3`.
-    With an empty deployed Postgres, any cross-customer lookup returns "not found"
-    regardless of ownership enforcement, so a "denied" result here doesn't yet prove
-    IDOR protection against a resource that actually exists for another customer.
-  - **Still blocked either way (10):** `NR-1`/`NR-2`/`NR-3`, `HR-1`/`HR-2`/`HR-3`,
-    `ML-1`, `WP-1`/`WP-2`/`WP-3` — all need a real, persisted transaction/product/
-    customer row the agent can actually find and act on.
-
-  `WP-*` also has a second, independent caveat: multi-turn continuation against the
-  hosted endpoint is best-effort (it reuses whatever `conversation` value the response
-  body returns, if any) and hasn't been validated yet.
+- Assigned-operator adjudication: blocked pending its separately approved contract;
+  queue/claim approval is not verdict acceptance or replay coverage.
+- Real-model paired disputes, consultation behavior, semantic/locale review, and variability.
+- Live JWT role/version/introspection and real ownership/authz acceptance, separate
+  from the mocked/seeded regression results above.
+- Persisted case/event parity; financial effects are not implemented by these fixtures.
+- Browser/BFF and hosted identity/continuation evidence.
+- Untouched external confirmation workload and priced usage/cost evidence.
