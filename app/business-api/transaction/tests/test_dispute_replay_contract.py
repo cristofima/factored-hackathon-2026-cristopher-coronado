@@ -5,7 +5,6 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 import runpy
-import sys
 from typing import Annotated, Any
 from unittest.mock import MagicMock
 
@@ -13,18 +12,17 @@ from fastmcp import Client, FastMCP
 from fastmcp.server.dependencies import CurrentHeaders
 import pytest
 
-from models import DisputeCase, DisputeCaseEvent
+from banking_transaction.models.transactions import DisputeCase, DisputeCaseEvent
+
+from banking_evals.mcp_replay import load_contracts
 
 ROOT = Path(__file__).resolve().parents[4]
-sys.path.insert(0, str(ROOT))
-
-from evals.mcp_replay import load_contracts
 
 
 @pytest.mark.asyncio
 async def test_replay_schemas_match_independent_fastmcp_discovery() -> None:
     for name in ("account", "transaction"):
-        source = ROOT / "app/business-api" / name / "mcp_tools.py"
+        source = ROOT / "app" / "business-api" / name / "src" / f"banking_{name}" / "mcp_tools.py"
         tree = ast.parse(source.read_text(encoding="utf-8"))
         tree.body = [
             node for node in tree.body
@@ -36,7 +34,8 @@ async def test_replay_schemas_match_independent_fastmcp_discovery() -> None:
             "service": MagicMock(), "dispute_service": MagicMock(),
             "Annotated": Annotated, "Any": Any,
         }
-        namespace.update(runpy.run_path(str(source.with_name("models.py"))))
+        model_name = "products" if name == "account" else "transactions"
+        namespace.update(runpy.run_path(str(source.parent / "models" / f"{model_name}.py")))
         exec(compile(tree, str(source), "exec"), namespace)
         async with Client(server) as client:
             discovered = {tool.name: tool for tool in await client.list_tools()}

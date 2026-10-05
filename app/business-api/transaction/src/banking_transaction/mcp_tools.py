@@ -4,9 +4,9 @@ from starlette.concurrency import run_in_threadpool
 from fastmcp import FastMCP
 from fastmcp.server.dependencies import CurrentHeaders
 import logging
-from dispute_service import support_case_service_singleton as dispute_service
-from internal_identity import get_customer_id
-from services import transaction_service_singleton as service
+from banking_transaction.services.disputes import support_case_service_singleton as dispute_service
+from banking_transaction.auth.internal_identity import get_customer_id
+from banking_transaction.services.transactions import transaction_service_singleton as service
 
 logger = logging.getLogger(__name__)
 mcp = FastMCP("Transaction MCP Server")
@@ -147,5 +147,3 @@ def get_support_case_timeline(
     headers: dict[str, str] = CurrentHeaders(),
 ):
     return dispute_service.get_case_timeline(case_id, get_customer_id(headers))
-
-

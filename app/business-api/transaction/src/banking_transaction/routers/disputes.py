@@ -3,14 +3,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 import logging
 from typing import Annotated
 
-from dispute_service import (
+from banking_transaction.services.disputes import (
     ActiveDisputeError,
     CardOnlyDisputeError,
     support_case_service_singleton as service,
 )
-from jwt_identity import get_jwt_customer_id
-from dispute_preview import DisputePreviewError
-from models import (
+from banking_transaction.auth.jwt_identity import get_jwt_customer_id
+from banking_transaction.consent.preview import DisputePreviewError
+from banking_transaction.models.transactions import (
     AcceptDisputeRequest, DisputeApprovalRequest, DisputeCase, DisputePreview,
     OpenDisputeRequest, ResolveCaseRequest,
 )

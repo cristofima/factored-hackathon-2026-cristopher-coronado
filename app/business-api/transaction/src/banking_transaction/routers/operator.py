@@ -3,10 +3,10 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from operator_identity import OperatorPrincipal, get_operator_principal
-from adjudication import AdjudicationConflict
-from operator_models import AdjudicateRequest, CardProtectionRequest, RetryEffectsRequest, OperatorCaseDetail, OperatorCasePage
-from operator_service import (
+from banking_transaction.auth.operator_identity import OperatorPrincipal, get_operator_principal
+from banking_transaction.services.adjudication import AdjudicationConflict
+from banking_transaction.models.operator import AdjudicateRequest, CardProtectionRequest, RetryEffectsRequest, OperatorCaseDetail, OperatorCasePage
+from banking_transaction.services.operator import (
     OperatorClaimConflict, OperatorPersistenceUnavailable, operator_case_service as service,
 )
 

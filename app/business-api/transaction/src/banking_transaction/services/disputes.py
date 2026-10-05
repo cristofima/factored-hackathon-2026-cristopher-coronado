@@ -28,12 +28,12 @@ from banking_shared.models import (
     TransactionRecord,
 )
 from banking_shared.product_types import CARD_PRODUCT_TYPES
-from models import DisputeCase, DisputeCaseEvent, DisputePreview
-from dispute_preview import (
+from banking_transaction.models.transactions import DisputeCase, DisputeCaseEvent, DisputePreview
+from banking_transaction.consent.preview import (
     DisputePreviewError, configured_preview_secret, evidence_digest, issue_preview, read_preview,
 )
-from services import _to_transaction
-from case_projections import effects, protection as protection_details
+from banking_transaction.projections.transactions import to_transaction
+from banking_transaction.projections.cases import effects, protection as protection_details
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
@@ -75,6 +75,9 @@ class CardOnlyDisputeError(ValueError):
     """New disputes are restricted to debit and credit card transactions."""
 
 
+from banking_transaction.projections.cases import _to_dispute_case, _to_dispute_case_event
+
+
 class SupportCaseService:
     def __init__(
         self, session_factory: SessionFactory = create_session, preview_secret: str | None = None,
@@ -97,7 +100,7 @@ class SupportCaseService:
             )
             return DisputePreview(
                 previewToken=token, transactionId=transaction_id, reason=reason.strip(),
-                expiresAt=expires.isoformat(), transaction=_to_transaction(transaction, product),
+                expiresAt=expires.isoformat(), transaction=to_transaction(transaction, product),
             )
 
     def recover_transaction_dispute(
@@ -515,84 +518,3 @@ def _add_event(
 
 def _get_case_product(session: Session, case: SupportCase) -> Product | None:
     return session.get(Product, case.product_id)
-
-
-def _product_display_number(product: Product | None) -> str | None:
-    if product is None:
-        return None
-    product_number = product.product_number
-    if product.product_type in CARD_PRODUCT_TYPES and product_number and len(product_number) > 4:
-        return f"**** {product_number[-4:]}"
-    return product_number
-
-
-def _to_dispute_case(session: Session, case: SupportCase, product: Product | None) -> DisputeCase:
-    posting = session.exec(select(RuntimePosting).where(RuntimePosting.case_id == case.case_id)).first()
-    protection = session.get(CardProtection, case.product_id)
-    return DisputeCase(
-        caseId=case.case_id,
-        productNumber=_product_display_number(product),
-        transactionId=case.transaction_id,
-        reason=case.reason,
-        status=case.status,
-        triageOutcome=case.triage_outcome,
-        resolutionOutcome=case.resolution_outcome,
-        resolutionNotes=case.resolution_notes,
-        financialEffectsStatus="EXECUTED" if posting else ("PENDING" if case.status == "PENDING_EFFECTS" else "NOT_EXECUTED"),
-        cardProtectionStatus="BLOCKED" if protection and protection.blocked else "NOT_BLOCKED",
-        caseVersion=case.case_version,
-        verdict=case.verdict,
-        rationale=case.resolution_notes,
-        effectCode=case.effect_code,
-        effects=effects(session, case),
-        cardProtection=protection_details(session, case),
-        recommendationType=case.recommendation_type,
-        recommendationRationale=case.recommendation_rationale,
-        recommendationOptedOut=case.recommendation_opted_out,
-        openedAt=case.opened_at.isoformat(),
-        updatedAt=case.updated_at.isoformat(),
-        resolvedAt=case.resolved_at.isoformat() if case.resolved_at else None,
-    )
-
-
-def _to_dispute_case_event(event: SupportCaseEvent) -> DisputeCaseEvent:
-    legacy_messages = {
-        ("APPROVAL_REQUESTED", "system", "Customer confirmation required to proceed with the dispute and card block"):
-            "Customer confirmation requested for the persisted dispute workflow; "
-            "card protection and financial effects are not implemented",
-        ("APPROVAL_GRANTED", "customer", "Customer approved the dispute and card block"):
-            "Customer approved the dispute workflow; no card block or posting was performed",
-        ("FAST_TRACKED", "system", "Low fraud-risk score; fast-tracked without manual review"):
-            "Low stored fraud-risk score; rule-based fast-track, not a legitimacy verdict",
-        ("RESOLVED", "system", "Provisional credit issued; case resolved without manual review"):
-            "Case closed; no provisional credit, refund, balance change, or card protection was executed",
-    }
-    for outcome in FAVORABLE_RESOLUTION_OUTCOMES:
-        legacy_messages[("RESOLVED", "agent", f"Case resolved: {outcome}")] = (
-            "Case closed; no financial or card-protection effects were executed, "
-            "and no human verdict is recorded"
-        )
-    display_message = legacy_messages.get((event.event_type, event.actor, event.message), event.message)
-    legacy_review_prefixes = (
-        "Elevated fraud-risk score; routed to manual review",
-        "No fraud score available for this transaction; routed to manual review",
-    )
-    if event.event_type == "ESCALATED_TO_REVIEW" and event.actor == "system":
-        for prefix in legacy_review_prefixes:
-            suffix = event.message.removeprefix(prefix)
-            if event.message.startswith(prefix) and (
-                suffix == " (no agent available)"
-                or (suffix.startswith(" (assigned to agent ") and suffix.endswith(")"))
-            ):
-                display_message = (
-                    "Review routing and catalog assignment recorded; "
-                    "no human investigation or verdict is recorded"
-                )
-                break
-    return DisputeCaseEvent(
-        eventType=event.event_type,
-        actor=event.actor,
-        message=event.message,
-        displayMessage=display_message,
-        createdAt=event.created_at.isoformat(),
-    )

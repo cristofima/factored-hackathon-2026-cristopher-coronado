@@ -179,7 +179,7 @@ wheels = [
 [[package]]
 name = "banking-assistant-transaction-mcp"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "banking-shared", extra = ["telemetry"] },
     { name = "fastapi", extra = ["all"] },
@@ -193,6 +193,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "banking-evals" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
 ]
@@ -211,9 +212,31 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "banking-evals", editable = "../../../evals" },
     { name = "pytest", specifier = "==9.1.1" },
     { name = "pytest-asyncio", specifier = "==1.4.0" },
 ]
+
+[[package]]
+name = "banking-evals"
+version = "0.1.0"
+source = { editable = "../../../evals" }
+dependencies = [
+    { name = "httpx" },
+    { name = "mcp" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "banking-assistant-agent", marker = "extra == 'model'", editable = "../../agent" },
+    { name = "httpx", specifier = "==0.28.1" },
+    { name = "mcp", specifier = ">=1.24,<2" },
+    { name = "pydantic", specifier = ">=2,<3" },
+    { name = "pytest", marker = "extra == 'offline'", specifier = "==9.1.1" },
+    { name = "pytest-asyncio", marker = "extra == 'offline'", specifier = "==1.4.0" },
+]
+provides-extras = ["offline", "model"]
 
 [[package]]
 name = "banking-shared"

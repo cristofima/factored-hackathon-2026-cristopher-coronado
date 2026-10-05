@@ -8,7 +8,7 @@ import time
 
 import pytest
 
-from internal_identity import get_customer_id
+from banking_transaction.auth.internal_identity import get_customer_id
 
 
 TEST_SECRET = "test-internal-identity-secret-32-bytes"

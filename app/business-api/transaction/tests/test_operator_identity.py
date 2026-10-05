@@ -7,8 +7,8 @@ import jwt
 import pytest
 from fastapi import FastAPI, HTTPException
 
-import operator_identity
-import operator_routers
+from banking_transaction.auth import operator_identity
+from banking_transaction.routers import operator as operator_routers
 
 SECRET = "synthetic-operator-signing-secret-32-bytes"
 pytestmark = pytest.mark.asyncio
@@ -63,7 +63,7 @@ async def test_every_operator_endpoint_introspects_each_request(monkeypatch: pyt
         # Validation still runs for all three routes before resource/service access.
         for path, method in [("?limit=0", "GET"), ("/missing", "GET"), ("/missing/claim", "POST")]:
             monkeypatch.setattr(operator_routers.service, "get_case", lambda *args: (_ for _ in ()).throw(LookupError()))
-            from operator_service import OperatorClaimConflict
+            from banking_transaction.services.operator import OperatorClaimConflict
             monkeypatch.setattr(operator_routers.service, "claim_case", lambda *args: (_ for _ in ()).throw(OperatorClaimConflict()))
             await client.request(method, "/api/operator/support-cases" + path, headers={"Authorization": "Bearer " + token})
     assert len(calls) == 3

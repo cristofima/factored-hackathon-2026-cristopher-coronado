@@ -94,4 +94,3 @@ class DisputeApprovalRequest(BaseModel):
 class ResolveCaseRequest(BaseModel):
     resolutionOutcome: str
     resolutionNotes: Optional[str] = None
-

@@ -6,14 +6,14 @@ from typing import Literal
 from banking_shared.database import create_session
 from banking_shared.identity_models import Operator
 from banking_shared.models import CardProtection, Customer, Product, SupportCase, SupportCaseEvent
-from adjudication import AdjudicationConflict, advance, audit, capture_evidence, destinations, execute_effects, owned_case, source_snapshot
+from banking_transaction.services.adjudication import AdjudicationConflict, advance, audit, capture_evidence, destinations, execute_effects, owned_case, source_snapshot
 from sqlalchemy import func, update
 from sqlalchemy.sql.elements import ColumnElement
 from sqlmodel import Session, select
 
-from case_projections import effects as _effects, protection as _protection, product_protection_status
-from operator_identity import OperatorPrincipal
-from operator_models import AdjudicateRequest, CardProtectionRequest, OperatorCaseDetail, OperatorCaseEvent, OperatorCasePage, OperatorCaseSummary
+from banking_transaction.projections.cases import effects as _effects, protection as _protection, product_protection_status
+from banking_transaction.auth.operator_identity import OperatorPrincipal
+from banking_transaction.models.operator import AdjudicateRequest, CardProtectionRequest, OperatorCaseDetail, OperatorCaseEvent, OperatorCasePage, OperatorCaseSummary
 
 
 class OperatorPersistenceUnavailable(RuntimeError):

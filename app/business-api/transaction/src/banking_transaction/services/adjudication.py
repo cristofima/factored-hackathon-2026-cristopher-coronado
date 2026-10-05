@@ -8,7 +8,7 @@ from banking_shared.runtime import effective_balance
 from banking_shared.identity_models import Operator
 from sqlmodel import Session, select
 
-from operator_identity import OperatorPrincipal
+from banking_transaction.auth.operator_identity import OperatorPrincipal
 
 
 class AdjudicationConflict(ValueError):

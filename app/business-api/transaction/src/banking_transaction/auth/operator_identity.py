@@ -9,7 +9,7 @@ import httpx
 import jwt
 from fastapi import Header, HTTPException
 
-from jwt_identity import _auth_client, _invalid, _unavailable
+from banking_transaction.auth.jwt_identity import _auth_client, _invalid, _unavailable
 
 
 @dataclass(frozen=True)
