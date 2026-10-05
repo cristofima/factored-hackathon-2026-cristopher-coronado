@@ -475,6 +475,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "banking-evals", extra = ["offline"], marker = "sys_platform != 'emscripten'" },
     { name = "pytest", marker = "sys_platform != 'emscripten'" },
     { name = "pytest-asyncio", marker = "sys_platform != 'emscripten'" },
 ]
@@ -498,9 +499,37 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "banking-evals", extras = ["offline"], editable = "../../evals" },
     { name = "pytest", specifier = "==9.1.1" },
     { name = "pytest-asyncio", specifier = "==1.4.0" },
 ]
+
+[[package]]
+name = "banking-evals"
+version = "0.1.0"
+source = { editable = "../../evals" }
+dependencies = [
+    { name = "httpx", marker = "sys_platform != 'emscripten'" },
+    { name = "mcp", marker = "sys_platform != 'emscripten'" },
+    { name = "pydantic", marker = "sys_platform != 'emscripten'" },
+]
+
+[package.optional-dependencies]
+offline = [
+    { name = "pytest", marker = "sys_platform != 'emscripten'" },
+    { name = "pytest-asyncio", marker = "sys_platform != 'emscripten'" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "banking-assistant-agent", marker = "extra == 'model'", editable = "." },
+    { name = "httpx", specifier = "==0.28.1" },
+    { name = "mcp", specifier = ">=1.24,<2" },
+    { name = "pydantic", specifier = ">=2,<3" },
+    { name = "pytest", marker = "extra == 'offline'", specifier = "==9.1.1" },
+    { name = "pytest-asyncio", marker = "extra == 'offline'", specifier = "==1.4.0" },
+]
+provides-extras = ["offline", "model"]
 
 [[package]]
 name = "certifi"

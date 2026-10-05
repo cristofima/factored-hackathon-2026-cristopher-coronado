@@ -9,8 +9,8 @@ import jwt
 import pytest
 from fastapi import FastAPI, HTTPException
 
-import dispute_routers
-import jwt_identity
+from banking_transaction.routers import disputes as dispute_routers
+from banking_transaction.auth import jwt_identity
 
 pytestmark = pytest.mark.asyncio
 

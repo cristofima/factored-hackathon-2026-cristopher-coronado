@@ -4,10 +4,10 @@ from copy import deepcopy
 
 import pytest
 
-from evals.dispute_replay import (
+from banking_evals.dispute_replay import (
     DATASET, ROOT, expanded_fingerprint, fingerprint, load_cases, score_case,
 )
-from evals.run_dispute_replay import (
+from banking_evals.run_dispute_replay import (
     case_latency, compare_reports, execute_case, rescore, run_baseline, sanitize,
 )
 
@@ -133,7 +133,7 @@ async def test_paired_comparison_rescores_evidence_and_rejects_wrong_system() ->
     _, cases = load_cases()
     baseline = {
         "schema_version": 1, "system": "baseline", "dataset_sha256": fingerprint(DATASET),
-        "scorer_sha256": fingerprint(ROOT / "evals" / "dispute_replay.py"),
+        "scorer_sha256": fingerprint(ROOT / "evals" / "src" / "banking_evals" / "disputes" / "scoring.py"),
         "expanded_inputs_sha256": expanded_fingerprint(cases),
         "results": [await run_baseline(case) for case in cases],
     }

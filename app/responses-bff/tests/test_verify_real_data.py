@@ -8,6 +8,7 @@ import importlib.util
 import json
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 
 import pytest
 from banking_shared.models import Customer, Product, TransactionRecord
@@ -82,6 +83,27 @@ def test_missing_or_short_card_numbers_remain_unavailable(number: str | None) ->
                       customer_id="customer", product_type="Credit Card", currency="USD")
 
     assert verifier.card_expected(product)["number"] is None
+
+
+def test_nonempty_transaction_comparison_preserves_exact_decimal_amounts() -> None:
+    product = Product(
+        product_id="internal-product", product_number="1234567890",
+        customer_id="customer", product_type="Savings Account", currency="USD",
+    )
+    record = TransactionRecord(
+        transaction_id="transaction", product_id=product.product_id,
+        customer_id="customer", amount=Decimal("12.34"), currency="USD",
+        transaction_date=datetime(2026, 6, 1),
+    )
+    actual = SimpleNamespace(**verifier.transaction_expected(record, product))
+    evidence = verifier.Evidence({}, {})
+
+    verifier.compare_transactions(evidence, "transaction_rows", [actual], [record], product)
+
+    assert evidence.checks == {"transaction_rows": True, "transaction_amounts_exact": True}
+    actual.amount = 12.35
+    verifier.compare_transactions(evidence, "transaction_rows", [actual], [record], product)
+    assert evidence.checks == {"transaction_rows": False, "transaction_amounts_exact": False}
 
 
 def test_filter_calls_use_public_number() -> None:

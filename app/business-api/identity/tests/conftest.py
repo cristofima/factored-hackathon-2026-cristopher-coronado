@@ -10,7 +10,7 @@ from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from identity.main import create_app
-from identity.service import IdentityService
+from identity.services.service import IdentityService
 from identity.settings import Settings
 from banking_shared import Customer, CustomerUser, Operator, Role, User, UserRole
 

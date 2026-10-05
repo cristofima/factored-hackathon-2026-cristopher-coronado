@@ -8,6 +8,26 @@ The browser never receives Azure credentials. Financial reads go directly to Acc
 and Transaction with the same application JWT; staff roles cannot use those reads
 or customer chat.
 
+## Package and ownership
+
+The installed [bff package](src/bff/) resolves imports through installation, not
+repository-root `PYTHONPATH`. [main.py](src/bff/main.py) preserves the `bff.main:app`
+entrypoint and owns application/client/credential lifecycle.
+
+- [routers](src/bff/routers/) contains the allowlisted auth/admin HTTP facades and
+  Responses proxy composition.
+- [clients](src/bff/clients/) owns Identity HTTP requests, Azure credential creation,
+  and the single Responses send and upstream response cleanup.
+- [identity](src/bff/identity/) owns validated identity/API contracts, JWT validation
+  and uncached authentication dependencies, signed conversation binding, internal
+  identity envelopes, and verified downstream headers.
+- [config](src/bff/config/) owns settings and tracing configuration.
+
+The Responses router preserves local payload compatibility and raw streaming
+behavior. Effectful sends are never retried; pre-stream transport/credential failures
+expose controlled 503 errors. Cancellation still propagates after streaming begins,
+while cleanup closes the upstream response.
+
 ## Request Flow
 
 ```mermaid
@@ -74,8 +94,8 @@ unchanged.
 Run from the repository root using the ignored service `.env`:
 
 ```powershell
-uv sync --project "app\responses-bff"
-uv run --project "app\responses-bff" --env-file "app\responses-bff\.env" uvicorn bff.main:app --app-dir "app\responses-bff" --port 8080
+rtk proxy uv sync --project "app\responses-bff" --frozen
+rtk proxy uv run --project "app\responses-bff" --env-file "app\responses-bff\.env" uvicorn bff.main:app --port 8080
 ```
 
 Keep `JWT_SECRET_KEY`, `JWT_ISSUER`, `JWT_AUDIENCE`, and
@@ -138,8 +158,7 @@ correlated Application Insights spans still need a separate hosted validation.
 ## Validation and Limits
 
 ```powershell
-cd app/responses-bff
-uv run python -m pytest tests -q
+rtk proxy uv run --directory app\responses-bff python -m pytest tests -q
 ```
 
 Tests cover the database-free boundary, allowlisted Identity adapters, current-state

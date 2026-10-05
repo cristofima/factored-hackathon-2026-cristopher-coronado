@@ -31,7 +31,7 @@ services:
     language: python
     codeConfiguration:
       runtime: python_3_13
-      entryPoint: app/main_responses_host.py
+      entryPoint: src/app/main_responses_host.py
     uses:
       - ai-project
     kind: hosted

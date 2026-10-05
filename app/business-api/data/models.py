@@ -1,25 +1,2 @@
-from banking_shared.models import (
-    Branch,
-    Customer,
-    Product,
-    ProductMonthlySnapshot,
-    LegacyServiceAgent,
-    SQLModel,
-    SupportCase,
-    SupportCaseEvent,
-    TransactionRecord,
-    User,
-)
-
-__all__ = [
-    "Branch",
-    "Customer",
-    "Product",
-    "ProductMonthlySnapshot",
-    "SQLModel",
-    "LegacyServiceAgent",
-    "SupportCase",
-    "SupportCaseEvent",
-    "TransactionRecord",
-    "User",
-]
+"""Compatibility exports."""
+from banking_data.models import *  # noqa: F403

@@ -39,15 +39,15 @@ Keep the service's `pyproject.toml` and uv lock as the development source of tru
 regenerate artifacts rather than editing them manually. From repository root:
 
 ```powershell
-rtk proxy uv pip compile app\business-api\account\pyproject.toml --no-emit-package banking-shared -o app\business-api\account\requirements.txt
-rtk proxy uv pip compile app\business-api\transaction\pyproject.toml --no-emit-package banking-shared -o app\business-api\transaction\requirements.txt
+rtk proxy uv pip compile app\business-api\account\pyproject.toml --no-emit-package banking-shared --python-version 3.11 --python-platform x86_64-unknown-linux-gnu -o app\business-api\account\requirements.txt
+rtk proxy uv pip compile app\business-api\transaction\pyproject.toml --no-emit-package banking-shared --python-version 3.11 --python-platform x86_64-unknown-linux-gnu -o app\business-api\transaction\requirements.txt
 rtk proxy uv pip compile app\business-api\identity\pyproject.toml --no-emit-package banking-shared --python-version 3.11 --python-platform x86_64-unknown-linux-gnu -o app\business-api\identity\requirements.txt
 rtk proxy uv export --project app\responses-bff --no-dev --no-hashes --no-emit-project --no-emit-package banking-shared --output-file app\responses-bff\requirements.txt
 ```
 
 `--no-emit-package banking-shared` excludes machine-local editable paths. Root azd
-packaging hooks copy the shared package into isolated deployment zips and clean up
-those copies. Packaging does not migrate PostgreSQL, provision users, or verify
+packaging hooks stage each service's installed-layout package and the shared package
+from their `src` directories into isolated deployment zips, then clean up those copies. Packaging does not migrate PostgreSQL, provision users, or verify
 hosted startup. See the [BFF guide](../responses-bff/README.md) and
 [Identity CI/CD guide](./identity/README.md#cicd) for their deployment contracts.
 
@@ -77,29 +77,12 @@ Each service follows the same setup pattern. Navigate to the specific service di
 
 ### 1. Account Service Setup
 
-```powershell
-cd app/business-api/account
-```
-
-#### Install dependencies using uv and run
+Run from the repository root after configuring the service's own `.env`:
 
 ```powershell
-# Install uv if you don't have it
-pip install uv
-
-# Create a virtual environment
-uv venv
-
-# Activate the virtual environment
-.\.venv\Scripts\Activate.ps1
-
-# Install all dependencies
-uv sync
-
-# Run the Account MCP Server (FastAPI + MCP)
-
-$env:PROFILE="dev"
-python main.py
+rtk proxy uv sync --directory app\business-api\account --frozen --group dev
+$env:PROFILE = "dev"
+rtk proxy uv run --directory app\business-api\account --env-file .env python -m banking_account.main
 ```
 
 The Account service will be available at: **http://localhost:8070**
@@ -108,21 +91,12 @@ The Account service will be available at: **http://localhost:8070**
 
 ### 2. Transaction Service Setup
 
-```powershell
-cd app/business-api/transaction
-```
-
-#### Install dependencies and run
+Run from the repository root:
 
 ```powershell
-# Create virtual environment and install dependencies
-uv venv
-.\.venv\Scripts\Activate.ps1
-uv sync
-
-# Run the Transaction MCP Server (FastAPI + MCP)
-$env:PROFILE="dev"
-python main.py
+rtk proxy uv sync --directory app\business-api\transaction --frozen --group dev
+$env:PROFILE = "dev"
+rtk proxy uv run --directory app\business-api\transaction --env-file .env python -m banking_transaction.main
 ```
 
 The Transaction service will be available at: **http://localhost:8071**
@@ -134,8 +108,9 @@ Each service exposes two parallel surfaces that never share an auth mechanism:
 - **MCP tools** (`mcp_tools.py`), mounted at `/mcp`, called only by the Responses agent.
   They authenticate with `internal_identity.py`'s short-lived HMAC bearer, minted
   fresh per request from the BFF-verified identity the agent receives.
-- **REST endpoints** (`routers.py`, `dispute_routers.py`), mounted at `/api`, called
-  directly by the browser. They authenticate with `jwt_identity.py`'s
+- **REST endpoints** in [Account routers](account/src/banking_account/routers/)
+  and [Transaction routers](transaction/src/banking_transaction/routers/), mounted
+  at `/api`, called directly by the browser. Their `auth` packages authenticate with `jwt_identity.py`'s
   `get_jwt_customer_id`, which validates the application JWT Identity issues through
   the BFF at login (HS256, `JWT_SECRET_KEY`/`JWT_ISSUER`/`JWT_AUDIENCE`) and verifies
   active customer status and the current identity version through protected Identity
@@ -151,7 +126,7 @@ MCP tools:
 - **`getAccountsByUserName`** - Get all accounts for a specific user
 - **`getAccountDetails`** - Get account details and available payment methods
 - **`getRegisteredBeneficiary`** - Get registered beneficiaries for an account (unavailable for persisted products)
-- **`getCreditCards`** - Get the list of credit cards bound to an account
+- **`getCreditCards`** - Validate the requested account's ownership, then list the customer's credit cards; this does not establish a card/account financial linkage
 - **`getCardDetails`** - Get the details of a single credit card
 
 REST endpoints (`/api` prefix):
@@ -250,18 +225,34 @@ the Terraform startup-command correction requires provisioning, not just zip dep
 
 ## 📁 Service Structure
 
-Each service follows a consistent structure:
+Account and Transaction use installed packages, with responsibility-oriented
+subpackages rather than flat application modules:
 
-```
+```text
 service-name/
-├── main.py                 # FastMCP server entry point
-├── mcp_tools.py           # MCP tool definitions (@mcp.tool decorators)
-├── services.py            # Business logic and data access
-├── models.py              # Pydantic data models
-├── logging_config.py      # Logging configuration
-├── pyproject.toml         # Project dependencies
-├── uv.lock               # Lock file for reproducible builds
+├── src/package_name/
+│   ├── main.py             # FastAPI + FastMCP entry point
+│   ├── mcp_tools.py        # Thin tool definitions
+│   ├── models/             # API DTOs, separate from persistence tables
+│   ├── routers/            # REST boundaries
+│   ├── services/           # Business logic, ownership and orchestration
+│   ├── projections/        # Runtime-to-DTO projections
+│   ├── auth/               # Independent JWT and internal bearer contracts
+│   └── observability/      # Tracing and logging
+├── tests/
+├── pyproject.toml
+└── uv.lock
 ```
+
+Transaction additionally owns `consent` proposal helpers and separate dispute,
+operator and adjudication service modules. Shared owns canonical model families;
+Identity owns provisioning services; Data owns ingestion, analysis and snapshot
+packages. Keep package-qualified imports aligned with those responsibilities:
+for example, `banking_account.services.products` and
+`banking_transaction.services.disputes`. Install through each project's manifest;
+do not add `sys.path` or `PYTHONPATH` workarounds. Checkout CLI adapters delegate to
+the installed implementation. See the [architecture map](../../ARCHITECTURE.md) for
+exact package paths and the [project convention](../../AGENTS.md#python-package-convention).
 
 ## 🔌 Integration with Copilot
 
@@ -279,7 +270,8 @@ The copilot's active specialist agents use these tools to:
 - **Transaction Agent**: Search and retrieve transaction history
 
 Account and Transaction MCP endpoints require a short-lived bearer created by the
-Responses agent from BFF-verified identity. Their `services.py` methods enforce
+Responses agent from BFF-verified identity. The [Account services](account/src/banking_account/services/)
+and [Transaction services](transaction/src/banking_transaction/services/) enforce
 `customer_id` ownership through persisted product relationships and transaction-row
 filters before returning customer-owned resources. Keep those checks in the service layer;
 tool descriptions and agent instructions are not authorization boundaries.

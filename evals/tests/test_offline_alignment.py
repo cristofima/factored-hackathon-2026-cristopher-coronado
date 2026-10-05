@@ -9,9 +9,10 @@ from typing import Any
 
 import pytest
 
-from evals import dispute_replay as replay
-from evals import run_dispute_replay as runner
-from evals.evidence import (
+from banking_evals.disputes import dataset as replay
+from banking_evals.disputes.scoring import score_case
+from banking_evals import run_dispute_replay as runner
+from banking_evals.evidence import (
     available_output, controlled_error, customer_identity, financial_claim,
     register_result, sanitize, unique_output,
 )
@@ -25,7 +26,7 @@ def cases() -> list[dict[str, Any]]:
 def report(results: list[dict[str, Any]], system: str = "baseline") -> dict[str, Any]:
     return {"schema_version": 1, "system": system, "model": "synthetic-test-only",
             "dataset_sha256": replay.fingerprint(replay.DATASET),
-            "scorer_sha256": replay.fingerprint(replay.ROOT / "evals" / "dispute_replay.py"),
+            "scorer_sha256": replay.fingerprint(replay.ROOT / "evals" / "src" / "banking_evals" / "disputes" / "scoring.py"),
             "expanded_inputs_sha256": replay.expanded_fingerprint(replay.load_cases()[1]),
             "results": results}
 
@@ -36,7 +37,7 @@ async def test_all_25_cases_are_investigation_only(cases: list[dict[str, Any]]) 
     approved = []
     for case in cases:
         result = await runner.run_baseline(case)
-        assert replay.score_case(case, result)["passed"], case["id"]
+        assert score_case(case, result)["passed"], case["id"]
         for call in result["tool_calls"]:
             if call["tool"] == "reportTransactionDispute":
                 approved.append(call["result"])
@@ -136,7 +137,7 @@ async def test_timeout_retains_pending_answer(cases: list[dict[str, Any]]) -> No
     assert result["error"]["type"] == "TimeoutError"
     assert not result["turns"][0]["completed"]
     assert len(result["turns"][0]["final_answer"]) > 2000
-    assert not replay.score_case(cases[0], result)["passed"]
+    assert not score_case(cases[0], result)["passed"]
 
 
 @pytest.mark.asyncio
@@ -164,7 +165,7 @@ async def test_pair_counts_and_failure_latency(cases: list[dict[str, Any]]) -> N
 @pytest.mark.asyncio
 async def test_invalid_latency_excluded(value: object, cases: list[dict[str, Any]]) -> None:
     result = await runner.run_baseline(cases[0])
-    result["score"] = replay.score_case(cases[0], result)
+    result["score"] = score_case(cases[0], result)
     result["turns"][0]["latency_seconds"] = value
     assert runner.case_latency(result) is None
 
@@ -179,7 +180,8 @@ def test_collision_safe_output(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.mark.asyncio
 async def test_stream_failure_keeps_partial_evidence(monkeypatch: pytest.MonkeyPatch) -> None:
-    from evals import run_mcp_replay as mcp
+    pytest.importorskip("agent_framework")
+    from banking_evals.mcp import runner as mcp
 
     class Stream:
         async def __aiter__(self) -> Any:
@@ -210,7 +212,8 @@ async def test_stream_failure_keeps_partial_evidence(monkeypatch: pytest.MonkeyP
 @pytest.mark.asyncio
 async def test_completed_stream_uses_four_field_envelope(monkeypatch: pytest.MonkeyPatch) -> None:
     import base64
-    from evals import run_mcp_replay as mcp
+    pytest.importorskip("agent_framework")
+    from banking_evals.mcp import runner as mcp
 
     captured: list[dict[str, Any]] = []
 
@@ -249,7 +252,7 @@ async def test_completed_stream_uses_four_field_envelope(monkeypatch: pytest.Mon
 async def test_scorer_rejects_unsupported_effects(cases: list[dict[str, Any]]) -> None:
     result = await runner.run_baseline(cases[0])
     result["turns"][0]["final_answer"] += " Your card has been blocked."
-    assert not replay.score_case(cases[0], result)["passed"]
+    assert not score_case(cases[0], result)["passed"]
 
 
 def test_dependency_fingerprint_normalizes_line_endings(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -267,7 +270,7 @@ async def test_rescore_requires_expansion_and_records_current_scorer(
     evidence = report([await runner.run_baseline(case) for case in cases])
     evidence["scorer_sha256"] = "older-scorer"
     assert runner.rescore(evidence, cases, replay.fingerprint(replay.DATASET))
-    assert evidence["scorer_sha256"] == replay.fingerprint(replay.ROOT / "evals" / "dispute_replay.py")
+    assert evidence["scorer_sha256"] == replay.fingerprint(replay.ROOT / "evals" / "src" / "banking_evals" / "disputes" / "scoring.py")
     evidence.pop("expanded_inputs_sha256")
     with pytest.raises(ValueError, match="Expanded"):
         runner.rescore(evidence, cases, replay.fingerprint(replay.DATASET))
@@ -276,7 +279,7 @@ async def test_rescore_requires_expansion_and_records_current_scorer(
 @pytest.mark.asyncio
 async def test_failed_or_nested_error_timing_excluded(cases: list[dict[str, Any]]) -> None:
     result = await runner.run_baseline(cases[0])
-    result["score"] = replay.score_case(cases[0], result)
+    result["score"] = score_case(cases[0], result)
     result["turns"][0]["error"] = controlled_error(RuntimeError("private"))
     assert runner.case_latency(result) is None
     result["turns"][0].pop("error")
@@ -287,7 +290,7 @@ async def test_failed_or_nested_error_timing_excluded(cases: list[dict[str, Any]
 def test_historical_runner_retains_full_answer_and_continues_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from evals import run_held_out_eval as historical
+    from banking_evals.historical import diagnostic as historical
 
     answer = "Complete historical evidence " * 300
     calls: list[str] = []

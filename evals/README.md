@@ -8,7 +8,10 @@ development-exposed synthetic confirmation set, not untouched held-out evidence.
 expanded inputs, case count, and source dependencies. Dependency hashing normalizes
 CRLF to LF for portability; dataset hashing remains exact. The scoped
 `.gitattributes` rule keeps the frozen dataset checkout in LF on Windows too.
-Freeze revision 3 records the reviewed `dispute-consent-v3` expansion for pre-intake
+Freeze revision 4 records the approved `src` package relocation and responsibility
+splits, with transitive Agent/evaluation source membership enforced. It preserves both
+the exact dataset hash and revision-3 expanded-input hash. Revision 3 recorded the
+reviewed `dispute-consent-v3` expansion for pre-intake
 consent, production preview/location models, and asynchronous SDK tool invocation.
 Revision 2 previously reviewed additive ADR 0009 projections and unexecuted defaults.
 The 25 source scenarios, labels, dataset version, and exact dataset bytes remain
@@ -34,20 +37,31 @@ confirmation precedes a read-only preview; explicit consent binds that preview t
 acceptance directly into IN_REVIEW. Ambiguous consent creates no case. Legacy pending
 cases retain their approval/decline path. Its narrow
 en/es/pt grammar and dollar-prefixed amounts do not prove general language understanding.
-[dispute_replay.py](dispute_replay.py) validates response models and checks complete
+[dataset.py](src/banking_evals/disputes/dataset.py) validates response models and
+[scoring.py](src/banking_evals/disputes/scoring.py) checks complete
 turns, ordered tool arguments/results, consent, selection, status grounding, and
 unsupported actions. Financial-effect phrase checks are lexical, not semantic;
 negation and mixed clauses still require human review.
 
-Run from repository root using the existing agent uv environment:
+`banking-evals` installs from `src/banking_evals`. Dataset, scoring, report and
+baseline modules are separate from the opt-in model runner. The `offline` extra
+installs test tools without the Agent SDK; `model` explicitly installs the Agent.
+Legacy root scripts remain thin compatibility entrypoints, without path injection.
+
+Run from repository root:
 
 ```powershell
-$env:PYTHONPATH = (Get-Location).Path
-$env:OTEL_SDK_DISABLED = "true"
-rtk proxy uv run --project app\agent --frozen --no-sync python -m pytest evals\tests -q --tb=short
-rtk proxy uv run --project app\agent --frozen --no-sync python evals\run_dispute_replay.py --system baseline --timeout-seconds 10 --output evals\results\dispute-alignment-baseline.json
-rtk proxy uv run --project app\agent --frozen --no-sync python evals\run_dispute_replay.py --rescore evals\results\dispute-alignment-baseline.json --output evals\results\dispute-alignment-rescored.json
+rtk proxy uv run --project evals --extra offline python -m pytest evals\tests -q
+rtk proxy uv run --project evals --extra offline python -m banking_evals.run_dispute_replay --system baseline --timeout-seconds 10 --output evals\results\dispute-alignment-baseline.json
+rtk proxy uv run --project evals --extra offline python -m banking_evals.run_dispute_replay --rescore evals\results\dispute-alignment-baseline.json --output evals\results\dispute-alignment-rescored.json
 ```
+
+Installed commands are `banking-dispute-replay`, `banking-mcp-replay` and
+`banking-held-out-eval`. For use outside the checkout, set `BANKING_EVALS_ROOT` to
+its absolute path; fixtures and production contracts deliberately remain repository
+resources, not wheel data. The resolver rejects escaped or missing resources. Model
+execution requires `--extra model` and separate authorization; installation alone
+does not authorize billable runs.
 
 Verified locally: **25 tests passed**, offline comparator **25/25 structured passes**,
 and saved-evidence rescoring **25/25 passes**. These are synthetic results only.
@@ -64,7 +78,16 @@ The comparator's 25/25 is synthetic comparator completion, not model-quality evi
 These are historical session results recorded before subsequent operator/model-contract
 changes, not a rerun against the current worktree. Validate the freeze before reuse.
 
-## Current offline regression evidence
+## Migration offline regression evidence
+
+Revision 4 validation passed **48 tests with 3 optional SDK skips** in the standalone
+`offline` environment and **51 tests** in the Agent-backed environment. The Agent
+suite passed **164 tests** and the BFF suite passed **135 tests**. These overlapping
+suites are not additive coverage. All three wheels built successfully. Baseline and
+saved-evidence rescoring completed without model execution. This does not establish
+semantic quality, locale correctness, service authorization or live acceptance.
+
+## Historical offline regression evidence
 
 With freeze revision 3, the requested combined offline suites passed **77 tests**
 with no warnings reported. The run used repository-root `PYTHONPATH` and
@@ -159,7 +182,7 @@ role enforcement, service ownership, or BFF/hosted identity transport.
 
 ## Isolated MCP replay
 
-[mcp_replay.py](mcp_replay.py), [run_mcp_replay.py](run_mcp_replay.py), and
+[replay.py](src/banking_evals/mcp/replay.py), [run_mcp_replay.py](run_mcp_replay.py), and
 [replay_cases.json](replay_cases.json) exercise three synthetic balance, canned-denial,
 and empty-transaction protocol cases using the production workflow and real model.
 They do not test disputes or real service authorization. Caller-supplied sessions

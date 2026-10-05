@@ -37,4 +37,5 @@ jobs:
         with:
           project-path: app/business-api/account
           artifact-name: account-test-results
+          deployment-requirements: requirements.txt
           run-tests: "true"

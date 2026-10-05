@@ -6,13 +6,14 @@ on:
     paths:
       - "app/agent/**"
       - "!app/agent/**/*.md"
-      - "evals/**/*.py"
+      - "evals/**"
+      - "!evals/**/*.md"
       - "evals/dispute_freeze.json"
       - "evals/replay_cases.json"
       - "evals/dispute_cases.json"
-      - "app/business-api/account/mcp_tools.py"
-      - "app/business-api/transaction/mcp_tools.py"
-      - "app/business-api/transaction/models.py"
+      - "app/business-api/account/src/banking_account/mcp_tools.py"
+      - "app/business-api/transaction/src/banking_transaction/mcp_tools.py"
+      - "app/business-api/transaction/src/banking_transaction/models/**"
       - ".github/workflows/ci-hosted-agent.yml"
       - ".github/actions/ci-python/**"
   pull_request:
@@ -21,13 +22,14 @@ on:
     paths:
       - "app/agent/**"
       - "!app/agent/**/*.md"
-      - "evals/**/*.py"
+      - "evals/**"
+      - "!evals/**/*.md"
       - "evals/dispute_freeze.json"
       - "evals/replay_cases.json"
       - "evals/dispute_cases.json"
-      - "app/business-api/account/mcp_tools.py"
-      - "app/business-api/transaction/mcp_tools.py"
-      - "app/business-api/transaction/models.py"
+      - "app/business-api/account/src/banking_account/mcp_tools.py"
+      - "app/business-api/transaction/src/banking_transaction/mcp_tools.py"
+      - "app/business-api/transaction/src/banking_transaction/models/**"
       - ".github/workflows/ci-hosted-agent.yml"
       - ".github/actions/ci-python/**"
 
@@ -42,7 +44,6 @@ jobs:
     name: Build & Test (Hosted Agent)
     runs-on: ubuntu-latest
     env:
-      PYTHONPATH: ${{ github.workspace }}
       OTEL_SDK_DISABLED: "true"
     permissions:
       contents: read
@@ -61,7 +62,6 @@ jobs:
     permissions:
       contents: read
     env:
-      PYTHONPATH: ${{ github.workspace }}
       OTEL_SDK_DISABLED: "true"
     steps:
       - uses: actions/checkout@v7.0.1
@@ -76,9 +76,9 @@ jobs:
       - name: Run offline dispute alignment regressions
         run: uv run --project app/agent --frozen --no-sync python -m pytest evals/tests -q --junitxml=evals/results/dispute-tests.xml
       - name: Execute deterministic comparator
-        run: uv run --project app/agent --frozen --no-sync python evals/run_dispute_replay.py --system baseline --timeout-seconds 10 --output evals/results/dispute-baseline.json
+        run: uv run --project app/agent --frozen --no-sync python -m banking_evals.run_dispute_replay --system baseline --timeout-seconds 10 --output evals/results/dispute-baseline.json
       - name: Rescore saved evidence
-        run: uv run --project app/agent --frozen --no-sync python evals/run_dispute_replay.py --rescore evals/results/dispute-baseline.json --output evals/results/dispute-rescored.json
+        run: uv run --project app/agent --frozen --no-sync python -m banking_evals.run_dispute_replay --rescore evals/results/dispute-baseline.json --output evals/results/dispute-rescored.json
       - name: Publish structured summary
         if: always()
         shell: bash
@@ -152,7 +152,7 @@ jobs:
       - name: Run real-model replay
         shell: bash
         run: |
-          uv run --project app/agent --frozen --no-sync python evals/run_mcp_replay.py \
+          uv run --project app/agent --frozen --no-sync python -m banking_evals.run_mcp_replay \
             --project-endpoint "$FOUNDRY_PROJECT_ENDPOINT" --model "$MODEL_DEPLOYMENT_NAME" \
             --triage-model "$TRIAGE_MODEL_DEPLOYMENT_NAME" \
             --account-model "$ACCOUNT_MODEL_DEPLOYMENT_NAME" \
@@ -163,7 +163,7 @@ jobs:
         shell: bash
         run: |
           status=0
-          python evals/replay_summary.py --report evals/results/mcp-replay.json \
+          uv run --project app/agent --frozen --no-sync python -m banking_evals.replay_summary --report evals/results/mcp-replay.json \
             --dataset evals/replay_cases.json --output evals/results/replay-summary.md || status=$?
           cat evals/results/replay-summary.md >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"

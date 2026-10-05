@@ -9,7 +9,7 @@
       "name": "Account MCP: DEV (Python Main)",
       "type": "debugpy",
       "request": "launch",
-      "program": "main.py",
+      "module": "banking_account.main",
       "env": {
         "PROFILE": "dev"
       },
@@ -20,7 +20,7 @@
       "name": "Transaction MCP: DEV (Python Main)",
       "type": "debugpy",
       "request": "launch",
-      "program": "main.py",
+      "module": "banking_transaction.main",
       "env": {
         "PROFILE": "dev"
       },

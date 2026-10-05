@@ -64,7 +64,9 @@ REST routes. Current operators have a separate direct Transaction review surface
 consented available cases, exclusively assigned cases and owner-only detail.
 Identity authenticates and revalidates those operators; Transaction owns claim
 policy and audit. See the [Transaction guide](../transaction/README.md).
-Operator verdicts and reassignment remain unavailable.
+Assigned-operator verdicts and recorded effects are implemented in Transaction;
+reassignment remains out of scope. Implementation does not establish hosted or
+financial end-to-end acceptance.
 
 ## Configuration and local tooling
 
@@ -85,7 +87,8 @@ already-issued JWTs retain their original expiry.
 From repository root, only after authorizing stack startup:
 
 ```powershell
-uv run --project "app\business-api\identity" --env-file "app\business-api\identity\.env" uvicorn identity.main:create_app --factory --port 8090
+rtk proxy uv sync --directory app\business-api\identity --frozen --group dev
+rtk proxy uv run --project "app\business-api\identity" --env-file "app\business-api\identity\.env" uvicorn identity.main:create_app --factory --port 8090
 ```
 
 The local tasks load each consumer's ignored `.env`: Identity, Account,
@@ -145,10 +148,32 @@ identity is the operator-supplied bootstrap email, not a default or a seeded cus
 Never put passwords in source, command arguments, or a provisioning manifest.
 
 Provisioning order is explicit: approve target/backups and the legacy activation
-policy, apply [data migrations](../data/README.md#customer-and-identity-schema), run
+policy, apply [data migrations](../data/README.md#migration-prerequisites), run
 the existing `run_pipeline.py` only if the approved customer data needs loading,
 then separately seed selected customer users and bootstrap the first administrator.
 Ingestion never provisions users or an administrator automatically.
+
+## Package responsibilities
+
+- [services](src/identity/services/) contains identity operations, explicit administrator
+  bootstrap and customer demo provisioning.
+- [models](src/identity/models/) contains API and provisioning DTO schemas; persisted
+  tables remain owned by the shared package.
+- [main.py](src/identity/main.py) remains the application launch entrypoint.
+  [bootstrap.py](src/identity/bootstrap.py) retains the compatible module CLI;
+  the console command targets `identity.services.bootstrap:main`.
+
+## Explicit customer demo provisioning
+
+[provisioning.py](src/identity/services/provisioning.py) owns customer identity creation and
+refresh, role and association checks, Argon2 hashing, profile normalization and
+audits. Each explicit call commits the selected cohort once. Refresh rotates the
+credential and identity version; it is not a name-only repair.
+
+The compatible [Data CLI](../data/README.md#explicit-demo-identity-seeding) supplies
+environment inputs and writes a credential-free manifest. Normal ingestion and
+service startup never invoke provisioning. Database writes and seeding require
+separate explicit authorization.
 
 ## CI/CD
 
@@ -181,7 +206,7 @@ Regenerate the Oryx runtime artifact from the dependency manifest for Linux Pyth
 when dependencies change, using the repository's `uv pip compile` convention:
 
 ```powershell
-uv pip compile app\business-api\identity\pyproject.toml --no-emit-package banking-shared --python-version 3.11 --python-platform x86_64-unknown-linux-gnu -o app\business-api\identity\requirements.txt
+rtk proxy uv pip compile app\business-api\identity\pyproject.toml --no-emit-package banking-shared --python-version 3.11 --python-platform x86_64-unknown-linux-gnu -o app\business-api\identity\requirements.txt
 ```
 
 The excluded shared distribution is supplied as source by the packaging hooks;
@@ -192,11 +217,13 @@ PostgreSQL acceptance.
 ## Verification boundaries
 
 ```powershell
-uv run --directory app\business-api\identity --offline pytest -q --tb=short
+rtk proxy uv run --directory app\business-api\identity --offline python -m pytest -q --tb=short
 ```
 
 Synthetic tests cover roles, profiles, token version/revocation, fail-closed
-associations, lifecycle audit, and explicit bootstrap. Shared-schema migration tests
+associations, lifecycle audit, explicit bootstrap and
+[customer provisioning](tests/test_provisioning.py), including cohort commit and
+pre-session validation. Shared-schema migration tests
 live in [data tests](../data/tests/test_identity_migrations.py).
 
 Synthetic SQLite success is not PostgreSQL migration/backfill acceptance. Live

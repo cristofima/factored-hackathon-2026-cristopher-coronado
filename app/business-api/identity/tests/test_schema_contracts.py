@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session
 
 from banking_shared import Customer, Operator, Role, User, UserRole
-from identity.schemas import AdminBootstrap, OperatorCreate
+from identity.models.schemas import AdminBootstrap, OperatorCreate
 
 
 @pytest.mark.parametrize("field,value", [

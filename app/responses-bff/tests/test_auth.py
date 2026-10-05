@@ -11,7 +11,7 @@ import pytest
 from asgi_lifespan import LifespanManager
 
 from bff.main import create_app
-from bff.settings import Settings
+from bff.config.settings import Settings
 
 SECRET = "synthetic-signing-secret-at-least-32-bytes"
 

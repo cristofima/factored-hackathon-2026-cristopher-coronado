@@ -12,10 +12,10 @@ from agent_framework import (
 from agent_framework.foundry import FoundryChatClient
 
 from app.agents.azure_chat.hosted_workflow import _has_completed_agent_response
-from app.helpers.checkpointed_handoff import CheckpointedHandoffBuilder as HandoffBuilder
-from app.helpers.handoff_middleware import HandoffNarrationMiddleware
-from app.helpers.isolated_responses_host import IsolatedResponsesHostServer
-from app.helpers.no_history_provider import NoHistoryProvider
+from app.adapters.checkpointed_handoff import CheckpointedHandoffBuilder as HandoffBuilder
+from app.adapters.handoff_middleware import HandoffNarrationMiddleware
+from app.adapters.isolated_responses_host import IsolatedResponsesHostServer
+from app.adapters.no_history_provider import NoHistoryProvider
 
 
 @pytest.mark.parametrize("conversation_id", [None, "conversation-test"])

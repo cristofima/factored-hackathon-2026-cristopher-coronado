@@ -15,8 +15,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.common.internal_identity import create_mcp_authorization
-from app.helpers.user_profile_helper import UserProfileHelper
-from app.helpers.user_profile_provider import UserProfileProvider
+from app.context.user_profile_helper import UserProfileHelper
+from app.context.user_profile_provider import UserProfileProvider
 
 
 SECRET = "test-secret-key-with-at-least-32-bytes"

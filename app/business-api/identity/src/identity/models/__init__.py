@@ -1,0 +1,1 @@
+"""Identity models responsibilities."""

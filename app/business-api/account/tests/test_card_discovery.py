@@ -14,9 +14,9 @@ from fastmcp import Client
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, create_engine
 
-import internal_identity
-import mcp_tools
-from services import CardService
+from banking_account.auth import internal_identity
+from banking_account import mcp_tools
+from banking_account.services.products import CardService
 
 
 @pytest.fixture
@@ -84,10 +84,13 @@ def test_discovery_projects_current_card_status(
 ) -> None:
     _add_card(session_factory)
 
-    def blocked_projection(session: Session, product: Product) -> Product:
-        return product.model_copy(update={"product_status": "Blocked"})
+    def blocked_projection(
+        session: Session, products: list[Product], *, balances: bool = True,
+    ) -> list[Product]:
+        assert balances is False
+        return [product.model_copy(update={"product_status": "Blocked"}) for product in products]
 
-    monkeypatch.setattr("services.project_runtime", blocked_projection)
+    monkeypatch.setattr("banking_account.services.products.project_runtime_many", blocked_projection)
     result = CardService(session_factory).discover_cards_by_suffix("7036", "owner")
     assert result.candidates[0].status == "Blocked"
     assert result.candidates[0].lookup_product_number == "4111111111117036"

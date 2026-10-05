@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 def test_production_has_no_database_imports() -> None:
-    for path in (Path(__file__).parents[1] / "bff").glob("*.py"):
+    for path in (Path(__file__).parents[1] / "src" / "bff").rglob("*.py"):
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             modules: list[str] = []
             if isinstance(node, ast.ImportFrom):

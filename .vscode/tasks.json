@@ -36,7 +36,7 @@
     {
       "label": "run account mcp dev",
       "type": "shell",
-      "command": "uv run --env-file .env python main.py",
+      "command": "uv run --env-file .env python -m banking_account.main",
       "options": {
         "cwd": "${workspaceFolder}/app/business-api/account",
         "env": {
@@ -66,7 +66,7 @@
     {
       "label": "run transaction mcp dev",
       "type": "shell",
-      "command": "uv run --env-file .env python main.py",
+      "command": "uv run --env-file .env python -m banking_transaction.main",
       "options": {
         "cwd": "${workspaceFolder}/app/business-api/transaction",
         "env": {

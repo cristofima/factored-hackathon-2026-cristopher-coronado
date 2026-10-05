@@ -7,9 +7,9 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 from sqlmodel import Session, select
 
-from identity.bootstrap import bootstrap_admin
-from identity.schemas import AdminBootstrap
-from identity.service import IdentityService
+from identity.services.bootstrap import bootstrap_admin
+from identity.models.schemas import AdminBootstrap
+from identity.services.service import IdentityService
 from identity.settings import Settings
 from banking_shared import CustomerUser, IdentityAudit, Operator, Role, User, UserRole
 

@@ -7,7 +7,7 @@ from banking_shared.database import create_session
 from banking_shared.models import Customer, Product
 from sqlmodel import select
 
-from services import ACCOUNT_PRODUCT_TYPES, AccountService
+from banking_account.services.products import ACCOUNT_PRODUCT_TYPES, AccountService
 
 pytestmark = pytest.mark.skipif(
     not os.getenv("DATABASE_URL"),

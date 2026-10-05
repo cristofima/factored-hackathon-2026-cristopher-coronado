@@ -18,10 +18,10 @@ from fastapi.testclient import TestClient
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, create_engine, select
 
-import dispute_routers
-from dispute_service import CardOnlyDisputeError, SupportCaseService
-from models import DisputeCase
-from jwt_identity import get_jwt_customer_id
+from banking_transaction.routers import disputes as dispute_routers
+from banking_transaction.services.disputes import CardOnlyDisputeError, SupportCaseService
+from banking_transaction.models.transactions import DisputeCase
+from banking_transaction.auth.jwt_identity import get_jwt_customer_id
 
 NOW = datetime.now(timezone.utc)
 
@@ -669,14 +669,14 @@ def test_consent_acceptance_is_atomic_and_same_token_is_idempotent(
 
 @pytest.mark.parametrize("token", ["", "not-a-token", "a.b.c"])
 def test_invalid_preview_rejected(preview_service: SupportCaseService, token: str) -> None:
-    from dispute_preview import DisputePreviewError
+    from banking_transaction.consent.preview import DisputePreviewError
 
     with pytest.raises(DisputePreviewError):
         preview_service.accept_transaction_dispute(token, "customer-owned")
 
 
 def test_preview_is_customer_bound_and_tamper_resistant(preview_service: SupportCaseService) -> None:
-    from dispute_preview import DisputePreviewError
+    from banking_transaction.consent.preview import DisputePreviewError
 
     preview = preview_service.preview_transaction_dispute("tx-low-risk", "customer-owned", "Unrecognized")
     with pytest.raises(PermissionError):
@@ -689,7 +689,7 @@ def test_preview_is_customer_bound_and_tamper_resistant(preview_service: Support
 def test_changed_evidence_rejects_acceptance_without_writes(
     session_factory: Callable[[], Session], preview_service: SupportCaseService, field: str, value: Decimal,
 ) -> None:
-    from dispute_preview import DisputePreviewError
+    from banking_transaction.consent.preview import DisputePreviewError
 
     preview = preview_service.preview_transaction_dispute("tx-low-risk", "customer-owned", "Unrecognized")
     with session_factory() as session:
@@ -709,8 +709,7 @@ def test_acceptance_failure_rolls_back_case_and_events(
     session_factory: Callable[[], Session], preview_service: SupportCaseService,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import dispute_service
-
+    from banking_transaction.services import disputes as dispute_service
     preview = preview_service.preview_transaction_dispute("tx-low-risk", "customer-owned", "Unrecognized")
 
     def fail_approval(*args: object, **kwargs: object) -> None:
@@ -725,7 +724,7 @@ def test_acceptance_failure_rolls_back_case_and_events(
 
 
 def test_distinct_proposals_cannot_create_duplicate_active_cases(preview_service: SupportCaseService) -> None:
-    from dispute_service import ActiveDisputeError
+    from banking_transaction.services.disputes import ActiveDisputeError
 
     first = preview_service.preview_transaction_dispute("tx-low-risk", "customer-owned", "First reason")
     second = preview_service.preview_transaction_dispute("tx-low-risk", "customer-owned", "Second reason")
@@ -740,7 +739,7 @@ def test_preview_deadlines_reject_without_writes(
     preview_service: SupportCaseService, session_factory: Callable[[], Session], phase: str,
 ) -> None:
     import jwt
-    from dispute_preview import DisputePreviewError
+    from banking_transaction.consent.preview import DisputePreviewError
 
     preview = preview_service.preview_transaction_dispute("tx-low-risk", "customer-owned", "Reason")
     claims = jwt.decode(preview.previewToken, options={"verify_signature": False})
@@ -766,7 +765,7 @@ def test_malformed_signed_preview_claims_are_rejected(
     preview_service: SupportCaseService, field: str, value: object,
 ) -> None:
     import jwt
-    from dispute_preview import DisputePreviewError
+    from banking_transaction.consent.preview import DisputePreviewError
 
     preview = preview_service.preview_transaction_dispute("tx-low-risk", "customer-owned", "Reason")
     claims = jwt.decode(preview.previewToken, options={"verify_signature": False})
@@ -819,8 +818,7 @@ def test_mcp_sdk_preview_acceptance_and_recovery(
 ) -> None:
     import asyncio
     from fastmcp import Client
-    import mcp_tools
-
+    from banking_transaction import mcp_tools
     monkeypatch.setattr(mcp_tools, "dispute_service", preview_service)
     monkeypatch.setattr(mcp_tools, "get_customer_id", lambda headers: "customer-owned")
 

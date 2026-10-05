@@ -12,6 +12,34 @@ Registry, Cosmos DB, Key Vault, or Azure Search).
 > from the repository root for the App Service stack (`./azure.yaml`), and use
 > `--cwd app/agent` for hosted-agent operations (`./app/agent/azure.yaml`).
 
+## Python installed-package import errors
+
+After the package migration, a missing `banking_account`, `banking_transaction`,
+`identity`, `bff` or `app` import usually requires checking the selected service
+environment and installation, not restoring flat modules or changing `sys.path`.
+
+1. Select that project's `.venv` in VS Code and sync its frozen dependencies.
+   For example, from repository root:
+
+   ```powershell
+   rtk proxy uv sync --directory app\business-api\account --frozen --group dev
+   ```
+
+2. Use the package-qualified entrypoint from the
+   [Account](../app/business-api/account/README.md#package-layout-and-local-startup),
+   [Transaction](../app/business-api/transaction/README.md#package-layout-and-local-startup),
+   [Identity](../app/business-api/identity/README.md#configuration-and-local-tooling),
+   [BFF](../app/responses-bff/README.md) or [Agent](../app/agent/README.md#local-setup)
+   guide. Keep nested namespaces such as `banking_account.services.products`.
+3. For ZIP deployment, check that the root
+   [packaging hooks](../azure.yaml) staged the complete application package and
+   shared source. The old `main:app` target is not the migrated service entrypoint;
+   see [deployment startup targets](deployment-guide.md#python-package-staging-and-startup).
+
+Do not use `PYTHONPATH`, copy compatibility modules into `src`, or flatten
+responsibility subpackages to mask an installation error. Offline package checks
+and local endpoint checks do not establish chatbot or hosted acceptance.
+
 ## ⚡ Most Frequently Encountered Errors
 
 | Error Code                            | Common Cause                                    | Full Details                                            |

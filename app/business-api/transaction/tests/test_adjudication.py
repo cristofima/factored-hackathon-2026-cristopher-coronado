@@ -12,10 +12,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, create_engine, select
 
-from adjudication import AdjudicationConflict
-from operator_identity import OperatorPrincipal
-from operator_models import AdjudicateRequest, CardProtectionRequest, OperatorCaseDetail
-from operator_service import OperatorCaseService
+from banking_transaction.services.adjudication import AdjudicationConflict
+from banking_transaction.auth.operator_identity import OperatorPrincipal
+from banking_transaction.models.operator import AdjudicateRequest, CardProtectionRequest, OperatorCaseDetail
+from banking_transaction.services.operator import OperatorCaseService
 
 PRINCIPAL = OperatorPrincipal("operator", 1)
 
@@ -124,8 +124,7 @@ def test_effect_failure_rolls_back_posting_movement_audit_and_closure(factory: C
 def test_failure_after_all_effects_flush_rolls_back_before_commit(
     factory: Callable[[], Session], monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import operator_service
-
+    from banking_transaction.services import operator as operator_service
     service = OperatorCaseService(factory)
     service.claim_case("case", PRINCIPAL)
     original_execute = operator_service.execute_effects
@@ -163,8 +162,7 @@ def test_failure_after_all_effects_flush_rolls_back_before_commit(
 def test_failed_attempt_does_not_overwrite_a_newer_successful_retry(
     factory: Callable[[], Session], monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import operator_service
-
+    from banking_transaction.services import operator as operator_service
     service = OperatorCaseService(factory)
     service.claim_case("case", PRINCIPAL)
     original_execute = operator_service.execute_effects
@@ -350,7 +348,7 @@ def test_missing_customer_consent_cannot_adjudicate(factory: Callable[[], Sessio
 def test_generated_refund_is_not_disputable(
     factory: Callable[[], Session], product_type: str,
 ) -> None:
-    from dispute_service import CardOnlyDisputeError, SupportCaseService
+    from banking_transaction.services.disputes import CardOnlyDisputeError, SupportCaseService
 
     with factory() as session:
         card = session.get(Product, "card")
@@ -369,7 +367,7 @@ def test_generated_refund_is_not_disputable(
 
 
 def test_customer_reads_recorded_effect_and_protection_references(factory: Callable[[], Session]) -> None:
-    from dispute_service import SupportCaseService
+    from banking_transaction.services.disputes import SupportCaseService
 
     operator = OperatorCaseService(factory)
     claimed = operator.claim_case("case", PRINCIPAL)
@@ -402,7 +400,7 @@ def test_customer_reads_recorded_effect_and_protection_references(factory: Calla
 def test_customer_terminal_reads_do_not_invent_effects(
     factory: Callable[[], Session], status: str,
 ) -> None:
-    from dispute_service import SupportCaseService
+    from banking_transaction.services.disputes import SupportCaseService
 
     with factory() as session:
         case = session.get(SupportCase, "case")
@@ -414,7 +412,7 @@ def test_customer_terminal_reads_do_not_invent_effects(
 
 
 def test_product_protection_state_preserves_unknown_prior_status(factory: Callable[[], Session]) -> None:
-    from dispute_service import SupportCaseService
+    from banking_transaction.services.disputes import SupportCaseService
 
     with factory() as session:
         product = session.get(Product, "card")

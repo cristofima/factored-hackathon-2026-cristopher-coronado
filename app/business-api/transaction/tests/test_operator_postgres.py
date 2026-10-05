@@ -18,8 +18,8 @@ from sqlalchemy import event, func
 from sqlalchemy.schema import CreateSchema, DropSchema
 from sqlmodel import Session, create_engine, select
 
-from operator_identity import OperatorPrincipal
-from operator_service import OperatorCaseService, OperatorClaimConflict
+from banking_transaction.auth.operator_identity import OperatorPrincipal
+from banking_transaction.services.operator import OperatorCaseService, OperatorClaimConflict
 
 pytestmark = pytest.mark.skipif(
     os.getenv("OPERATOR_TEST_ALLOW_WRITES") != "1"

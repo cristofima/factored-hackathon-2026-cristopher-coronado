@@ -14,10 +14,10 @@ from fastmcp import Client
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, create_engine
 
-import mcp_tools
-import routers
-from jwt_identity import get_jwt_customer_id
-from services import AccountService, CardService, UserService
+from banking_account import mcp_tools
+from banking_account.routers import products as routers
+from banking_account.auth.jwt_identity import get_jwt_customer_id
+from banking_account.services.products import AccountService, CardService, UserService
 
 
 @pytest.fixture
@@ -166,6 +166,36 @@ def test_owned_account_resources_are_mapped_from_storage(
             "ACCOUNT-SOURCE-NUMBER",
             "customer-owned",
         )
+
+
+def test_multiple_accounts_share_customer_card_catalog(
+    session_factory: Callable[[], Session],
+) -> None:
+    with session_factory() as session:
+        session.add(Product(
+            product_id="second-owned", customer_id="customer-owned",
+            product_type="Savings Account", product_number="SECOND-ACCOUNT", currency="USD",
+        ))
+        session.commit()
+
+    service = CardService(session_factory)
+    first = service.get_credit_cards("ACCOUNT-SOURCE-NUMBER", "customer-owned")
+    second = service.get_credit_cards("SECOND-ACCOUNT", "customer-owned")
+
+    assert [card.model_dump() for card in first] == [card.model_dump() for card in second]
+    assert [card.number for card in second] == ["4111 **** **** 1111"]
+
+
+@pytest.mark.parametrize("message", ["unavailable", "not found", "changed domain wording"])
+@pytest.mark.parametrize("status_code", [400, 404, 503])
+def test_domain_http_status_is_independent_of_prose(message: str, status_code: int) -> None:
+    from banking_account.services.errors import AccountOperationError
+
+    error = routers._to_runtime_http_error(AccountOperationError(message, status_code=status_code))
+
+    assert error.status_code == status_code
+    assert error.detail == message
+    assert routers._to_runtime_http_error(RuntimeError(message)).status_code == 400
 
 
 def test_foreign_product_numbers_are_denied(session_factory: Callable[[], Session]) -> None:

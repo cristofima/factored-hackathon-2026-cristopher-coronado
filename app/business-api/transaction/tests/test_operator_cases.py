@@ -11,9 +11,9 @@ from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, create_engine, select
 
-import operator_routers
-from operator_identity import OperatorPrincipal, get_operator_principal
-from operator_service import OperatorCaseService, OperatorClaimConflict
+from banking_transaction.routers import operator as operator_routers
+from banking_transaction.auth.operator_identity import OperatorPrincipal, get_operator_principal
+from banking_transaction.services.operator import OperatorCaseService, OperatorClaimConflict
 
 OPERATOR = OperatorPrincipal("operator-one", 3)
 OTHER = OperatorPrincipal("operator-two", 1)

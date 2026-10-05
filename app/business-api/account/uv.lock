@@ -178,7 +178,7 @@ wheels = [
 [[package]]
 name = "banking-assistant-account-mcp"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "banking-shared", extra = ["telemetry"] },
     { name = "fastapi", extra = ["all"] },

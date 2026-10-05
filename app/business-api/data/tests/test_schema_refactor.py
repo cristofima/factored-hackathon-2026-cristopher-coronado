@@ -10,7 +10,7 @@ from sqlalchemy.engine import Connection
 
 from banking_shared.models import Customer
 from banking_shared.customer_status import normalize_customer_status
-from test_identity_migrations import additive, legacy, revision, run, table
+from .test_identity_migrations import additive, legacy, revision, run, table
 
 
 @pytest.fixture(autouse=True)
@@ -106,7 +106,7 @@ def test_status_normalization(source: str | None, expected: str | None) -> None:
 
 @pytest.mark.parametrize("source,expected", [(" active ", "Active"), ("CLOSED", "Closed"), ("", None)])
 def test_customer_mapper_status(source: str, expected: str | None) -> None:
-    from scripts.load_scoped_data import map_customer
+    from banking_data.ingestion.load_scoped_data import map_customer
 
     row = dict.fromkeys(("first_name", "last_name", "country", "detected_accent", "segment",
                          "registration_date", "registration_branch_id"), "")
@@ -118,7 +118,7 @@ def test_customer_mapper_status(source: str, expected: str | None) -> None:
     ("email", "a" * 121), ("first_name", "a" * 51), ("last_name", "a" * 51),
     ("country", "a" * 101)])
 def test_customer_mapper_rejects_invalid_values(field: str, value: str) -> None:
-    from scripts.load_scoped_data import map_customer
+    from banking_data.ingestion.load_scoped_data import map_customer
 
     row = dict.fromkeys(("first_name", "last_name", "country", "detected_accent", "segment",
                          "registration_date", "registration_branch_id", "customer_status"), "")

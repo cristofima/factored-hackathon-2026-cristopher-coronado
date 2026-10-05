@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from banking_shared.tracing import create_tracer_provider
-from main import create_app
+from banking_account.main import create_app
 
 
 def test_mcp_request_preserves_incoming_trace_context() -> None:

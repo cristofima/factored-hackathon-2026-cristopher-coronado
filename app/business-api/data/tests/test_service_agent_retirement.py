@@ -5,7 +5,7 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy.engine import Connection
 
-from test_identity_migrations import revision, run, table
+from .test_identity_migrations import revision, run, table
 
 
 @pytest.fixture

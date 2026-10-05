@@ -39,7 +39,7 @@ proposal context, accept/decline and bounded recovery between `ReportDisputeDial
 and the chat `DisputePreview` widget. Legacy `DisputeConsent` handles only persisted
 pending-case decisions; generic MCP permission controls remain separate.
 
-### `app/responses-bff/bff/`
+### `app/responses-bff/src/bff/`
 
 `main.py` wires the FastAPI app. `auth.py` fronts allowlisted Identity
 operations and checks current active identity/version without caching. `responses.py`
@@ -50,7 +50,7 @@ package does not import or query Account/Transaction/PostgreSQL financial tables
 see [ADR 0005: Direct frontend financial API calls](docs/adr/0005-frontend-calls-account-and-transaction-directly.md)
 for the boundary decision.
 
-### `app/business-api/identity/`
+### `app/business-api/identity/src/identity/`
 
 Dedicated FastAPI identity service: Argon2 login, HS256 issuance, customer/operator/
 admin profiles, fixed-role operator management, active/inactive lifecycle, identity
@@ -61,28 +61,30 @@ credentials; it never runs at startup. Protected introspection uses a separate
 financial REST or customer chat; operator-role review endpoints are a separate
 boundary. See [ADR 0006: Dedicated auth users and staff identities](docs/adr/0006-dedicated-auth-users-and-staff-identities.md).
 
-### `app/agent/app/`
+### `app/agent/src/app/`
 
 `main_responses_host.py` is the Responses entry point, local and hosted.
 `agents/azure_chat/hosted_workflow.py` builds the triage + Account + Transaction
 specialist agents as one `HandoffBuilder` workflow using `FoundryChatClient` and MCP
 tools; it constructs a request-local workflow per call to avoid shared mutable
-executor state. `helpers/user_profile_provider.py` injects authenticated locale and
+executor state. `context/user_profile_provider.py` injects authenticated locale and
 localized human-label instructions. Transaction intake requires preview and explicit
 consent before mutation; REST-accepted cases continue via `getSupportCase` readback.
 `tools/` holds the MCP client wiring. `routers/` exposes the local
 `/responses` endpoint that the BFF proxies to.
 
-### `app/business-api/account/` and `app/business-api/transaction/`
+### `app/business-api/account/src/banking_account/` and `app/business-api/transaction/src/banking_transaction/`
 
-Both expose `mcp_tools.py` (agent-only tool definitions, authenticated via
-`internal_identity.py`'s fresh 60-second bearer), `routers.py` (browser-facing
-customer REST via `jwt_identity.py`), `services.py` (business logic and resource
-ownership), and `models.py` (Pydantic response/tool DTOs, not canonical tables).
-Transaction also owns `dispute_service.py` and `dispute_routers.py` for customer
-proposals, consent, routing and `/api/support-cases`. `operator_service.py` owns
-claims, verdicts and recorded effects; `operator_routers.py`, `operator_identity.py`
-and `operator_models.py` define the separate operator-role REST boundary and DTOs.
+Both expose `mcp_tools.py` (agent-only tools via `auth/internal_identity.py`'s
+fresh 60-second bearer), `routers/` (browser REST via `auth/jwt_identity.py`),
+`services/` (business logic and resource ownership), `projections/` (read DTO
+assembly), and `models/` (Pydantic DTOs, not canonical tables).
+Transaction's `services/disputes.py`, `consent/preview.py` and `routers/disputes.py`
+own customer proposals, consent, routing and `/api/support-cases`.
+`services/operator.py` coordinates claims, verdicts and recorded effects;
+`services/adjudication.py` applies effects without owning commits.
+`routers/operator.py`, `auth/operator_identity.py` and `models/operator.py`
+define the separate operator-role REST boundary and DTOs.
 Both REST boundaries validate application JWTs and check current Identity; customer
 ownership and operator assignment/version rules remain in service code. Read-only preview precedes explicit consent; signed-token
 acceptance atomically creates the case, consent and routing in `IN_REVIEW`, while
@@ -99,14 +101,17 @@ uses owned savings/checking allocation, not an inferred card-account relationshi
 Card protection is separately audited and does not imply processor enforcement.
 Both services enable `CORSMiddleware` via `CORS_ALLOWED_ORIGINS`.
 
-### `app/business-api/shared/banking_shared/`
+### `app/business-api/shared/src/banking_shared/`
 
 Owns canonical SQLModel tables such as `Product`, `TransactionRecord`,
 `RuntimePosting`, `CardProtection`, `SupportCase` and `SupportCaseEvent`.
 Services and ingestion import these persisted types. Service `Account`, `Card`,
 `Transaction` and `DisputeCase` models are separate Pydantic DTOs. Stored-field
 changes start here and require data-module migrations; API-shape changes belong
-in service DTOs. `db.py` owns PostgreSQL engine/session wiring.
+in service DTOs. `models/` groups catalog, products, transactions, cases, effects
+and historical tables; its initializer registers canonical metadata.
+`database.py` owns PostgreSQL engine/session wiring, and `runtime.py` batches
+runtime balance/protection projections without changing persisted anchors.
 
 ### `app/business-api/data/`
 
@@ -114,7 +119,7 @@ The CSV-to-PostgreSQL ingestion pipeline. `scripts/run_pipeline.py` is the only
 normal entry point (EDA, scope approval, loading, verification, in that order).
 `scripts/evaluate_fraud_threshold.py` is the offline baseline evaluation for the
 dispute triage threshold. This module owns Alembic migrations and historical
-assignment archives; canonical tables live in `shared/banking_shared`. Source-data
+assignment archives; canonical tables live in `shared/src/banking_shared`. Source-data
 refresh must preserve runtime financial effects.
 
 ### `infra/`

@@ -195,7 +195,7 @@ resource "azapi_resource" "app" {
         # container; without --proxy-headers/--forwarded-allow-ips, Uvicorn ignores
         # X-Forwarded-Proto and emits http:// redirects (e.g. the mounted MCP app's own
         # trailing-slash redirect), which MCP clients correctly refuse as an HTTPS downgrade.
-        appCommandLine = "python -m uvicorn main:app --host 0.0.0.0 --port 8080 --proxy-headers"
+        appCommandLine = "python -m uvicorn banking_${each.key}.main:app --host 0.0.0.0 --port 8080 --proxy-headers"
         appSettings = concat([
           { name = "WEBSITES_PORT", value = "8080" },
           { name = "FORWARDED_ALLOW_IPS", value = "*" },

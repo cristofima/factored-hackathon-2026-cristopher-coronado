@@ -14,10 +14,9 @@ from banking_shared.product_types import (
     CARD_PRODUCT_TYPES,
     normalize_product_type,
 )
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
-from scripts import load_scoped_data
-from scripts.load_scoped_data import map_product
+from banking_data.ingestion import load_scoped_data
+from banking_data.ingestion.load_scoped_data import map_product
 
 
 PRODUCT_TYPES = (

@@ -21,7 +21,7 @@ banking-shared = { path = "../business-api/shared", editable = true }
 dev = ["asgi-lifespan", "pytest==9.1.1", "pytest-asyncio==1.4.0"]
 
 [tool.setuptools.packages.find]
-where = ["."]
+where = ["src"]
 include = ["bff*"]
 
 [tool.pytest.ini_options]

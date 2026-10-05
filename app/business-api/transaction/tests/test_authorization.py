@@ -11,9 +11,9 @@ from fastapi.testclient import TestClient
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, create_engine
 
-import routers
-from jwt_identity import get_jwt_customer_id
-from services import TransactionService
+from banking_transaction.routers import transactions as routers
+from banking_transaction.auth.jwt_identity import get_jwt_customer_id
+from banking_transaction.services.transactions import TransactionService
 
 
 @pytest.fixture

@@ -4,12 +4,56 @@ This module profiles the LATAM banking CSV dataset, selects a bounded ingestion
 window, loads customer-owned data into PostgreSQL, and verifies the load manifest.
 Run the commands below from the repository root. Use Python 3.11+ and `uv`.
 
+## Installed package and CLI adapters
+
+Install this project's dependencies from repository root before running the commands
+below:
+
+```powershell
+rtk proxy uv sync --directory app\business-api\data --frozen --group dev
+```
+
+Implementation lives in [src/banking_data](src/banking_data/):
+
+- [analysis](src/banking_data/analysis/) owns source inspection, EDA and scope analysis.
+- [ingestion](src/banking_data/ingestion/) owns pipeline orchestration, mapping,
+  loading and manifest verification.
+- [snapshots](src/banking_data/snapshots/) owns estimated monthly snapshot calculation,
+  persistence and verification.
+- [seed_demo_users.py](src/banking_data/seed_demo_users.py) is the explicit demo seed
+  CLI; Identity owns the provisioning implementation.
+
+The checkout [scripts](scripts/) and package-root compatibility modules remain thin
+CLI adapters. Keep the documented pipeline entrypoint; do not duplicate its logic
+or add runtime import-path repair. Alembic configuration and migrations remain in
+this project outside `src`.
+
+## Export fraud-marked transaction CSV records
+
+[export_fraud_transactions.py](scripts/export_fraud_transactions.py) scans every CSV
+under `month=*/day=*` in `C:\Factored\data\transactions\year=2026` and exports
+complete rows whose `is_fraud` value is `true` (case-insensitive) or `1`. It streams
+records without loading the year into memory and never modifies source files or
+connects to PostgreSQL.
+
+```powershell
+rtk proxy uv run --directory app\business-api\data python scripts\export_fraud_transactions.py --output C:\Factored\fraud_2026.csv
+```
+
+Use `--source` to select another year directory. Omit `--output` to emit CSV on
+stdout; the count and errors go to stderr. Output files must be new and outside
+the source directory. All partitions must share the same columns, including
+`transaction_id` and `is_fraud`. Invalid records fail with exit code 1; discard any
+partial output from a failed run. A successful scan without matches emits only the
+CSV header. Treat exported records as sensitive local data; do not commit them.
+
 ## Schema and ownership
 
 The authoritative SQLModel definitions live in
-[banking models](../shared/banking_shared/models.py) and
-[Identity models](../shared/banking_shared/identity_models.py). This module's
-[models](models.py) and [database helpers](database.py) are compatibility reexports;
+[banking model families](../shared/src/banking_shared/models/) and
+[Identity models](../shared/src/banking_shared/identity_models.py). This module's
+[models](src/banking_data/models.py) and
+[database helpers](src/banking_data/database.py) are compatibility reexports;
 Alembic owns schema evolution, not ingestion or service startup.
 
 | Owner / purpose                       | Tables                                                                           | Population path                                    |
@@ -120,7 +164,7 @@ reject loading rather than truncate data. Business status is independent of User
 login status.
 
 Product types normalize through the
-[canonical product catalog](../shared/banking_shared/product_types.py): Savings
+[canonical product catalog](../shared/src/banking_shared/product_types.py): Savings
 Account, Checking Account, Investment, Mortgage Loan, Personal Loan, Insurance,
 Credit Card and Debit Card. Known Spanish labels accept whitespace, case and accent
 normalization. Unknown scoped types reject the dimension transaction. Account and
@@ -194,11 +238,26 @@ Each script exposes its argument contract through `--help`.
 | [build_monthly_snapshots.py](scripts/build_monthly_snapshots.py)             | PostgreSQL products/transactions, cohort and optional months              | Estimated projection; supports non-persisting `--dry-run`                                           |
 | [verify_monthly_snapshots.py](scripts/verify_monthly_snapshots.py)           | Same cohort/months as builder                                             | Shared-calculation consistency, not independent accounting reconciliation                           |
 
+Source normalization belongs to [source_mapping.py](src/banking_data/ingestion/source_mapping.py).
+[scoped_loading.py](src/banking_data/ingestion/scoped_loading.py) owns loading coordination:
+dimensions commit before transactions, and each transaction day commits or rolls back
+independently. A failed day does not stop later days. The loader CLI persists the
+returned manifest through [load_manifest.py](src/banking_data/ingestion/load_manifest.py),
+which also owns checksum validation and verification scope. The
+[persisted verifier](src/banking_data/ingestion/verify_load.py) validates that contract before
+opening a database connection and checks transactions only on successful load days.
+
 The fraud-threshold analysis reports TP/FP/TN/FN, precision, recall and F1. Missing
 labels are skipped and missing scores counted. Percentiles in describe mode use a
 sample (`--sample-every 50` by default). Results do not change service triage policy.
 
 ## Explicit demo identity seeding
+
+Identity owns provisioning policy, credential hashing, associations and audits in
+[provisioning.py](../identity/src/identity/services/provisioning.py). The Data
+[seed adapter](src/banking_data/seed_demo_users.py) preserves the existing CLI and
+handles environment inputs and manifest output. Provisioning commits the selected
+cohort once; it is separate from source loading and requires explicit write approval.
 
 After migrations and an approved customer load, supply `DEMO_USER_PASSWORD` outside
 source control and explicitly run:
@@ -230,7 +289,7 @@ it never reads PostgreSQL or verifies passwords.
 ### First-administrator bootstrap
 
 Administrator provisioning belongs to Identity's `banking-bootstrap-admin` CLI,
-implemented in [bootstrap.py](../identity/identity/bootstrap.py), not to
+implemented in [bootstrap.py](../identity/src/identity/services/bootstrap.py), not to
 [seed_demo_users.py](scripts/seed_demo_users.py). It requires migrated roles, a
 separately approved database/write operation, `--locale` and `--confirm-bootstrap`.
 It refuses an existing administrator or email identity; it is not a reset or
@@ -250,7 +309,12 @@ approved database; setting variables alone does not authorize or execute provisi
 ## Estimated monthly snapshots
 
 Snapshots reconstruct product closing balances from persisted data; they are
-estimates, not an external accounting ledger or a CSV reload. Profile semantics
+estimates, not an external accounting ledger or a CSV reload.
+[snapshot_calculations.py](src/banking_data/snapshots/snapshot_calculations.py) contains pure
+calculations; [snapshot_inputs.py](src/banking_data/snapshots/snapshot_inputs.py) fetches and
+projects persisted inputs; [snapshot_repository.py](src/banking_data/snapshots/snapshot_repository.py)
+upserts without committing. The [builder CLI](src/banking_data/snapshots/build_monthly_snapshots.py)
+commits once after all batches; `--dry-run` neither upserts nor commits. Profile semantics
 before calculating them:
 
 ```powershell
