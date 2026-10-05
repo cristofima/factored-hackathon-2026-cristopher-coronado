@@ -34,7 +34,7 @@ vi.mock("@/api/disputeClient", () => ({ listSupportCases: harness.list }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("@/components/ReportDisputeDialog", () => ({ default: () => null }));
 
-const caseFor = (status: string, transactionId = "tx"): SupportCase => ({
+const caseFor = (status: SupportCase["status"], transactionId = "tx"): SupportCase => ({
   caseId: `case-${status}`, transactionId, status, productNumber: "account", reason: "customer reason",
   triageOutcome: null, resolutionOutcome: null, resolutionNotes: null, recommendationType: null,
   recommendationRationale: null, recommendationOptedOut: false, openedAt: "", updatedAt: "", resolvedAt: null,
@@ -67,7 +67,7 @@ describe("customer-scoped dispute reporting", () => {
     expect(harness.list).toHaveBeenCalledOnce();
   });
   it.each(["OPEN", "IN_REVIEW", "ESCALATED_TO_REVIEW", "UNKNOWN_STATUS"])("treats %s as active without changing stored records", (status) => {
-    const item = caseFor(status);
+    const item = { ...caseFor("IN_REVIEW"), status } as SupportCase;
     expect(activeTransactionCases([item]).get("tx")).toBe(item);
     expect(item.status).toBe(status);
   });
