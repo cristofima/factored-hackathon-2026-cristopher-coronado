@@ -389,11 +389,10 @@ function TaskItemRenderer({
 }) {
   const { task } = item;
   const icon = getIconForName(task.icon);
-  const isLoading =
-    task.status_indicator === "loading" || task.status_indicator === "none";
+  const isLoading = task.status_indicator === "loading";
   const isComplete = task.status_indicator === "complete";
 
-  // Apply shimmer only if this is the last task in the list and it's loading (or none, which means in progress)
+  // Neutral statuses, including failed tool results, must not appear active.
   const shouldShimmer = isLastTask && isLoading;
 
   // Debug logging

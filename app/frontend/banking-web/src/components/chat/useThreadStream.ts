@@ -16,6 +16,8 @@ export interface StreamEvent {
   http_status?: number;
   response?: unknown;
   delta?: unknown;
+  item_id?: unknown;
+  message_id?: unknown;
 }
 
 interface ThreadStreamRequest {
@@ -132,13 +134,27 @@ export function useThreadStream({ url, request, onEvent, onConversation, onError
         }
 
         let buffer = "";
+        const emitLine = (line: string) => {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith("data:")) return;
+          const data = trimmed.slice(5).trimStart();
+          if (data === "[DONE]") return;
+          const event: unknown = JSON.parse(data);
+          if (!event || typeof event !== "object" ||
+            !("type" in event) || typeof event.type !== "string") {
+            throw new Error("Invalid stream event");
+          }
+          if (isCurrent()) onEventRef.current(event as StreamEvent);
+        };
 
         while (true) {
           const { done, value } = await reader.read();
           if (!isCurrent()) return;
 
           if (done) {
-            onCompleteRef.current?.();
+            buffer += decoder.decode();
+            if (buffer.trim()) emitLine(buffer);
+            if (isCurrent()) onCompleteRef.current?.();
             break;
           }
 
@@ -151,31 +167,13 @@ export function useThreadStream({ url, request, onEvent, onConversation, onError
 
           for (const line of lines) {
             if (!isCurrent()) return;
-            const trimmed = line.trim();
-
-            // SSE events start with "data: "
-            if (trimmed.startsWith("data: ")) {
-              const jsonStr = trimmed.substring(6); // Remove "data: " prefix
-
-              try {
-                const event = JSON.parse(jsonStr) as StreamEvent;
-                onEventRef.current(event);
-              } catch (parseError) {
-                console.error("Failed to parse SSE event:", jsonStr, parseError);
-              }
-            }
+            emitLine(line);
           }
         }
-      } catch (error) {
+      } catch {
         if (!isCurrent()) return;
-        if (error instanceof Error) {
-          if (error.name === "AbortError") {
-            console.log("Stream aborted");
-          } else {
-            console.error("Stream error:", error);
-            onErrorRef.current?.(error);
-          }
-        }
+        controller.abort();
+        onErrorRef.current?.(new Error("The response could not be completed."));
       }
     };
 

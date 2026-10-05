@@ -371,7 +371,8 @@ export interface ChatContextValue {
   sendMessage: (text: string, attachments?: AttachmentMeta[]) => void;
   cancelStreaming: () => void;
   retryLastMessage: () => void;
-  sendWidgetAction: (threadId: string, itemId: string, action: ActionConfig) => void;
+  sendWidgetAction: (threadId: string, itemId: string, action: ActionConfig) => Promise<"success" | "error" | "cancelled">;
+  isApprovalCompleted: (threadId: string, itemId: string) => boolean;
   createThread: (initialMessage?: string, options?: { title?: string }) => void;
   selectThread: (threadId: string) => void;
   toggleHistory: () => void;
