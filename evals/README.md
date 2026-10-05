@@ -193,11 +193,13 @@ cases, protocol errors, unused replies, and missing transcript/answer evidence.
 CI uses Development OIDC for same-repository PRs to main/develop, retains 14-day
 artifacts, and publishes controlled statuses in a persistent PR comment. Fork model
 replay is explicitly not executed. This is not a dispute quality/authz gate.
-Historical [CI run 37089481802](https://github.com/cristofima/factored-hackathon-2026-cristopher-coronado/actions/runs/37089481802)
-verified offline tests, PR/OIDC/real-model execution, artifact upload and PR reporting
-at commit f08d6aa2494e619df96883761f7cf73fa8e9c4cd: all three cases passed protocol
-checks. It did not validate the v2 dispute alignment or current worktree, semantics,
-real ownership, business approval, persistence, or hosted identity transport.
+[CI run 37264970360](https://github.com/cristofima/factored-hackathon-2026-cristopher-coronado/actions/runs/37264970360)
+passed agent build/tests, PR/OIDC/real-model MCP protocol smoke, report validation,
+evidence upload and PR reporting at commit `ee40605859f3ae7c2e047182025c8c304bead418`.
+Its Dispute Replay job also passed offline alignment regressions, deterministic
+comparator and saved-evidence rescoring checks. These offline checks do not establish
+real-model dispute quality, semantics, real ownership, business approval, persisted
+financial effects or hosted identity transport.
 No runner creates a remote Foundry evaluation; local display names are not remote IDs.
 
 ## Historical diagnostics

@@ -32,6 +32,25 @@ database or create users, and resolved references do not prove runtime readiness
 See the [workflow guide](../../.github/workflows/README.md#required-github-environment-variables)
 and [infrastructure guide](../../infra/README.md) for configuration and rollout.
 
+### Python dependency artifacts
+
+Each Python App Service installs runtime dependencies from its own `requirements.txt`.
+Keep the service's `pyproject.toml` and uv lock as the development source of truth;
+regenerate artifacts rather than editing them manually. From repository root:
+
+```powershell
+rtk proxy uv pip compile app\business-api\account\pyproject.toml --no-emit-package banking-shared -o app\business-api\account\requirements.txt
+rtk proxy uv pip compile app\business-api\transaction\pyproject.toml --no-emit-package banking-shared -o app\business-api\transaction\requirements.txt
+rtk proxy uv pip compile app\business-api\identity\pyproject.toml --no-emit-package banking-shared --python-version 3.11 --python-platform x86_64-unknown-linux-gnu -o app\business-api\identity\requirements.txt
+rtk proxy uv export --project app\responses-bff --no-dev --no-hashes --no-emit-project --no-emit-package banking-shared --output-file app\responses-bff\requirements.txt
+```
+
+`--no-emit-package banking-shared` excludes machine-local editable paths. Root azd
+packaging hooks copy the shared package into isolated deployment zips and clean up
+those copies. Packaging does not migrate PostgreSQL, provision users, or verify
+hosted startup. See the [BFF guide](../responses-bff/README.md) and
+[Identity CI/CD guide](./identity/README.md#cicd) for their deployment contracts.
+
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -204,7 +223,7 @@ Services use different ports based on the `PROFILE` environment variable:
 | Account     | 8070             | 8080            |
 | Transaction | 8071             | 8080            |
 
-## ⚙️ Configuration
+## Configuration
 
 | Variable                                | Used by              | Purpose / default                                                         |
 | --------------------------------------- | -------------------- | ------------------------------------------------------------------------- |
@@ -276,7 +295,10 @@ auth dependencies (customer/operator application-JWT dependencies for REST,
 
 ## 🐛 Development & Debugging
 
-Launch the services individually or press `F5` with `DEV - Full Stack Ordered` to start Account, Transaction, the local Responses agent, the BFF, and Vite; see the [root local-development guide](../../README.md#local-development-vs-code). Set breakpoints in any service and the running process will honor them.
+Launch the services individually or press `F5` with `DEV - Full Stack Ordered` to
+start Identity, Account, Transaction, the local Responses agent, the BFF and Vite;
+see the [root local-development guide](../../README.md#run-locally). Set breakpoints
+in any service and the running process will honor them.
 
 ## Local inquiry verification
 

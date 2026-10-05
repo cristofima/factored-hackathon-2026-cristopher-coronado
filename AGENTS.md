@@ -29,8 +29,10 @@ flowchart LR
   Account MCP tools.
 - [app/business-api/transaction](app/business-api/transaction): transaction REST/MCP
   reads, customer disputes and operator queue, claim and adjudication APIs.
-- [app/business-api/data](app/business-api/data): shared SQLModel schema, Alembic
-  migrations and CSV-to-PostgreSQL pipeline.
+- [app/business-api/shared/banking_shared](app/business-api/shared/banking_shared):
+  canonical SQLModel persistence tables and database wiring.
+- [app/business-api/data](app/business-api/data): Alembic migrations, historical
+  archives and CSV-to-PostgreSQL pipeline.
 - [app/frontend/banking-web](app/frontend/banking-web): React/Vite UI for customer
   banking, support cases, administrator pages and operator queue/detail pages.
   `/operator` redirects to `/operator/support-cases`.

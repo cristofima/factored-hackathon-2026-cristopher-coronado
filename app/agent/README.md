@@ -128,7 +128,7 @@ Configure the Foundry project endpoint and the name of a model deployment in tha
 ```env
 FOUNDRY_PROJECT_ENDPOINT=https://your-resource.services.ai.azure.com/api/projects/your-project
 AZURE_AI_PROJECT_ID=/subscriptions/<subscription-id>/resourceGroups/<resource-group>/providers/Microsoft.CognitiveServices/accounts/<account-name>/projects/<project-name>
-MODEL_DEPLOYMENT_NAME=gpt-4.1-mini
+MODEL_DEPLOYMENT_NAME=gpt-5.4
 ACCOUNT_MCP_URL=http://localhost:8070/mcp
 TRANSACTION_MCP_URL=http://localhost:8071/mcp
 INTERNAL_IDENTITY_SECRET=<shared-secret-at-least-32-characters>
@@ -144,7 +144,7 @@ For hosted provisioning with `azd`, make sure the agent environment includes at 
 
 Local tasks load the agent's own `.env` and use the developer's Azure credential. Keep MCP URLs, Foundry settings, and the shared transport identity secret in that file; use `.env.example` as the credential-free template.
 
-Hosted deployment is owned by [`azure.yaml`](azure.yaml) and uses managed identity. Foundry injects `FOUNDRY_PROJECT_ENDPOINT` into the hosted container; `MODEL_DEPLOYMENT_NAME=gpt-4.1-mini` is an application-defined declaration in the manifest. Neither manifest provisions the model deployment, and hosted deployment has not been verified by the local test suite.
+Hosted deployment is owned by the [agent manifest](azure.yaml) and uses managed identity. Its `ai-project` service declares `model-router` and `gpt-5.4` deployments for provisioning; the hosted agent references that project. Foundry injects `FOUNDRY_PROJECT_ENDPOINT` into the container. Shared and per-agent environment settings select runtime deployments; manifest declarations and local tests do not verify available capacity or hosted end-to-end behavior.
 
 ### Optional per-agent model deployments
 
@@ -173,8 +173,9 @@ lists Responses, Chat Completions, and function/tool calling support. Router mod
 eligibility and deployment availability depend on region, access, and deployment
 configuration. Configure an eligible tool-capable routing pool; no project
 availability or live end-to-end compatibility is established by offline tests.
-The hosted manifest still declares the shared mini deployment; optional overrides
-must also be supplied to the deployed host environment to take effect there.
+The [hosted manifest](azure.yaml) forwards the shared setting and all three optional
+overrides; configure them in the agent azd environment to select the deployed host's
+models.
 
 ## Validation
 
@@ -213,12 +214,14 @@ The [evaluation guide](../../evals/README.md) separates evidence levels:
   acceptance or untouched held-out evidence.
 
 The isolated MCP replay's three cases cover balance lookup, canned denial, and empty
-transactions, not disputes. Historical CI run 37089481802 verified 3/3 protocol cases,
-PR/OIDC/real-model execution, artifacts and PR reporting at commit
-f08d6aa2494e619df96883761f7cf73fa8e9c4cd. This does not verify the current worktree
-or v2 dispute CI. `protocol_passed` checks calls and completion, not grounding,
-locale, approval correctness, or dispute success. Behavioral review remains pending.
-See the [replay guide](../../evals/README.md#pr-smoke-check).
+transactions, not disputes. [CI run 37264970360](https://github.com/cristofima/factored-hackathon-2026-cristopher-coronado/actions/runs/37264970360)
+passed agent build/tests, real-model MCP protocol smoke and offline Dispute Replay
+alignment, comparator and saved-evidence rescoring checks at commit
+`ee40605859f3ae7c2e047182025c8c304bead418`, with evidence uploads and PR reporting.
+Offline dispute checks are not real-model dispute evaluation. `protocol_passed`
+checks calls and completion, not grounding, locale, approval correctness or dispute
+success; live authorization, persisted effects and hosted end-to-end acceptance
+remain separate gates. See the [replay guide](../../evals/README.md#pr-smoke-check).
 
 Session checkpoints recorded 25 offline alignment tests, synthetic comparator and
 saved-evidence rescore results of 25/25 each, then 57 combined offline replay tests.
