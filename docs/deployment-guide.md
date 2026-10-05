@@ -36,10 +36,6 @@ azd up --cwd app/agent
 
 3. After the application has been successfully deployed you will see a web app URL printed to the console. Click that URL to interact with the application in your browser.
 
-It will look like the following:
-
-!['Output from running azd up'](assets/azd-success.png)
-
 ### **Important: Note for PowerShell Users**
 
 If you encounter issues running PowerShell scripts due to the policy of not being digitally signed, you can temporarily adjust the `ExecutionPolicy` by running the following command in an elevated PowerShell session:

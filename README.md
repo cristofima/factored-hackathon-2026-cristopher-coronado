@@ -97,11 +97,6 @@ Even if specific to banking scenarios, this sample can be used for other busines
 Business scenario
 </h2>
 
-<div align="center">  
-<img src="./docs/assets/banking-web.gif" alt="Banking Web Demo">
-</div>
-<br/>
-
 Users can converse with the assistant to inquire about account balances and review recent transactions instead of navigating traditional menus. The active workflow does not execute payments.
 
 The dashboard presents an owned-product catalog with All, Accounts, and Cards
