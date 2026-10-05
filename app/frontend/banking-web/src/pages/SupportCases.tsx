@@ -6,15 +6,16 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { listSupportCases } from "@/api/disputeClient";
+import { isTerminalCase } from "@/api/supportCaseContracts";
 import { startDisputePolling } from "@/api/disputePolling";
-import { errorTranslationKey } from "@/api/errors";
+import { ApiError, errorTranslationKey } from "@/api/errors";
 import type { SupportCase } from "@/models/SupportCase";
 import { useAuth } from "@/context/AuthContext";
 import { formatDateTime } from "@/common/dateTime";
 
 export default function SupportCases() {
   const { t } = useTranslation();
-  const { user } = useAuth();
+  const { user, sessionKey, logout } = useAuth();
   const [cases, setCases] = useState<SupportCase[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -23,7 +24,7 @@ export default function SupportCases() {
   useEffect(() => {
     setCases([]);
     setLoading(true);
-  }, [user?.id]);
+  }, [user?.id, sessionKey, user?.identityVersion]);
 
   useEffect(() => {
     setError(null);
@@ -37,6 +38,7 @@ export default function SupportCases() {
         })
         .catch((cause: unknown) => {
           if (!signal.aborted) {
+            if (cause instanceof ApiError && cause.code === "AUTH_REQUIRED") logout();
             setError(
               errorTranslationKey(cause, "Support cases are unavailable"),
             );
@@ -46,7 +48,7 @@ export default function SupportCases() {
           if (!signal.aborted) setLoading(false);
         }),
     );
-  }, [user?.id, attempt]);
+  }, [user?.id, sessionKey, user?.identityVersion, attempt, logout]);
 
   return (
     <div className="p-6 max-w-5xl space-y-6">
@@ -85,7 +87,7 @@ export default function SupportCases() {
                   </CardTitle>
                   <Badge
                     variant={
-                      item.status === "RESOLVED" ? "secondary" : "default"
+                      isTerminalCase(item.status) ? "secondary" : "default"
                     }
                   >
                     {t(`support-cases.status.${item.status}`, {

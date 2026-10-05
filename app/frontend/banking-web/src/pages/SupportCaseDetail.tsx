@@ -10,16 +10,20 @@ import {
   getSupportCaseDetail,
   respondToSupportCaseApproval,
 } from "@/api/disputeClient";
-import { errorTranslationKey } from "@/api/errors";
+import { ApiError, errorTranslationKey } from "@/api/errors";
+import { isTerminalCase } from "@/api/supportCaseContracts";
 import { startDisputePolling } from "@/api/disputePolling";
 import { useAuth } from "@/context/AuthContext";
 import type { SupportCase, SupportCaseEvent } from "@/models/SupportCase";
 import SupportCaseTimeline from "@/components/SupportCaseTimeline";
+import SupportCaseFinancialDetails from "@/components/SupportCaseFinancialDetails";
+import SupportCaseIntakeReceipt from "@/components/SupportCaseIntakeReceipt";
+import { maskedCardNumber } from "@/common/products";
 
 export default function SupportCaseDetail() {
   const { t } = useTranslation();
   const { caseId } = useParams<{ caseId: string }>();
-  const { user } = useAuth();
+  const { user, sessionKey, logout } = useAuth();
   const [supportCase, setSupportCase] = useState<SupportCase | null>(null);
   const [timeline, setTimeline] = useState<SupportCaseEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,6 +34,7 @@ export default function SupportCaseDetail() {
   const actionInFlight = useRef(false);
   const stopPolling = useRef<(() => void) | null>(null);
   const actionScope = useRef(0);
+  const actionController = useRef<AbortController | null>(null);
 
   useEffect(() => {
     setSupportCase(null);
@@ -40,8 +45,9 @@ export default function SupportCaseDetail() {
     actionInFlight.current = false;
     return () => {
       actionScope.current += 1;
+      actionController.current?.abort();
     };
-  }, [caseId, user?.id]);
+  }, [caseId, user?.id, user?.identityVersion, sessionKey]);
 
   useEffect(() => {
     if (!caseId || actionPending) return;
@@ -57,6 +63,7 @@ export default function SupportCaseDetail() {
         })
         .catch((cause: unknown) => {
           if (!signal.aborted) {
+            if (cause instanceof ApiError && cause.code === "AUTH_REQUIRED") logout();
             setError(errorTranslationKey(cause, "Support case is unavailable"));
           }
         })
@@ -66,20 +73,23 @@ export default function SupportCaseDetail() {
     );
     stopPolling.current = stop;
     return stop;
-  }, [caseId, user?.id, attempt, actionPending]);
+  }, [caseId, user?.id, user?.identityVersion, sessionKey, attempt, actionPending, logout]);
 
   const respond = async (approved: boolean) => {
     if (!caseId || actionInFlight.current) return;
     actionInFlight.current = true;
     stopPolling.current?.();
     const scope = actionScope.current;
+    const controller = new AbortController();
+    actionController.current = controller;
     setActionPending(true);
     setActionError(null);
     try {
-      const updated = await respondToSupportCaseApproval(caseId, approved);
+      const updated = await respondToSupportCaseApproval(caseId, approved, controller.signal);
       if (scope !== actionScope.current) return;
       setSupportCase(updated);
     } catch (cause) {
+      if (!controller.signal.aborted && cause instanceof ApiError && cause.code === "AUTH_REQUIRED") logout();
       if (scope === actionScope.current)
         setActionError(
           errorTranslationKey(cause, "Could not record your response"),
@@ -97,12 +107,15 @@ export default function SupportCaseDetail() {
     actionInFlight.current = true;
     stopPolling.current?.();
     const scope = actionScope.current;
+    const controller = new AbortController();
+    actionController.current = controller;
     setActionPending(true);
     setActionError(null);
     try {
-      const updated = await dismissSupportCaseRecommendation(caseId);
+      const updated = await dismissSupportCaseRecommendation(caseId, controller.signal);
       if (scope === actionScope.current) setSupportCase(updated);
     } catch (cause) {
+      if (!controller.signal.aborted && cause instanceof ApiError && cause.code === "AUTH_REQUIRED") logout();
       if (scope === actionScope.current)
         setActionError(
           errorTranslationKey(cause, "Could not dismiss the recommendation"),
@@ -141,7 +154,7 @@ export default function SupportCaseDetail() {
               <CardTitle className="text-base">{t("Case Details")}</CardTitle>
               <Badge
                 variant={
-                  supportCase.status === "RESOLVED" ? "secondary" : "default"
+                  isTerminalCase(supportCase.status) ? "secondary" : "default"
                 }
               >
                 {t(`support-cases.status.${supportCase.status}`, {
@@ -151,16 +164,13 @@ export default function SupportCaseDetail() {
               </Badge>
             </CardHeader>
             <CardContent className="text-sm space-y-2">
-              <p>
-                <span className="text-muted-foreground">{t("Reason")}: </span>
-                {supportCase.reason}
-              </p>
+              <SupportCaseIntakeReceipt supportCase={supportCase} events={timeline} />
               {supportCase.productNumber && (
                 <p>
                   <span className="text-muted-foreground">
                     {t("Card Number")}:{" "}
                   </span>
-                  {supportCase.productNumber}
+                  {maskedCardNumber(supportCase.productNumber) ?? t("Unavailable")}
                 </p>
               )}
               {supportCase.resolutionOutcome && (
@@ -172,7 +182,7 @@ export default function SupportCaseDetail() {
                     `support-cases.resolution.${supportCase.resolutionOutcome}`,
                     {
                       keySeparator: ".",
-                      defaultValue: supportCase.resolutionOutcome,
+                      defaultValue: t("Not available"),
                     },
                   )}
                 </p>
@@ -241,6 +251,7 @@ export default function SupportCaseDetail() {
               </Card>
             )}
 
+          <SupportCaseFinancialDetails supportCase={supportCase} />
           <SupportCaseTimeline events={timeline} transactionId={supportCase.transactionId} />
         </>
       )}
