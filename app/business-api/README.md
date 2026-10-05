@@ -7,7 +7,7 @@ A collection of Python-based FastMCP servers used by the Banking Assistant. Acco
 This business API layer contains **specialized MCP servers** for different banking domains:
 
 - **Account Service**: Active workflow dependency for account details, payment methods, and beneficiaries
-- **Transaction Service**: Active workflow dependency for transaction history and search operations
+- **Transaction Service**: Active workflow dependency for transaction history, search and persisted support cases. Read-only dispute proposals require explicit consent before atomic intake/review; see the [Transaction consent contract](./transaction/README.md#customer-dispute-proposal-and-consent).
 
 Each service runs as an independent FastMCP server exposing banking tools through HTTP endpoints that the copilot agents can consume.
 
@@ -150,7 +150,7 @@ MCP tools:
 - **`getTransactionsByRecipientName`** - Search transactions by recipient name
 - **`getLastTransactions`** - Get recent transaction history for an account
 - **`getCardTransactions`** - Get credit and debit card transactions
-- **`reportTransactionDispute`**, **`respondToDisputeApproval`**, **`listSupportCases`**,
+- **`previewTransactionDispute`**, **`reportTransactionDispute`**, **`recoverTransactionDispute`**, **`respondToDisputeApproval`**, **`listSupportCases`**,
   **`getSupportCase`**, **`getSupportCaseTimeline`** - transaction-dispute support-case
   workflow (intake/triage only; the agent never decides legitimacy)
 
@@ -163,13 +163,16 @@ REST endpoints (`/api/transactions` prefix):
 New disputes accept card transactions only; historical account cases remain readable.
 No debit-card/account relationship is inferred from shared customer ownership.
 
-Support-case REST endpoints at `/api/support-cases` (same JWT auth) additionally expose
-`POST /{case_id}/approval`, `POST /{case_id}/recommendation/dismiss` (records the
-customer's explicit opt-out of the single post-resolution recommendation), and
-`POST /{case_id}/resolve` (ownership-checked and customer-authenticated, never
-exposed as an MCP tool; it is not an operator-only endpoint).
+Support-case REST endpoints at `/api/support-cases` (same JWT auth) expose read-only
+`POST /preview`, root `POST` acceptance with `{previewToken}`, and read-only
+`POST /recovery`. Preview and decline create no case/events; explicit acceptance
+atomically persists intake, consent and routing. Existing pending cases retain
+`POST /{case_id}/approval`; `POST /{case_id}/recommendation/dismiss` records the
+customer's explicit opt-out. Customer `POST /{case_id}/resolve` is retired.
+See the [Transaction consent contract](transaction/README.md#customer-dispute-proposal-and-consent)
+for token expiry, revalidation and ambiguous-outcome recovery.
 
-Approval transitions every classification to `IN_REVIEW`. Low scores retain the
+Accepted intake or legacy approval transitions every classification to `IN_REVIEW`. Low scores retain the
 `fast_track` routing classification and emit `REVIEW_REQUIRED`, but no longer close
 the case automatically or generate a resolution outcome/recommendation. High and
 missing scores retain their escalation classifications. New cases do not assign a
@@ -185,11 +188,12 @@ including resolved cases. Claim ownership, timestamp, version and audit commit
 atomically. See the [Transaction guide](transaction/README.md) for pagination,
 conflicts and authorization boundaries.
 
-Resolution still requires a separate explicit customer-authorized operation on an
-owned `IN_REVIEW` case. Operator takeover grants review responsibility only;
-operator adjudication, reassignment and automatic review timeouts are not implemented. Historical resolved records remain unchanged. Case resolution does
-not post credits, change balances, or block cards. The 365-day intake window is
-unchanged and remains independent of fraud-score triage.
+Consent and operator takeover authorize intake/review only, never a legitimacy
+verdict, credit or card protection. Assigned-operator adjudication, recorded financial
+effects and local card protection are separate versioned operations documented in the
+[Transaction guide](transaction/README.md); intake does not execute them. Historical
+resolved records remain unchanged. The 365-day intake window is unchanged and remains
+independent of fraud-score triage.
 
 ### Port Configuration
 

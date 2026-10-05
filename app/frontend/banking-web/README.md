@@ -40,6 +40,14 @@ the source tree, but are not used by the in-scope financial screens.
 
 The frontend signs in through the [Responses BFF](../../responses-bff/README.md) at `/auth/login`, keeps only the short-lived application JWT in browser storage, and restores verified identity through `/auth/me`. Profiles require a supported role and positive `identity_version`; only customers carry `customer_id`. Navigation uses the persisted name, with an email fallback. The frontend does not create fixed bearer tokens or synthetic profiles.
 
+## Session lifetime
+
+Access JWTs expire 60 minutes after issuance by default; navigation does not extend
+their lifetime. Identity configuration can override this within 1–60 minutes.
+Restart Identity and sign in again after changing the TTL: existing JWTs keep their
+original expiry. Refresh tokens and renewal dialogs are deferred; expiry requires
+a new login. Current-identity checks still fail closed.
+
 ## App Service Deployment
 
 [Frontend CD](../../../.github/workflows/cd-frontend.yaml) requires GitHub
@@ -98,7 +106,21 @@ alone does not establish browser or deployed financial acceptance.
   preserves the source calendar date without timezone conversion. Stored timestamps,
   audit text and custom resolution notes remain unchanged.
   Pending requests are canceled on route/session teardown. Claim records responsibility
-  only: dispute decisions, reassignment and financial actions remain unavailable.
+  only. Assigned operators review versioned evidence and confirm valid/invalid verdicts
+  with a mandatory rationale in the shared confirmation dialog. Pending restitution
+  supports retry and explicit selection when multiple eligible destinations exist.
+  Completed effects show the persisted movement, original currency amount and actual
+  execution date; pending effects never imply credit. Card protection is a separate
+  reason-required audited application-only action, not processor enforcement.
+  Reassignment remains unavailable.
+  Evidence is stored transaction data captured when the operator claims a case,
+  not an external investigation or proof that a dispute is valid. Legacy assigned
+  cases without a snapshot show an explicit unavailable warning, hide destination
+  controls and disable adjudication; reading detail does not create evidence.
+  Protection labels distinguish the current card state from the recorded prior state.
+  Customer balance reload only repeats read requests; it never executes restitution
+  or modifies balances. Destination unavailability alone does not imply that a valid
+  verdict or pending restitution has already been recorded.
   Neither staff shell mounts financial screens or chat providers.
 
 Direct and nested routes are role-guarded; unknown staff paths return to their workspace. Login destinations cannot redirect to another role's workspace or an external URL. Role guards are UI isolation, not a replacement for server authorization.
@@ -107,24 +129,141 @@ Login, logout and cross-tab token changes cancel pending identity work, clear qu
 
 Verified sessions also schedule teardown at JWT expiry and recheck expiry on window focus. JWT payload parsing is only a UI timer, never an identity or authorization source. Customer Responses `AUTH_REQUIRED` or `ACCESS_DENIED` errors invoke the same logout boundary. Canceled streams and streams whose stored token changed cannot publish late text, approval widgets, conversation IDs, errors or completion callbacks into another session. Revocation is observed when the BFF rejects a request; this is not proactive revocation polling.
 
-Focused Node tests cover customer launcher/routes, staff exclusion, failed/loading profiles, expiry/focus, logout and replacement-token stream isolation. Operator tests cover validated queue/detail/claim payloads, exclusive-claim controls, conflict refresh and request cancellation. Browser evidence remains unverified: customer launcher interaction, refresh/deep links, real expiry/revocation, cross-user/role transitions with open or minimized chat, and retained composer/widget/conversation cleanup require an authorized browser run through the BFF. Operator queue/detail/claim requires its own browser run using direct JWT-authenticated Transaction requests. Unit tests and builds do not close the live acceptance gates in issues #35, #42, #55 or #56; the operator claim workspace is implemented, but final-verdict controls are not.
+Focused Node tests cover customer launcher/routes, staff exclusion, failed/loading profiles, expiry/focus, logout and replacement-token stream isolation. Operator tests cover validated queue/detail/claim payloads, exclusive-claim controls, conflict refresh and request cancellation. Browser evidence remains unverified: customer launcher interaction, refresh/deep links, real expiry/revocation, cross-user/role transitions with open or minimized chat, and retained composer/widget/conversation cleanup require an authorized browser run through the BFF. Operator queue/detail/claim requires its own browser run using direct JWT-authenticated Transaction requests. Unit tests and builds do not close the live acceptance gates in issues #35, #42, #55 or #56; the operator claim and versioned final-verdict controls are implemented; live adjudication, posting and protection acceptance remain unverified.
 
 Run `npm test`, `npm run lint` and `npm run build` for frontend checks. Administrator client tests resolve request paths against a synthetic base URL so they work both with a configured BFF URL and without local Vite environment files, as in CI. This test base does not change production transport configuration. Identity tests cover contracts, route mount isolation, session reset orchestration and administrator form handlers using the existing Node test environment. These are not browser or live-backend acceptance evidence. Manual checks still include three-role deep links and refresh, lifecycle persistence, expired/revoked sessions, locale display and cross-user logout isolation.
 
 ## Session validation (2026-10-04)
 
-Final focused support-case timestamp/operator/timeline checks:
+Frontend checks after adding versioned adjudication, pending-effects controls,
+application-only protection and customer balance refresh:
 
 ```powershell
-rtk proxy npm --prefix app\frontend\banking-web test -- --run src/common/dateTime.test.ts src/pages/OperatorCases.test.tsx src/components/SupportCaseTimeline.test.tsx
-rtk proxy npm --prefix app\frontend\banking-web run lint
-rtk proxy npm --prefix app\frontend\banking-web run build
+rtk npm --prefix app\frontend\banking-web test
+rtk npm --prefix app\frontend\banking-web run lint
+rtk npm --prefix app\frontend\banking-web run build
 ```
 
-Results: 36 tests passed; lint had zero errors and 14 existing warnings; build
-passed with the existing large-chunk warning. These checks cover reusable date
-presets and operator UI contracts, not authenticated browser acceptance.
+Results: 493 tests across 30 files passed; lint had zero errors and 14 existing
+warnings; build passed with the existing large-chunk warning. These checks cover
+shared posting/protection contracts, operator controls using actual product state,
+nullable historical protection state, linked financial movements and session-scoped
+balance refresh, not authenticated browser acceptance.
 Historical suite counts elsewhere describe earlier runs, not the current total.
+
+### Dispute presentation and recorded receipts
+
+Operator context uses fixed source-evidence and stored-routing groups, with chronology
+before the review controls and a separate missing-information summary. Missing snapshot
+fields are shown even when omitted from the payload; zero scores and false flags remain
+visible. The stored synthetic fraud signal supports routing only, not investigation or
+proof of legitimacy. Customer statements, operator rationales and original audit text
+remain unchanged.
+
+Customer detail reads back the persisted case ID, transaction, reason and status. Consent
+comes from the latest recorded approval event, never from intake acceptance or case
+status. Financial receipts show recorded movement/destination references, original
+currency, balance adjustment and execution time. Pending effects and invalid verdicts
+never imply completed restitution. Recorded application movements do not confirm external
+settlement; application-local protection remains a separately recorded action.
+
+Dispute product, transaction-status, source and protection labels use controlled en/es/pt
+lookups with unavailable fallbacks. Amounts use the shared precision-safe locale formatter;
+stored scores retain their decimal precision without a currency or probability suffix.
+Multiple debit destinations still require explicit selection. No allocation or default
+policy has been added; that policy remains unratified.
+
+Focused validation from this directory:
+
+```powershell
+rtk npm test -- src\common\disputePresentation.test.ts src\components\DisputePresentation.test.tsx src\components\SupportCaseIntakeReceipt.test.tsx src\components\OperatorCaseActions.test.tsx src\components\SupportCaseFinancialDetails.test.tsx src\components\SupportCaseTimeline.test.tsx
+rtk npm run lint
+rtk npm run build
+```
+
+Results: 67 tests across six files passed; lint passed with zero errors and 14 existing
+warnings; build passed with the large-chunk warning. These are synthetic frontend
+regressions, not browser, live posting/protection, hosted or end-to-end acceptance.
+
+### Pre-intake proposal and consent
+
+Direct reporting through [ReportDisputeDialog](src/components/ReportDisputeDialog.tsx)
+and the chat [DisputePreview widget](src/components/chat/widgets/common/DisputePreview.tsx)
+share [DisputePreviewConsent](src/components/DisputePreviewConsent.tsx). The owned
+Transaction preview displays amount/currency, localized date, masked card, merchant,
+optional persisted country/city and the customer's verbatim reason. Before acceptance
+it is a proposal, not a persisted case or successful receipt.
+
+Accept explicitly authorizes case creation and review. The Transaction service records
+case, consent and routing atomically in `IN_REVIEW`; new intake has no second review
+approval. Decline/cancel creates no case or event. The [REST client](src/api/disputeClient.ts)
+uses preview, token-based acceptance and read-only recovery. Acceptance expires after
+ten minutes and recovery after 24 hours from issuance. An ambiguous response uses
+recovery; null remains uncertain, not a successful receipt or permission for blind retry.
+Chat continues a REST-accepted case with `getSupportCase`, not recreation. Existing
+`WAITING_USER_APPROVAL` cases keep the legacy consent widget, separate from generic MCP
+permission controls. Intake/review does not itself refund, adjudicate or protect a card.
+See the [Transaction contract](../../business-api/transaction/README.md#customer-dispute-proposal-and-consent).
+
+The owner reported the feature working. This is a limited user observation, not
+completion of the en/es/pt browser, expired-session, cross-user, PostgreSQL contention
+or hosted acceptance matrix.
+
+### Chat streaming and approval parity
+
+The [Responses provider](src/components/chat/ResponsesChatProvider.tsx) keeps POST SSE
+through the BFF. Account, Transaction and support-case calls show correlated processing
+tasks only while executing. Successful results remove their correlated activity instead
+of leaving generic completion rows; failed or unfinished calls retain neutral failure
+feedback without a loading shimmer. Concurrent pending calls remain independent.
+Metadata does not prematurely hide the initial loading indicator. A call
+declaration is not an execution receipt. The [stream reader](src/components/chat/useThreadStream.ts)
+handles fragmented UTF-8, a final event without a newline and `[DONE]`, while rejecting
+malformed events with controlled feedback and suppressing stale-session callbacks.
+Text deltas are accumulated separately by output item or message ID; deltas without
+an ID retain the legacy accumulator. Completed, incomplete and EOF turns without
+meaningful text or a current-turn approval/validated consent card show one controlled,
+localized failure instead of silently ending blank. Tool progress and handoff receipts
+do not count as an answer; cancellation does not add this fallback.
+
+Generic MCP approval cards remain separate from persisted dispute consent. Cards await
+the resumed request's outcome: success disables duplicate submissions; failure or
+cancellation permits retry. A transport failure can occur after server processing, so
+an enabled retry is not proof that the server never consumed the approval.
+
+For an already-persisted legacy case, a complete validated tool result inserts an inline
+[dispute consent card](src/components/chat/widgets/common/DisputeConsent.tsx). The card
+New proposals use the shared pre-intake consent component instead. The card
+reloads the owned case through the existing authenticated Transaction REST client,
+only offers approve/decline while `WAITING_USER_APPROVAL`, and refreshes persisted state
+after an ambiguous POST failure. Consent does not itself grant tool permission, issue
+a refund or protect a card. Progress, controls and feedback use en/es/pt catalogs.
+
+Outputless-turn validation, run from the repository root:
+
+| Command                                                                             | Result                                    |
+| ----------------------------------------------------------------------------------- | ----------------------------------------- |
+| `rtk proxy npm --prefix app\frontend\banking-web test -- --run src\components\chat` | 111 passed across five files              |
+| `rtk proxy npm --prefix app\frontend\banking-web run lint`                          | Passed: zero errors, 14 existing warnings |
+| `rtk proxy npm --prefix app\frontend\banking-web run build`                         | Passed with existing large-chunk warning  |
+
+These provider regressions exercise visible error items, en/es/pt failure text,
+interleaved output IDs, legacy deltas, approval retries and consent-only turns.
+Earlier parity validation recorded 619 full-suite tests across 37 files and 13 existing
+diagnostics from `tsc --noEmit -p tsconfig.app.json` outside the parity changes; neither
+check was rerun for this update. Editor diagnostics report no errors in the three
+changed chatbot source/test files. Browser, backend-producer and hosted end-to-end
+behavior are not verified by these synthetic checks.
+
+Owner browser checklist using the normal full-stack launch:
+
+- Ask Account and Transaction questions: observe processing feedback followed by streamed text.
+- Accept and reject a generic tool approval; simulate a failed continuation and retry.
+- Preview a dispute in chat: no case exists before explicit acceptance; acceptance creates one `IN_REVIEW` case and detail link, without a second consent step.
+- Decline/cancel a new proposal: no case or event is created. Verify legacy pending-case approve/decline separately.
+- Accept a proposal manually, then retrieve that same case in chat; confirm readback without duplicate intake or second consent.
+- Switch threads, cancel, logout and change customer: no stale text, cards or actions may leak.
+- Repeat with en/es/pt profiles; compare inline case status with the persisted detail page.
 
 ## Localization
 
@@ -154,12 +293,28 @@ Controlled [BFF error codes](../../responses-bff/README.md#controlled-errors) ar
 to local UI messages. Raw backend details and unexpected exception messages are not
 displayed; login errors remain English.
 
-The earlier localization snapshot passed with 52 frontend tests; its focused i18n suite passed with
-16 tests, covering transaction labels, catalog parity, timeline/recommendation
-templates and unknown-label fallback. Edited-file lint and production build passed;
-the build retains a large-chunk warning. Full TypeScript checking previously reported existing errors in chat rendering/provider
-types and legacy BFF mocks. Authenticated browser localization, responsive layouts and
-live multilingual conversations were not validated in this change.
+The consent-label audit added the flat `Card` key explicitly to all three catalogs:
+English `Card`, Spanish `Tarjeta`, Portuguese `Cartão`. Spanish customer-facing dispute
+and claim labels consistently use `reclamo`/`reclamos` with masculine grammar. Canonical
+English keys, statuses and payload values remain unchanged, as do Portuguese dispute
+terminology, customer-entered reasons and original audit text. The agent's authenticated
+locale directive separately requires this terminology for generated Spanish prose.
+
+Latest focused localization validation from the repository root:
+
+| Command                                                                                                                  | Result                                    |
+| ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------- |
+| `rtk proxy npm --prefix app\frontend\banking-web test -- src\i18n.test.ts src\components\DisputePreviewConsent.test.tsx` | 53 passed across two files                |
+| `rtk proxy npm --prefix app\frontend\banking-web run lint`                                                               | Passed: zero errors, 14 existing warnings |
+| `rtk proxy npm --prefix app\frontend\banking-web run build`                                                              | Passed with existing large-chunk warning  |
+
+Catalog regressions verify consent-surface key completeness, `Card` translations,
+Spanish terminology/grammar and canonical payload preservation. These results supersede
+the earlier 16-test focused i18n snapshot, not unrelated full-suite evidence. Full
+TypeScript checking previously reported existing errors in chat rendering/provider
+types and legacy BFF mocks; Vite build does not prove those resolved. The owner reported
+the feature working, but the complete authenticated browser localization, responsive
+layout and live multilingual model matrix was not rerun for this follow-up.
 
 ## Account Page
 
@@ -268,31 +423,30 @@ or duplicate-credit guarantee.
 Resolved transactions can currently be reported again. Eligibility also accepts
 approved card deposits; restricting transaction types requires an explicit policy decision.
 
-Case outcomes currently do not create financial movements, update balances, or
-block cards. Financial movements and card protection are not implemented.
-The en/es/pt approval, status, outcome, and timeline templates describe recorded consent,
-routing, and case closure, not verified human review, fraud verdicts, credits, refunds,
-or card blocks. Catalog reviewer assignment is persisted routing, not actual human
-review; operator adjudication is pending/not implemented. The financial-effects and
-card-protection metadata remain available. Historical stored records and machine codes
-remain unchanged. Any future credit should appear as a separate,
-case-linked movement on its posting date, not rewrite the original transaction.
+Under [ADR 0009](../../../docs/adr/0009-operator-verdicts-with-recorded-financial-effects.md),
+assigned operators issue versioned final verdicts. Valid verdicts stay `PENDING_EFFECTS`
+until compensation is recorded; completed application effects have separate linked
+movements and balance adjustments without rewriting the original transaction. Card
+protection is a separate audited application action, never an automatic consequence
+of consent or verdict and never proof of external processor enforcement. Historical
+records do not trigger financial backfills. Live posting/protection acceptance remains
+unverified.
 
-Recommendation and timeline message templates are localized in en/es/pt, while the
-customer's reason remains unchanged. Generic translated messages omit free-form
-manual-resolution notes and reviewer-assignment suffixes; the original audit data
-remains persisted. On 2026-10-02, 52 frontend tests (including 16 focused localization
-tests), edited-file lint, and the production build passed. The existing bundle-size
-warning remains. These checks do not establish authenticated three-language browser parity.
+Recommendation and timeline projections are localized in en/es/pt. Customer reasons,
+operator rationales and original audit text remain unchanged; arbitrary resolution
+notes remain visible. Display uses recorded state, not inferred human review or
+settlement. Earlier localization checks passed, but synthetic tests do not establish
+authenticated three-language browser parity.
 
 The detail page labels the product number as Card Number, localized in en/es/pt.
 The approve/decline gate appears while `WAITING_USER_APPROVAL`. Approval starts
 review, not closure: low, high, and missing fraud scores all remain `IN_REVIEW`
-until explicit resolution. Low-score cases show the localized `REVIEW_REQUIRED`
-event; a low score neither determines legitimacy nor authorizes automatic closure.
-Catalog assignment does not implement operator takeover or adjudication. The existing
-resolution endpoint remains customer-authenticated; no review timeout is implemented.
-Previously resolved cases remain unchanged.
+until an assigned operator's explicit verdict and any required recorded effects.
+Low-score cases show the localized `REVIEW_REQUIRED` event; a low score neither
+determines legitimacy nor authorizes automatic closure. Historical catalog assignments
+are not real operator claims. Current takeover and verdict controls use the authenticated
+assigned operator; customer final-resolution authority is retired. No automatic review
+timeout is implemented. Previously resolved cases remain unchanged.
 
 The detail page also shows the full event timeline and the single post-resolution
 recommendation card with an explicit dismiss action once a case resolves favorably. All
@@ -314,9 +468,9 @@ npm run build
 
 Frontend CI coverage uses Vitest's V8 provider and requires `@vitest/coverage-v8` in `devDependencies`.
 
-Financial arithmetic and pagination tests passed (19 tests), as did the frontend
-build and focused financial lint. Global lint still reports unrelated existing
-errors in WidgetRenderer, two UI components, and Tailwind configuration.
+Historical financial arithmetic and pagination validation passed 19 tests, the build
+and focused financial lint. Historical global lint errors described below were resolved;
+the latest full run passes with 14 warnings (see chat streaming validation above).
 
 The card page compiled successfully, and the user confirmed local credit/debit card
 display. The Account API's JWT-authenticated contract suite passed, including masking
@@ -325,7 +479,8 @@ have not yet been recorded. The user supplied desktop screenshots of the card pa
 and Dashboard. Subsequent card-grid, Account, and Dashboard presentation changes
 passed build and focused lint; the 19 frontend tests passed again. The latest layout
 has not been independently inspected in an authenticated browser session. Account
-retains inherited placeholder-link accessibility diagnostics; global lint is not clean.
+retains inherited placeholder-link accessibility diagnostics; the latest global lint
+has warnings but no errors.
 
 Desktop browser balances and transaction rows matched direct, JWT-authenticated Account
 and Transaction reads for

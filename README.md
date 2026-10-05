@@ -66,12 +66,20 @@ transaction, submit a dispute with explicit approval, and understand the case's
 progress. The agent gathers context and explains service outcomes; deterministic
 business logic routes the case, and the AI never decides dispute legitimacy.
 
-The case lifecycle is persisted, but its financial actions are not yet implemented:
-the provisional-credit outcome does not create a transaction or update a balance,
-and approval does not block a card. These labels are prototype workflow results,
-not evidence of a refund or card protection. The backend rejects an existing active
-case, and the transaction UI checks reporting eligibility. Concurrent creation is
-not database-protected, and resolved card transactions can be disputed again.
+New intake first returns an owned, read-only transaction proposal. Explicit consent
+then records case creation, consent and review routing atomically in `IN_REVIEW`;
+decline creates no case or event. Existing pending cases retain their legacy approval
+path. Signed proposals have bounded acceptance/recovery, and chat reads back cases
+accepted through the manual action instead of recreating them. See the
+[Transaction consent contract](app/business-api/transaction/README.md#customer-dispute-proposal-and-consent).
+
+Consent and review do not themselves adjudicate, refund or protect a card. Separately
+implemented assigned-operator verdicts record financial effects under
+[ADR 0009](docs/adr/0009-operator-verdicts-with-recorded-financial-effects.md);
+status wording alone is not evidence of settlement. The service and active-case
+uniqueness guard duplicate intake; PostgreSQL acceptance-contention and complete
+browser/hosted acceptance remain unverified. Resolved card transactions can be
+disputed again under the current policy.
 
 Even if specific to banking scenarios, this sample can be used for other business use cases as technical reference architecture concerning customer support chatbots or virtual assistants using Microsoft Agent Framework to implement supervisor based orchestration for multiple domains agents that need to integrate with business domains API through MCP. AI-powered assistants in other domains by adapting the agents tools and backend services to your specific business needs.
 
@@ -114,19 +122,28 @@ filters and pagination, and enforce customer ownership.
 
 The submission MVP extends this flow into support operations: users can open a
 transaction-dispute support case from conversation context or directly from a
-transaction row, track its status through `OPEN -> WAITING_USER_APPROVAL -> IN_REVIEW
--> RESOLVED`, approve or decline the dispute, and receive a single contextual product
-recommendation with an explicit opt-out after case resolution. Customer approval
+transaction row, track intake and consent through
+`OPEN -> WAITING_USER_APPROVAL -> IN_REVIEW`, approve or decline review consent,
+and receive a single contextual product recommendation with an explicit opt-out
+only after case resolution. Customer approval
 starts review: all fraud-score classifications remain `IN_REVIEW`, including low
 scores, until an explicit resolution operation. A low stored score is routing
 information, not a legitimacy verdict or authorization for automatic closure.
-Real operators now claim consented, unclaimed cases exclusively and rediscover their
+Real operators claim consented, unclaimed cases exclusively and rediscover their
 assigned cases after refresh at `/operator/support-cases`. Owner-only detail shares
 the customer timeline with operator-perspective wording and localized timestamps.
 The simulated ServiceAgent catalog is retired; archived assignments never become
-real ownership. Claim grants review responsibility only: operator verdicts,
-reassignment and review timeouts remain unavailable. The existing resolution
-endpoint remains customer-authenticated, and previously resolved cases are not reopened. See the
+real ownership. Assigned operators submit reasoned, versioned verdicts: invalid cases
+become `RESOLVED_INVALID`; valid cases remain `PENDING_EFFECTS` until an atomic
+compensation posting and balance adjustment succeed, then become `RESOLVED_VALID`.
+Debit compensation prefers owned active same-currency savings accounts, then checking
+accounts; credit compensation reduces card debt. Card protection is a separate audited
+application action, not external processor enforcement. Customer resolution authority
+is retired; historical resolved cases are not automatically reopened or compensated.
+Reassignment and review timeouts remain unavailable. Local migration
+`20261004_0011` was applied and its head verified on authorized localhost PostgreSQL;
+six isolated PostgreSQL concurrency/rollback regressions passed. Browser and hosted
+acceptance remain separate gates. See the
 [frontend guide](app/frontend/banking-web/README.md#transaction-disputes) and
 [business API guide](app/business-api/README.md) for the implementation.
 
@@ -151,9 +168,14 @@ The implemented dispute workflow and its evaluation evidence are separate:
   has a persistent comment and transcript artifacts; dispute quality
   and baseline comparison remain pending.
 
-The next functional gates are an approved assigned-operator verdict contract and
-versioned evidence, followed by separately approved financial effects and duplicate
-protection. Existing review claims do not settle a dispute or change card state.
+[ADR 0009](docs/adr/0009-operator-verdicts-with-recorded-financial-effects.md)
+records the approved assigned-operator verdict and actual-compensation contract,
+including savings/checking allocation for debit disputes. Versioned evidence,
+financial execution and duplicate-compensation protection are implemented with
+synthetic automated coverage and isolated localhost PostgreSQL concurrency/rollback
+checks. The local migration is applied; browser, real-data parity and hosted runtime
+acceptance remain separate verification gates. Existing review claims alone do not settle a dispute or change
+card state.
 Dispute-specific evaluation remains a separate priority for intake, customer approval,
 low/high/missing-score review, safe refusals and grounded status explanations.
 Service authorization and persisted timelines require independent integration
@@ -216,8 +238,6 @@ The home banking assistant uses a handoff workflow whose agents specialize in ac
 - [Architecture](./ARCHITECTURE.md)
 - [Architecture Decision Records](./docs/adr/README.md)
 - For Semantic Kernel version check this [branch](https://github.com/Azure-Samples/agent-openai-python-banking-assistant/tree/semantic-kernel)
-
-<br /><br />
 
 ### Prerequisites
 
@@ -358,17 +378,22 @@ Current limitations to keep explicit:
 - The frontend displays persisted customer names and owned accounts, including explicit multi-account selection. Account codes absent from the schema are omitted; Agreements and Privacy & Security Policy remain inherited placeholders.
 - Dashboard and Analytics consume Account and Transaction directly over JWT-authenticated REST, with fully paginated transactions. Credit/debit cards use a customer-scoped, read-only catalog with server-masked numbers; card operations remain unavailable. See the [frontend guide](app/frontend/banking-web/README.md) for presentation and validation limits.
 - Account and Transaction use persisted product ownership and transaction rows. Selected local two-user PostgreSQL and browser financial comparisons passed, but the complete signed agent-chain, browser-state, and deployed validation matrices remain open.
-- Signed stored-locale context and profile-bound frontend i18n support exact `es`, `pt`, and `en`, with English fallback. Static JSON catalogs translate UI and transaction labels; controlled BFF failures use localized UI messages, while login stays English. Product queries use canonical English labels and ingestion normalizes Spanish source values. Automated coverage does not establish authenticated browser localization, multilingual agent conversations, or hosted parity. See the [localization guide](app/frontend/banking-web/README.md#localization).
+- Signed stored-locale context and profile-bound frontend i18n support exact `es`, `pt`, and `en`, with English fallback. Static JSON catalogs translate UI and transaction labels, including Card/Tarjeta/Cartão; Spanish generated/display text uses reclamo/reclamos while canonical contracts, customer reasons and audit text remain unchanged. Controlled BFF failures use localized UI messages, while login stays English. Product queries use canonical English labels and ingestion normalizes Spanish source values. Automated coverage does not establish authenticated browser localization, multilingual agent conversations, or hosted parity. See the [localization guide](app/frontend/banking-web/README.md#localization).
 - On 2026-09-30, user-supplied local browser evidence confirmed an owned-account answer with full bank number and masked card output, and a foreign-account lookup returning `ACCESS_DENIED` followed by a visible assistant response. This closes the reported blank-response failure, not the full authorization or hosted matrix; the complete real-data verification checklist is tracked internally, not in this public repository.
 - MCP and internal API authorization must be enforced in service code (`customer_id` ownership checks), not inferred from prompts.
 - The frontend must not call Foundry or agent endpoints directly; browser traffic for the chat path must go through the Responses BFF. Account and Transaction reads are the one scoped exception: the frontend calls those two services directly, authenticated with the same application JWT Identity issues.
 - The BFF validates application identity and proxies upstream requests, but this does not replace per-resource authorization in business services.
 - The previous ChatKit-style direct browser-to-agent pattern is no longer the target architecture.
-- HITL approval widgets back a real business workflow for transaction disputes (case
-  creation, customer consent gate, deterministic review routing, exclusive real
-  operator claims, and a single post-resolution recommendation with opt-out).
-  Simulated assignments are archived only. Operator final adjudication and
-  financial/card effects remain unimplemented. The 365-day dispute window
+- HITL proposal widgets require explicit customer consent before transaction-dispute
+  case creation. Read-only preview and decline create no case/events; acceptance
+  atomically records intake, consent and deterministic routing in `IN_REVIEW`.
+  Legacy pending cases retain their approval path, and REST-accepted cases continue
+  in chat through readback without second consent. See the
+  [consent contract](app/business-api/transaction/README.md#customer-dispute-proposal-and-consent).
+  Exclusive real operator claims and a single post-resolution recommendation with
+  opt-out remain separate workflow steps. Simulated assignments are archived only. Assigned-operator adjudication and
+  atomic compensation are implemented, with separately audited local card protection;
+  browser and hosted acceptance remain unverified. The 365-day dispute window
   is a demo policy evaluated against the real system clock and will reject opening new
   disputes once the loaded dataset's transactions fall outside it.
 - Prompt-injection resilience is bounded by deterministic authorization checks and does not rely on model instruction following alone.
