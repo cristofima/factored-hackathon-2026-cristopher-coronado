@@ -210,6 +210,16 @@ Required:
 - `ACCOUNT_MCP_URL`
 - `TRANSACTION_MCP_URL`
 
+Optional (per-agent model deployments):
+
+- `TRIAGE_MODEL_DEPLOYMENT_NAME`
+- `ACCOUNT_MODEL_DEPLOYMENT_NAME`
+- `TRANSACTION_MODEL_DEPLOYMENT_NAME`
+
+The workflow forwards these existing GitHub Environment variables with
+`azd -C app/agent env set`, including empty values when unset. They are not part of
+its required-variable validation; `MODEL_DEPLOYMENT_NAME` remains required.
+
 Optional (observability and tracing behavior):
 
 - `ENABLE_INSTRUMENTATION`
