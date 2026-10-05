@@ -105,12 +105,14 @@ Terraform owns the complete app settings arrays through `azapi_resource.app`,
 existing sites; declare persistent changes in Terraform rather than patching settings
 manually, because a later provision can overwrite those manual changes.
 
-Account and Transaction start with `python -m uvicorn main:app --host 0.0.0.0 --port 8080 --proxy-headers`.
+Account starts with `python -m uvicorn banking_account.main:app --host 0.0.0.0 --port 8080 --proxy-headers`;
+Transaction uses `banking_transaction.main:app` with the same options.
 Uvicorn reads `FORWARDED_ALLOW_IPS=*` from the App Service environment
 to trust the forwarded HTTPS scheme. Keeping the wildcard out of the startup command
 avoids shell expansion by Oryx. This trust setting is scoped to the controlled App Service
-proxy environment. The command imports `main:app`; it does not execute the
-`if __name__ == "__main__"` block used by `python main.py` locally.
+proxy environment. These commands import the qualified package's `main:app`; they do not execute the
+`if __name__ == "__main__"` block used by `python -m banking_account.main`
+or `python -m banking_transaction.main` locally.
 
 Changes to these startup commands or app settings require provisioning, not a service
 code deploy. Code or dependency changes still require deployment. After provisioning,

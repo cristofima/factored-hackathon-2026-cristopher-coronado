@@ -28,6 +28,20 @@ uv pip compile app/business-api/account/pyproject.toml --no-emit-package banking
 uv pip compile app/business-api/transaction/pyproject.toml --no-emit-package banking-shared -o app/business-api/transaction/requirements.txt
 ```
 
+### Importable source packages
+
+The Python distributions use `src/` layouts. The root [azd manifest](../azure.yaml)
+stages each service's package (`identity`, `banking_account`, `banking_transaction`,
+or `bff`) and `shared/src/banking_shared` at the ZIP root before packaging, then
+removes those temporary copies afterward. Hooks reject existing staging paths rather
+than overwrite source. Do not deploy a ZIP containing only `src/` with the existing
+startup commands: Oryx installs third-party requirements, not these local packages.
+
+Account and Transaction startup targets are `banking_account.main:app` and
+`banking_transaction.main:app`; Identity and BFF retain their qualified targets.
+Local packaging checks do not certify Oryx or hosted identity transport. Staging or
+startup changes need separate deployed validation before claiming hosted parity.
+
 ## Frontend deployment
 
 The banking web deployment workflow builds the Vite production assets, packages its App Service server, and injects the deployed Account, Transaction, and Responses BFF URLs. The browser calls the BFF `/responses` endpoint and never receives a Foundry credential.

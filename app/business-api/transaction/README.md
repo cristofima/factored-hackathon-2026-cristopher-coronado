@@ -4,6 +4,35 @@ Transaction REST reads and customer dispute routes verify the browser applicatio
 MCP tools use the separate short-lived internal agent bearer; it cannot authorize
 operator access. Business logic retains customer ownership checks.
 
+## Package layout and local startup
+
+The installed package is [banking_transaction](src/banking_transaction/):
+
+- [models](src/banking_transaction/models/) defines transaction and operator DTOs.
+- [routers](src/banking_transaction/routers/) separates transaction, customer-dispute
+  and operator REST boundaries.
+- [services](src/banking_transaction/services/) separates transaction reads, dispute
+  intake, operator review and adjudication business logic.
+- [consent](src/banking_transaction/consent/) owns signed proposal helpers.
+- [projections](src/banking_transaction/projections/) builds transaction and case DTOs.
+- [auth](src/banking_transaction/auth/) separates customer JWT, internal agent bearer
+  and operator identity checks; [observability](src/banking_transaction/observability/)
+  owns tracing and logging.
+- [mcp_tools.py](src/banking_transaction/mcp_tools.py) remains the thin tool boundary;
+  [main.py](src/banking_transaction/main.py) composes the application.
+
+From repository root, after configuring this service's own `.env`:
+
+```powershell
+rtk proxy uv sync --directory app\business-api\transaction --frozen --group dev
+$env:PROFILE = "dev"
+rtk proxy uv run --directory app\business-api\transaction --env-file .env python -m banking_transaction.main
+```
+
+Local development uses port 8071. The ASGI target is `banking_transaction.main:app`;
+production uses port 8080. Imports use the nested package namespaces without runtime
+path injection. See the [shared packaging guide](../README.md#python-dependency-artifacts).
+
 ## Customer dispute proposal and consent
 
 New intake is a read-only proposal followed by explicit consent to create a case
@@ -255,7 +284,7 @@ Separately authorized local PostgreSQL execution on 2026-10-04 upgraded revision
 passed: original business rows, five cases, 24 events, legacy catalog/mappings and
 Operator ownership constraints were retained. One concurrent login added an identity
 audit; all 62 original audit records were verified unchanged. Restore rehearsal and
-remote rollout were not performed. See the [data guide](../data/README.md#scope).
+remote rollout were not performed. See the [data guide](../data/README.md#schema-and-ownership).
 
 After assigned-list integration, the focused `tests\test_operator_cases.py` run
 passed 13 tests. This is synthetic service coverage, not authenticated browser

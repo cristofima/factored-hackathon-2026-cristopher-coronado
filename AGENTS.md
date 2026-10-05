@@ -29,7 +29,7 @@ flowchart LR
   Account MCP tools.
 - [app/business-api/transaction](app/business-api/transaction): transaction REST/MCP
   reads, customer disputes and operator queue, claim and adjudication APIs.
-- [app/business-api/shared/banking_shared](app/business-api/shared/banking_shared):
+- [app/business-api/shared/src/banking_shared](app/business-api/shared/src/banking_shared):
   canonical SQLModel persistence tables and database wiring.
 - [app/business-api/data](app/business-api/data): Alembic migrations, historical
   archives and CSV-to-PostgreSQL pipeline.
@@ -40,6 +40,20 @@ flowchart LR
 - [app/agent/azure.yaml](app/agent/azure.yaml): separate azd root for the hosted agent.
 
 This is an implementation map, not evidence of deployed or live-data acceptance.
+
+## Python Package Convention
+
+Python projects install their application packages from `src/` through their own
+`pyproject.toml` and uv environment. Keep meaningful responsibility-based subpackages
+such as `models`, `routers`, `services`, `auth`, `projections`, and domain helpers;
+do not flatten them into `src/<package>` or create generic catch-all modules.
+The Agent follows the same convention under `app/agent/src/app`.
+
+Use package-qualified imports and stable module/console entrypoints. Do not repair
+imports with runtime `sys.path` changes or `PYTHONPATH`. Checkout scripts may remain
+thin CLI adapters, with implementation inside the installed package. See the
+[package map](ARCHITECTURE.md) and [service structure](app/business-api/README.md#-service-structure)
+for current namespaces and responsibilities.
 
 ## Local Development
 
@@ -77,7 +91,6 @@ Run from repository root; select the commands for the changed component. These a
 local checks, not a replacement for the full CI workflow.
 
 ```powershell
-$env:PYTHONPATH = (Get-Location).Path
 $env:OTEL_SDK_DISABLED = "true"
 rtk proxy uv run --directory app\agent python -m pytest tests -q
 rtk proxy uv run --directory app\responses-bff python -m pytest tests -q
@@ -85,7 +98,7 @@ rtk proxy uv run --directory app\business-api\identity python -m pytest tests -q
 rtk proxy uv run --directory app\business-api\account python -m pytest tests -q
 rtk proxy uv run --directory app\business-api\transaction python -m pytest tests -q
 rtk proxy uv run --directory app\business-api\data python -m pytest tests -q
-rtk proxy uv run --project app\agent python -m pytest evals\tests -q
+rtk proxy uv run --project evals --extra offline python -m pytest evals\tests -q
 
 rtk proxy npm --prefix app\frontend\banking-web run test
 rtk proxy npm --prefix app\frontend\banking-web run lint

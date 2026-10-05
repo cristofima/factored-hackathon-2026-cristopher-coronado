@@ -100,13 +100,13 @@ prioritize a focused banking workflow, justified AI usage, secure tools, human
 oversight and explicit autonomy/accuracy/latency/cost tradeoffs. The table separates
 implementation from evidence still needed; it is not a claim of production readiness.
 
-| Dimension | Current contribution and detail guide | Evidence boundary / remaining work |
-| --- | --- | --- |
-| Technical Judgment | Separate Identity/BFF/REST/MCP boundaries; deterministic consent, ownership, operator verdicts and effects. [ADRs](docs/adr/README.md) | Full negative-path, hosted identity, reliability and rollback acceptance remain open. |
-| AI Engineering | Streaming React-to-BFF-to-Responses integration and Account/Transaction handoffs. [Agent guide](app/agent/README.md) | Real-model protocol smoke is verified; semantic grounding and multilingual workflow quality require broader evidence. |
-| Data Engineering | Approved cohort/date-window ingestion, normalization, dimension upserts, independent daily transactions and checksum manifests. [Data guide](app/business-api/data/README.md) | Persisted synthetic data is not live banking data; complete runtime field/service parity remains a separate gate. |
-| Machine Learning | Deterministic comparator, synthetic replay/scoring, held-out scenario definitions and offline fraud-threshold analysis. [Evaluation guide](evals/README.md) | No newly trained fraud model or paired real-model improvement is claimed; stored synthetic scores are inputs, not discovered fraud. |
-| Data Analytics | Customer-scoped product history, filters, currency-aware totals and labeled reconstructed snapshots. [Frontend guide](app/frontend/banking-web/README.md) | Transaction activity does not establish support demand or savings; measured safe-resolution impact, latency, cost and segment/language comparisons remain pending. |
+| Dimension          | Current contribution and detail guide                                                                                                                                         | Evidence boundary / remaining work                                                                                                                                 |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Technical Judgment | Separate Identity/BFF/REST/MCP boundaries; deterministic consent, ownership, operator verdicts and effects. [ADRs](docs/adr/README.md)                                        | Full negative-path, hosted identity, reliability and rollback acceptance remain open.                                                                              |
+| AI Engineering     | Streaming React-to-BFF-to-Responses integration and Account/Transaction handoffs. [Agent guide](app/agent/README.md)                                                          | Real-model protocol smoke is verified; semantic grounding and multilingual workflow quality require broader evidence.                                              |
+| Data Engineering   | Approved cohort/date-window ingestion, normalization, dimension upserts, independent daily transactions and checksum manifests. [Data guide](app/business-api/data/README.md) | Persisted synthetic data is not live banking data; complete runtime field/service parity remains a separate gate.                                                  |
+| Machine Learning   | Deterministic comparator, synthetic replay/scoring, held-out scenario definitions and offline fraud-threshold analysis. [Evaluation guide](evals/README.md)                   | No newly trained fraud model or paired real-model improvement is claimed; stored synthetic scores are inputs, not discovered fraud.                                |
+| Data Analytics     | Customer-scoped product history, filters, currency-aware totals and labeled reconstructed snapshots. [Frontend guide](app/frontend/banking-web/README.md)                     | Transaction activity does not establish support demand or savings; measured safe-resolution impact, latency, cost and segment/language comparisons remain pending. |
 
 ## Evaluation and observed evidence
 
@@ -144,7 +144,7 @@ stack locally does not imply inference is offline or free.
 
 1. Follow the [data setup and pipeline guide](app/business-api/data/README.md) for
    migrations and an approved explicit date/customer scope. Provision login identities
-   separately using the [demo seeder](app/business-api/data/README.md#seed-demo-users);
+   separately using the [demo seeder](app/business-api/data/README.md#explicit-demo-identity-seeding);
    ingestion and startup never implicitly create users or bootstrap an administrator.
 2. Install component dependencies and configure each service's ignored `.env` from
    its `.env.example`: [Identity](app/business-api/identity/README.md),
@@ -191,19 +191,19 @@ owns requirements regeneration and zip packaging.
 
 ## Documentation map
 
-| Detail | Source of truth |
-| --- | --- |
-| Physical code map and design decisions | [Architecture](ARCHITECTURE.md), [ADRs](docs/adr/README.md) |
-| Agent setup, tools and conversation state | [Agent](app/agent/README.md) |
-| Browser trust boundary and Responses proxy | [BFF](app/responses-bff/README.md) |
-| Credentials, roles, lifecycle and administrator APIs | [Identity](app/business-api/identity/README.md) |
-| Account/card inquiries | [Account](app/business-api/account/README.md) |
-| Transactions, consent, operators and recorded effects | [Transaction](app/business-api/transaction/README.md) |
-| Shared REST/MCP integration and packaging | [Business APIs](app/business-api/README.md) |
-| Ingestion, manifests, seeding and snapshots | [Data](app/business-api/data/README.md) |
-| Screens, catalog and localization | [Frontend](app/frontend/banking-web/README.md) |
-| Evaluation commands, evidence and limitations | [Evaluations](evals/README.md) |
-| Provisioning, deployment and CI/CD | [Infrastructure](infra/README.md), [Deployment](docs/deployment-guide.md), [Workflows](.github/workflows/README.md) |
+| Detail                                                | Source of truth                                                                                                     |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Physical code map and design decisions                | [Architecture](ARCHITECTURE.md), [ADRs](docs/adr/README.md)                                                         |
+| Agent setup, tools and conversation state             | [Agent](app/agent/README.md)                                                                                        |
+| Browser trust boundary and Responses proxy            | [BFF](app/responses-bff/README.md)                                                                                  |
+| Credentials, roles, lifecycle and administrator APIs  | [Identity](app/business-api/identity/README.md)                                                                     |
+| Account/card inquiries                                | [Account](app/business-api/account/README.md)                                                                       |
+| Transactions, consent, operators and recorded effects | [Transaction](app/business-api/transaction/README.md)                                                               |
+| Shared REST/MCP integration and packaging             | [Business APIs](app/business-api/README.md)                                                                         |
+| Ingestion, manifests, seeding and snapshots           | [Data](app/business-api/data/README.md)                                                                             |
+| Screens, catalog and localization                     | [Frontend](app/frontend/banking-web/README.md)                                                                      |
+| Evaluation commands, evidence and limitations         | [Evaluations](evals/README.md)                                                                                      |
+| Provisioning, deployment and CI/CD                    | [Infrastructure](infra/README.md), [Deployment](docs/deployment-guide.md), [Workflows](.github/workflows/README.md) |
 
 ## Attribution
 

@@ -46,6 +46,31 @@ rtk proxy azd up --cwd app\agent
    URL or successful deploy command does not prove Identity availability, database
    migrations, hosted identity transport or customer/operator end-to-end behavior.
 
+## Python package staging and startup
+
+Development installs application packages from each project's `src` directory.
+The root [azd manifest](../azure.yaml) stages those packages and
+`banking_shared` into the App Service ZIP roots before packaging, then removes the
+staging copies. Existing staging destinations are rejected rather than overwritten.
+Do not deploy only the old flat module names or add import-path workarounds.
+
+| Service       | ASGI entrypoint                             |
+| ------------- | ------------------------------------------- |
+| Identity      | `identity.main:create_app` with `--factory` |
+| Account       | `banking_account.main:app`                  |
+| Transaction   | `banking_transaction.main:app`              |
+| Responses BFF | `bff.main:app`                              |
+
+Responsibility subpackages remain intact inside each staged package. Runtime
+requirements omit the local `banking-shared` distribution path because its source
+is staged separately; its dependencies are still required. See the
+[dependency artifact contract](../app/business-api/README.md#python-dependency-artifacts),
+[Identity deployment contract](../app/business-api/identity/README.md#cicd) and
+[BFF guide](../app/responses-bff/README.md). The
+[agent project](../app/agent/README.md) packages separately from its own azd root.
+Package/import validation does not prove hosted startup, chatbot behavior or
+PostgreSQL migration acceptance.
+
 ### **Important: Note for PowerShell Users**
 
 If you encounter issues running PowerShell scripts due to the policy of not being digitally signed, you can temporarily adjust the `ExecutionPolicy` by running the following command in an elevated PowerShell session:

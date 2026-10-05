@@ -45,7 +45,7 @@ intake recovers an owned active case through list/detail readback. Eligibility a
 ownership remain service decisions. Existing `WAITING_USER_APPROVAL` cases retain their
 legacy consent path. See the [Transaction contract](../business-api/transaction/README.md#customer-dispute-proposal-and-consent).
 
-The authenticated [locale provider](app/helpers/user_profile_provider.py) injects the
+The authenticated [locale provider](src/app/context/user_profile_provider.py) injects the
 stored en/es/pt response language once per request. Generated prose and human-readable
 status labels use that language; canonical structured keys, status codes and tool names
 remain unchanged. Spanish generated labels consistently use `reclamo`/`reclamos` with
@@ -59,7 +59,6 @@ and acknowledges confirmed readback, without recreation or second consent.
 Focused localization checks, from the repository root:
 
 ```powershell
-$env:PYTHONPATH = (Get-Location).Path
 $env:OTEL_SDK_DISABLED = 'true'
 rtk proxy uv run --directory app\agent python -m pytest tests\test_internal_identity.py tests\test_hosted_workflow.py tests\test_settings.py -q
 ```
@@ -77,6 +76,15 @@ returned evidence and is application-local, not external processor enforcement.
 Stored synthetic fraud scores are routing signals, not an investigation or proof.
 Deterministic instruction-contract tests verify these requirements are present,
 not that a real model follows them; persisted and browser validation remain separate.
+
+## Package and responsibility seams
+
+The installed `app` package lives under `src/app`. Authenticated context providers
+live in `context`; protected SDK compatibility lives in `adapters`. Composition
+roots retain deployment-keyed client reuse and independent model overrides. Sync
+and async credential consumers remain supported. Logging configuration is packaged
+and invalid configuration falls back once to a bounded console configuration.
+Handoff buffering, output suppression and Responses streaming are unchanged.
 
 ## Runtime Flow
 
@@ -104,7 +112,7 @@ Install dependencies and run the local Responses host:
 
 ```powershell
 cd app/agent
-uv sync --extra dev
+uv sync --dev --frozen
 $env:PROFILE="dev"
 uv run python -m app.main_responses_host
 ```
@@ -247,13 +255,13 @@ for prompts that need no tools. Hosted deployment success does not close that ga
 
 ## Conversation State
 
-[The isolated host](app/helpers/isolated_responses_host.py) builds a fresh workflow
+[The isolated host](src/app/adapters/isolated_responses_host.py) builds a fresh workflow
 for each request. The hosting runtime restores the matching conversation checkpoint
 inside that request before delivering new input; different requests do not share
 mutable executor state. This uses an internal extension point of the installed
 hosting SDK and must be revalidated when upgrading it.
 
-[The checkpoint-aware handoff builder](app/helpers/checkpointed_handoff.py)
+[The checkpoint-aware handoff builder](src/app/adapters/checkpointed_handoff.py)
 also synchronizes each fresh restored turn to the specialists before routing.
 The installed orchestration SDK otherwise broadcasts only the initial input,
 allowing a specialist's stale final answer to terminate a follow-up without an

@@ -1,6 +1,6 @@
 # Agent Customization
 
-The active workflow contains a triage agent plus Account and Transaction specialists. It is built in [`app/agent/app/agents/azure_chat/hosted_workflow.py`](app/agent/app/agents/azure_chat/hosted_workflow.py) and served through Foundry Responses by [`app/agent/app/main_responses_host.py`](app/agent/app/main_responses_host.py).
+The active workflow contains a triage agent plus Account and Transaction specialists. It is built in [hosted_workflow.py](app/agent/src/app/agents/azure_chat/hosted_workflow.py) and served through Foundry Responses by [main_responses_host.py](app/agent/src/app/main_responses_host.py).
 
 ## Supported Changes
 
@@ -13,7 +13,7 @@ Adding another specialist or restoring ChatKit changes the locked architecture a
 
 ## Agent Changes
 
-1. Update the owning agent or workflow module under `app/agent/app/agents/azure_chat`.
+1. Update the owning agent or workflow module under [azure_chat](app/agent/src/app/agents/azure_chat).
 2. Keep agent instructions and MCP tool names and descriptions in English.
 3. Preserve `FoundryChatClient`, `HandoffBuilder`, and the Responses host boundary.
 4. Keep MCP calls async and avoid opening connections during module import or workflow construction.
@@ -22,13 +22,12 @@ Adding another specialist or restoring ChatKit changes the locked architecture a
 Run:
 
 ```powershell
-cd app/agent
-uv run pytest tests/test_hosted_workflow.py tests/test_settings.py -q
+rtk proxy uv run --directory app\agent python -m pytest tests\test_hosted_workflow.py tests\test_settings.py -q
 ```
 
 ## Tool Changes
 
-Keep `mcp_tools.py` as a thin schema and delegation layer. Put business rules, data access, and customer-resource authorization in the corresponding `services.py`.
+Keep `mcp_tools.py` as a thin schema and delegation layer. Put business rules, data access, and customer-resource authorization in the owning [Account services](app/business-api/account/src/banking_account/services) or [Transaction services](app/business-api/transaction/src/banking_transaction/services) module. Keep transport adapters in `routers/`, DTOs in `models/`, and display conversion in `projections/`; preserve service-owned authorization and transaction boundaries.
 
 ## Browser Contract
 
@@ -37,7 +36,6 @@ The frontend signs in through the existing BFF login and sends messages and gene
 Validate frontend changes with:
 
 ```powershell
-cd app/frontend/banking-web
-npm run lint
-npm run build
+rtk proxy npm --prefix app\frontend\banking-web run lint
+rtk proxy npm --prefix app\frontend\banking-web run build
 ```
