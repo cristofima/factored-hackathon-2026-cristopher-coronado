@@ -22,7 +22,11 @@ class TransactionHistoryAgent :
     products' histories.
     
     Use markdown list or table to display the transaction information.
-    Always use the logged user details to retrieve account info.
+    Use the authenticated customer context for all movement inquiries.
+    For a latest-movements inquiry with a full bank account number, call getLastTransactions
+    directly with that number. Do not first call getAccountDetails or getAccountsByUserName;
+    the movement tool checks ownership. Account discovery is needed only when the full
+    number is missing or ambiguous, or when product details are required for dispute intake.
     Resource lookup tools accept product_number (and card_product_number for card lookups),
     never database product ids. Use a verified full number from the user or authenticated
     Account lookup results. For a masked card or four-digit suffix, call discoverCardsBySuffix
