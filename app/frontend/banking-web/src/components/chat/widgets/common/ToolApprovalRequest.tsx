@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
+import { useChat } from "../../ResponsesChatProvider";
 import { Info } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,7 @@ import { useTranslation } from "react-i18next";
 /**
  * Arguments expected by the ToolApprovalRequest widget
  */
-interface ToolApprovalArgs {
+interface ToolApprovalArgs extends Record<string, unknown> {
   tool_name: string;
   tool_args: Record<string, unknown>;
   call_id: string;
@@ -37,22 +38,22 @@ export function ToolApprovalRequest({ args, itemId }: ClientWidgetProps) {
   const [loadingButton, setLoadingButton] = useState<
     "approve" | "reject" | null
   >(null);
-  const [isDisabled, setIsDisabled] = useState(false);
+  const { activeThreadId, isApprovalCompleted, isStreaming } = useChat();
+  const [isDisabled, setIsDisabled] = useState(() =>
+    Boolean(activeThreadId && isApprovalCompleted(activeThreadId, itemId)),
+  );
+  const [failed, setFailed] = useState(false);
+  const pendingRef = useRef(false);
 
-  // Get action sender from hook with callbacks
   const sendWidgetAction = useSendWidgetAction({
-    onThreadStarted: () => {
-      // Loading state is already set when button is clicked
-      console.log("Widget action thread started");
-    },
     onThreadEnded: () => {
-      // Disable buttons to prevent double submit
+      pendingRef.current = false;
       setIsDisabled(true);
       setLoadingButton(null);
     },
-    onError: (error) => {
-      // Re-enable buttons on error so user can retry
-      console.error("Widget action error:", error);
+    onError: () => {
+      pendingRef.current = false;
+      setFailed(true);
       setIsDisabled(false);
       setLoadingButton(null);
     },
@@ -62,31 +63,14 @@ export function ToolApprovalRequest({ args, itemId }: ClientWidgetProps) {
   const argsStr = formatAsPython(tool_args);
   const codeBlock = createPythonCodeBlock(argsStr);
 
-  const handleApprove = () => {
-    setLoadingButton("approve");
-    sendWidgetAction(itemId, {
+  const handleResponse = (approved: boolean) => {
+    if (pendingRef.current || isDisabled || isStreaming) return;
+    pendingRef.current = true;
+    setFailed(false);
+    setLoadingButton(approved ? "approve" : "reject");
+    void sendWidgetAction(itemId, {
       type: "approval",
-      payload: {
-        tool_name,
-        tool_args,
-        approved: true,
-        call_id,
-        request_id,
-      },
-    });
-  };
-
-  const handleReject = () => {
-    setLoadingButton("reject");
-    sendWidgetAction(itemId, {
-      type: "approval",
-      payload: {
-        tool_name,
-        tool_args,
-        approved: false,
-        call_id,
-        request_id,
-      },
+      payload: { tool_name, tool_args, approved, call_id, request_id },
     });
   };
 
@@ -126,21 +110,23 @@ export function ToolApprovalRequest({ args, itemId }: ClientWidgetProps) {
         <Separator />
       </div>
 
+      {failed && <p role="alert" className="px-4 pb-4 text-sm text-destructive">{t("Approval response not completed. Please retry.")}</p>}
+      <p className="px-4 pb-4 text-sm text-muted-foreground">{t("Tool permission is separate from dispute consent.")}</p>
       {/* Action buttons */}
       <div className="flex gap-2 p-4 pt-0">
         <Button
-          onClick={handleApprove}
+          onClick={() => handleResponse(true)}
           className="flex-1"
-          disabled={isDisabled || loadingButton !== null}
+          disabled={isDisabled || isStreaming || loadingButton !== null}
           loading={loadingButton === "approve"}
         >
           {t("Approve")}
         </Button>
         <Button
-          onClick={handleReject}
+          onClick={() => handleResponse(false)}
           variant="outline"
           className="flex-1"
-          disabled={isDisabled || loadingButton !== null}
+          disabled={isDisabled || isStreaming || loadingButton !== null}
           loading={loadingButton === "reject"}
         >
           {t("Reject")}
