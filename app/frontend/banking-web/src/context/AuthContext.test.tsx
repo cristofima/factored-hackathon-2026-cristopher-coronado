@@ -7,7 +7,7 @@ const harness = vi.hoisted(() => ({
   effects: [] as Array<() => void | (() => void)>,
   setters: [] as Array<ReturnType<typeof vi.fn>>,
   clear: vi.fn(), cancel: vi.fn(), dismiss: vi.fn(), resetToasts: vi.fn(),
-  login: vi.fn(), restore: vi.fn(), remove: vi.fn(), getToken: vi.fn(),
+  login: vi.fn(), restore: vi.fn(), remove: vi.fn(), getToken: vi.fn(), clearChat: vi.fn(),
   state: null as unknown[] | null,
   addEventListener: vi.fn(), removeEventListener: vi.fn(),
 }));
@@ -28,6 +28,7 @@ vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({ clear: harnes
 vi.mock("sonner", () => ({ toast: { dismiss: harness.dismiss } }));
 vi.mock("@/hooks/use-toast", () => ({ resetToasts: harness.resetToasts }));
 vi.mock("@/api/authClient", () => ({ login: harness.login, restoreUser: harness.restore }));
+vi.mock("@/components/chat/sessionHistory", () => ({ clearChatSnapshot: harness.clearChat }));
 
 const profile: AuthenticatedUser = { id: "admin", email: "admin@example.test", locale: "es", name: null, role: "admin", identityVersion: 2 };
 const flush = async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); };
@@ -49,6 +50,29 @@ afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 const tokenExpiringAt = (expiry: number) => `header.${btoa(JSON.stringify({ exp: expiry / 1000 }))}.signature`;
 
  describe("session isolation orchestration", () => {
+  it("preserves reload history on initial restoration but clears it on identity storage changes", async () => {
+    harness.restore.mockResolvedValue(profile);
+    provider();
+    harness.effects[0]();
+    await flush();
+    expect(harness.clearChat).not.toHaveBeenCalled();
+    const onStorage = harness.addEventListener.mock.calls[0][1] as (event: { key: string | null }) => void;
+    onStorage({ key: "unrelated" });
+    expect(harness.clearChat).not.toHaveBeenCalled();
+    onStorage({ key: AUTH_TOKEN_KEY });
+    expect(harness.clearChat).toHaveBeenCalledOnce();
+    onStorage({ key: null });
+    expect(harness.clearChat).toHaveBeenCalledTimes(2);
+    await flush();
+  });
+  it("clears recovery history on explicit login and logout", async () => {
+    harness.login.mockResolvedValue(profile);
+    const auth = provider();
+    await auth.login(profile.email, "test-only-password");
+    expect(harness.clearChat).toHaveBeenCalledOnce();
+    auth.logout();
+    expect(harness.clearChat).toHaveBeenCalledTimes(2);
+  });
   it("expires an idle customer session and resets all session state", () => {
     vi.useFakeTimers();
     harness.state = [{ ...profile, role: "customer", customerId: "customer" }, false, 5];
