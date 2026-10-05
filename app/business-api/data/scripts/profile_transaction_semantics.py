@@ -72,7 +72,7 @@ def build_profile(session: Session, customer_ids: tuple[str, ...]) -> dict[str, 
     )
     mismatch_statement = (
         select(func.count())
-        .select_from(TransactionRecord)
+        .select_from(TransactionRecord).where(TransactionRecord.source_kind == "source")
         .join(Product, TransactionRecord.product_id == Product.product_id)
         .where(
             (TransactionRecord.customer_id != Product.customer_id)

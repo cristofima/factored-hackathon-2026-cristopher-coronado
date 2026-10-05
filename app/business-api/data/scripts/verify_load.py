@@ -54,7 +54,7 @@ def transaction_count(
     if has_day_results and not loaded_days:
         return 0
 
-    statement = select(func.count()).select_from(TransactionRecord)
+    statement = select(func.count()).select_from(TransactionRecord).where(TransactionRecord.source_kind == "source")
     if loaded_days:
         statement = statement.where(TransactionRecord.process_date.in_(loaded_days))
     else:
@@ -124,7 +124,7 @@ def main() -> None:
 
         orphan_transactions_statement = (
             select(func.count())
-            .select_from(TransactionRecord)
+            .select_from(TransactionRecord).where(TransactionRecord.source_kind == "source")
             .outerjoin(Product, TransactionRecord.product_id == Product.product_id)
             .where(Product.product_id.is_(None))
         )
