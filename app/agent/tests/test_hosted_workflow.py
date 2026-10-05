@@ -21,12 +21,24 @@ from app.agents.azure_chat.hosted_workflow import (
     _has_completed_agent_response,
     build_hosted_workflow,
 )
+from app.agents.azure_chat.account_agent import AccountAgent
 from app.agents.azure_chat.transaction_agent import TransactionHistoryAgent
 from app.helpers.no_history_provider import NoHistoryProvider
 from app.helpers.handoff_middleware import HandoffNarrationMiddleware
 from app.helpers.tool_error_middleware import OwnershipErrorMiddleware
 from app.helpers.isolated_responses_host import IsolatedResponsesHostServer
 from app.helpers.user_profile_provider import UserProfileProvider
+
+
+def test_supplied_number_inquiries_use_direct_owned_resource_tools() -> None:
+    account = " ".join(AccountAgent.instructions.split())
+    transactions = " ".join(TransactionHistoryAgent.instructions.split())
+    assert "call getAccountDetails directly with that number" in account
+    assert "Do not first call getAccountsByUserName" in account
+    assert "rely on the tool's ownership check" in account
+    assert "call getLastTransactions directly with that number" in transactions
+    assert "Do not first call getAccountDetails or getAccountsByUserName" in transactions
+    assert "the movement tool checks ownership" in transactions
 
 
 def test_transaction_instructions_scope_new_disputes_to_cards() -> None:

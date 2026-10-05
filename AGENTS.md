@@ -16,32 +16,28 @@ flowchart LR
     BFF --> Agent[Responses agent]
     Agent --> Account[Account MCP]
     Agent --> Transaction[Transaction MCP]
-    Browser -->|accounts, cards, transactions, disputes| Account
-    Browser -->|accounts, cards, transactions, disputes| Transaction
+    Browser -->|accounts, cards| Account
+    Browser -->|transactions, customer and operator cases| Transaction
 ```
 
-- `app/agent`: Account/Transaction handoff workflow and Responses host.
-- `app/business-api/identity`: persisted credentials, profiles, fixed roles, lifecycle,
-  JWT issuance, audited administrator operations and explicit bootstrap.
-- `app/responses-bff`: database-free browser boundary for allowlisted Identity facades
-  and customer Responses chat. It checks current identity through introspection;
-  it does not verify passwords or read banking data.
-- `app/business-api/account`: Account REST and MCP service. Its REST endpoints verify the
-  browser's application JWT directly (`jwt_identity.py`); its MCP tools verify a separate
-  short-lived agent-only bearer (`internal_identity.py`).
-- `app/business-api/transaction`: Transaction REST and MCP service, same dual-auth split
-  as Account.
-- `app/business-api/data`: SQLModel/Alembic schema and verified CSV-to-PostgreSQL pipeline.
-- `app/frontend/banking-web`: React/Vite banking UI, calling Account/Transaction directly
-  for financial data and the Responses stream through the BFF for chat. Includes the
-  transaction-dispute support-case pages (`/support-cases`, `/support-cases/:caseId`,
-  `ReportDisputeDialog`), calling Transaction's `/api/support-cases` directly with the
-  same application JWT, never through the BFF. Administrator pages use
-  `/admin/operators`, `/admin/operators/create` and `/admin/customers`, with shared
-  customer UI components and centered action-confirmation modals. `/operator`
-  remains a placeholder; real reviewer queues and decisions are not enabled.
-- `infra`: Terraform for the App Service stack and Foundry resources.
-- `app/agent/azure.yaml`: separate azd root for the hosted Foundry agent.
+- [app/agent](app/agent): Account/Transaction handoff workflow and Responses host.
+- [app/business-api/identity](app/business-api/identity): credentials, profiles,
+  identity lifecycle, JWT issuance and administrator operations.
+- [app/responses-bff](app/responses-bff): database-free browser boundary for Identity
+  facades and customer Responses chat.
+- [app/business-api/account](app/business-api/account): account/card REST reads and
+  Account MCP tools.
+- [app/business-api/transaction](app/business-api/transaction): transaction REST/MCP
+  reads, customer disputes and operator queue, claim and adjudication APIs.
+- [app/business-api/data](app/business-api/data): shared SQLModel schema, Alembic
+  migrations and CSV-to-PostgreSQL pipeline.
+- [app/frontend/banking-web](app/frontend/banking-web): React/Vite UI for customer
+  banking, support cases, administrator pages and operator queue/detail pages.
+  `/operator` redirects to `/operator/support-cases`.
+- [infra](infra): Terraform for the App Service stack and Foundry resources.
+- [app/agent/azure.yaml](app/agent/azure.yaml): separate azd root for the hosted agent.
+
+This is an implementation map, not evidence of deployed or live-data acceptance.
 
 ## Local Development
 
@@ -56,11 +52,10 @@ The root `.vscode` configuration owns local orchestration. `DEV - Full Stack Ord
 | `8071` | Transaction MCP       |
 | `8090` | Identity              |
 
-F5 starts all six services in separate terminals. Each service owns its ignored
-`.env` and documented `.env.example`; there is no root dotenv configuration.
-Frontend authentication and administration use the BFF URL, not a direct Identity URL.
-Use this topology for user-run browser validation; do not start it implicitly.
-Hosted Identity deployment and Foundry validation remain separate rollout gates.
+F5 starts all six services in separate terminals through root
+[launch.json](.vscode/launch.json) and [tasks.json](.vscode/tasks.json).
+Each service has its own `.env` and `.env.example`. See the component guides below
+for configuration and Copilot Instructions for operational restrictions.
 
 ## Task Guides
 
@@ -76,30 +71,39 @@ Hosted Identity deployment and Foundry validation remain separate rollout gates.
 
 ## Focused Checks
 
+Run from repository root; select the commands for the changed component. These are
+local checks, not a replacement for the full CI workflow.
+
 ```powershell
-cd app/agent
-$env:PYTHONPATH = (Resolve-Path ../..).Path
+$env:PYTHONPATH = (Get-Location).Path
 $env:OTEL_SDK_DISABLED = "true"
-uv run python -m pytest tests -q
+rtk proxy uv run --directory app\agent python -m pytest tests -q
+rtk proxy uv run --directory app\responses-bff python -m pytest tests -q
+rtk proxy uv run --directory app\business-api\identity python -m pytest tests -q
+rtk proxy uv run --directory app\business-api\account python -m pytest tests -q
+rtk proxy uv run --directory app\business-api\transaction python -m pytest tests -q
+rtk proxy uv run --directory app\business-api\data python -m pytest tests -q
+rtk proxy uv run --project app\agent python -m pytest evals\tests -q
 
-cd ../responses-bff
-uv run pytest -q
+rtk proxy npm --prefix app\frontend\banking-web run test
+rtk proxy npm --prefix app\frontend\banking-web run lint
+rtk proxy npm --prefix app\frontend\banking-web run build
 
-cd ../business-api/identity
-uv run pytest tests -q
-
-cd ../account
-uv run --directory . python -m pytest tests -q
-
-cd ../transaction
-uv run --directory . python -m pytest tests -q
-
-cd ../../frontend/banking-web
-npm run lint
-npm run build
-
-cd ../../business-api/data
-uv run pytest tests/test_run_pipeline.py -q
+rtk proxy terraform -chdir=infra fmt -check -recursive
+rtk proxy terraform -chdir=infra validate
 ```
 
-Run `terraform fmt -check -recursive` and `terraform validate` from `infra` after infrastructure changes.
+For ingestion-only edits, narrow the data test selector to
+`tests\test_run_pipeline.py`; it is not the full data suite. Terraform validation
+requires an initialized working directory; see the infrastructure guide.
+
+CI-specific commands and prerequisites live in:
+
+- [Python CI action](.github/actions/ci-python/action.yml): frozen dependency sync,
+  syntax compilation, pytest and deployment-requirements verification.
+- [Node CI action](.github/actions/ci-node/action.yml): clean dependency installation,
+  lint, Vitest coverage and build. The frontend currently has no `typecheck` script.
+- [Hosted Agent CI](.github/workflows/ci-hosted-agent.yml) and the
+  [offline comparator guide](evals/README.md#offline-comparator-and-scoring): offline
+  evaluation tests, fresh deterministic baseline and rescoring. Real-model replay
+  is a separate opt-in check, not part of the default commands above.

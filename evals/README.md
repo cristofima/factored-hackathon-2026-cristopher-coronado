@@ -165,6 +165,26 @@ and empty-transaction protocol cases using the production workflow and real mode
 They do not test disputes or real service authorization. Caller-supplied sessions
 stay separate from production HTTP/header providers. Full evidence and controlled
 failures are retained; behavioral review is separate from protocol passes.
+The supplied-number cases expect direct resource lookups, not preliminary account
+listing. The denial case is an ordinary balance request with a canned tool ownership
+denial; it does not require a tool call for a prompt that can safely be refused outright.
+
+The runner requires `--model` as the base deployment and accepts optional
+`--triage-model`, `--account-model`, and `--transaction-model` overrides. Each omitted
+or empty override independently falls back to the base deployment, matching production.
+Clients are reused when participants share a deployment. Reports retain `model` and
+record the effective deployments in `participant_models`.
+
+CI reads `MODEL_DEPLOYMENT_NAME` and the optional Development environment variables
+`TRIAGE_MODEL_DEPLOYMENT_NAME`, `ACCOUNT_MODEL_DEPLOYMENT_NAME`, and
+`TRANSACTION_MODEL_DEPLOYMENT_NAME`, forwarding them to those flags. These are
+existing model deployment names, not agent names; replay does not provision models.
+
+Warnings about missing outgoing handoffs for AccountAgent and
+TransactionHistoryAgent reflect the intentional terminal-specialist topology. They
+are not themselves a protocol failure; unexpected calls or unused replies still fail
+replay and report validation. Prompt contracts and offline tests do not guarantee
+real-model compliance; a separately authorized CI replay confirms runtime behavior.
 
 ## PR smoke check
 

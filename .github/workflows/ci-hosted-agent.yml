@@ -117,6 +117,9 @@ jobs:
       OTEL_SDK_DISABLED: "true"
       FOUNDRY_PROJECT_ENDPOINT: ${{ vars.FOUNDRY_PROJECT_ENDPOINT }}
       MODEL_DEPLOYMENT_NAME: ${{ vars.MODEL_DEPLOYMENT_NAME }}
+      TRIAGE_MODEL_DEPLOYMENT_NAME: ${{ vars.TRIAGE_MODEL_DEPLOYMENT_NAME }}
+      ACCOUNT_MODEL_DEPLOYMENT_NAME: ${{ vars.ACCOUNT_MODEL_DEPLOYMENT_NAME }}
+      TRANSACTION_MODEL_DEPLOYMENT_NAME: ${{ vars.TRANSACTION_MODEL_DEPLOYMENT_NAME }}
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
@@ -151,6 +154,9 @@ jobs:
         run: |
           uv run --project app/agent --frozen --no-sync python evals/run_mcp_replay.py \
             --project-endpoint "$FOUNDRY_PROJECT_ENDPOINT" --model "$MODEL_DEPLOYMENT_NAME" \
+            --triage-model "$TRIAGE_MODEL_DEPLOYMENT_NAME" \
+            --account-model "$ACCOUNT_MODEL_DEPLOYMENT_NAME" \
+            --transaction-model "$TRANSACTION_MODEL_DEPLOYMENT_NAME" \
             --output evals/results/mcp-replay.json
       - name: Validate and render protocol report
         if: always()

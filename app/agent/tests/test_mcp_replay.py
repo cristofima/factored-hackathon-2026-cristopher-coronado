@@ -1,6 +1,7 @@
 """Offline protocol checks, not model-quality or live authorization evidence."""
 
 import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -180,8 +181,13 @@ async def test_runner_records_full_transcript_and_interleaved_tools() -> None:
         await account_session.call_tool("getAccountDetails", {"product_number": "TEST"})
         return response
 
+    triage_client, account_client, transaction_client = MagicMock(), MagicMock(), MagicMock()
+
     def build_workflow(*args: object, **kwargs: object) -> MagicMock:
         nonlocal account_session, transaction_session
+        assert args[0] is triage_client
+        assert kwargs["account_chat_client"] is account_client
+        assert kwargs["transaction_chat_client"] is transaction_client
         account_session = kwargs["account_mcp_session"]
         transaction_session = kwargs["transaction_mcp_session"]
         workflow = MagicMock()
@@ -193,11 +199,11 @@ async def test_runner_records_full_transcript_and_interleaved_tools() -> None:
     account_session = None
     transaction_session = None
     with patch("evals.run_mcp_replay.build_hosted_workflow", side_effect=build_workflow):
-        result = await run_case(MagicMock(), {
+        result = await run_case(triage_client, {
             "id": "success", "query": "test", "expected_behavior": "test",
             "account": [{"tool": "getAccountDetails", "arguments": {"product_number": "TEST"}, "result": {}}],
             "transaction": [{"tool": "getLastTransactions", "arguments": {"product_number": "TEST"}, "result": []}],
-        })
+        }, account_chat_client=account_client, transaction_chat_client=transaction_client)
     assert result["protocol_passed"]
     assert result["final_answer"] == text
     assert result["response"]["messages"][0]["text"] == text
@@ -247,3 +253,56 @@ async def test_multi_turn_runner_reuses_session_and_isolates_cases() -> None:
         assert all(call.kwargs["session"] is session for call in agent.run.call_args_list)
     assert [turn["turn"] for turn in first["turns"]] == [0, 1]
     assert all(turn["latency_seconds"] >= 0 for turn in first["turns"])
+
+
+@pytest.mark.parametrize("overrides, expected", [
+    ([], {"triage": "base", "account": "base", "transaction": "base"}),
+    (["--triage-model", "router", "--account-model", "account", "--transaction-model", "movements"],
+     {"triage": "router", "account": "account", "transaction": "movements"}),
+    (["--triage-model", "", "--account-model", "specialist", "--transaction-model", "specialist"],
+     {"triage": "base", "account": "specialist", "transaction": "specialist"}),
+])
+async def test_replay_cli_resolves_and_records_participant_models(
+    tmp_path: Path, overrides: list[str], expected: dict[str, str],
+) -> None:
+    from unittest.mock import AsyncMock
+
+    from evals.run_mcp_replay import main, main_async
+
+    dataset = tmp_path / "cases.json"
+    dataset.write_text(json.dumps([{"id": "model-routing"}]), encoding="utf-8")
+    output = tmp_path / "report.json"
+    argv = ["run_mcp_replay", "--project-endpoint", "https://example.invalid",
+            "--model", "base", "--dataset", str(dataset), "--output", str(output), *overrides]
+    with patch("sys.argv", argv), patch("evals.run_mcp_replay.asyncio.run", return_value=0) as run:
+        with patch("evals.run_mcp_replay.main_async", new=MagicMock()) as parse:
+            assert main() == 0
+        args = parse.call_args.args[0]
+        run.assert_called_once()
+
+    credential_context = MagicMock()
+    credential_context.__aenter__ = AsyncMock(return_value=MagicMock())
+    credential_context.__aexit__ = AsyncMock(return_value=False)
+    clients = {model: MagicMock() for model in set(expected.values())}
+    with patch("evals.run_mcp_replay.AzureCliCredential", return_value=credential_context), \
+         patch("evals.run_mcp_replay.FoundryChatClient",
+               side_effect=lambda **kwargs: clients[kwargs["model"]]) as factory, \
+         patch("evals.run_mcp_replay.run_case", new=AsyncMock(
+             return_value={"protocol_passed": True},
+         )) as replay:
+        assert await main_async(args) == 0
+
+    assert factory.call_count == len(clients)
+    assert {call.kwargs["model"] for call in factory.call_args_list} == set(expected.values())
+    for call in factory.call_args_list:
+        assert call.kwargs["project_endpoint"] == args.project_endpoint
+        assert call.kwargs["credential"] is credential_context.__aenter__.return_value
+    replay.assert_awaited_once_with(
+        clients[expected["triage"]], {"id": "model-routing"}, args.timeout_seconds,
+        account_chat_client=clients[expected["account"]],
+        transaction_chat_client=clients[expected["transaction"]],
+    )
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert report["model"] == "base"
+    assert report["participant_models"] == expected
+    assert report["model_execution"] == "real"
