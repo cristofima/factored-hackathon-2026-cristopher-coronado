@@ -18,17 +18,25 @@ services:
       prepackage:
         windows:
           shell: pwsh
-          run: Copy-Item -Recurse -Force ../shared/banking_shared ./banking_shared
+          run: |
+            $ErrorActionPreference = 'Stop'
+            if ((Test-Path ./identity) -or (Test-Path ./banking_shared)) { throw 'Package staging paths already exist' }
+            Copy-Item -Recurse ./src/identity ./identity
+            Copy-Item -Recurse ../shared/src/banking_shared ./banking_shared
         posix:
           shell: sh
-          run: cp -R ../shared/banking_shared ./banking_shared
+          run: |
+            set -eu
+            test ! -e ./identity && test ! -e ./banking_shared
+            cp -R ./src/identity ./identity
+            cp -R ../shared/src/banking_shared ./banking_shared
       postpackage:
         windows:
           shell: pwsh
-          run: Remove-Item -Recurse -Force ./banking_shared
+          run: Remove-Item -Recurse -Force ./identity, ./banking_shared
         posix:
           shell: sh
-          run: rm -rf ./banking_shared
+          run: rm -rf ./identity ./banking_shared
   account:
     resourceName: ${AZURE_ACCOUNT_APP_NAME}
     project: ./app/business-api/account
@@ -38,17 +46,25 @@ services:
       prepackage:
         windows:
           shell: pwsh
-          run: Copy-Item -Recurse -Force ../shared/banking_shared ./banking_shared
+          run: |
+            $ErrorActionPreference = 'Stop'
+            if ((Test-Path ./banking_account) -or (Test-Path ./banking_shared)) { throw 'Package staging paths already exist' }
+            Copy-Item -Recurse ./src/banking_account ./banking_account
+            Copy-Item -Recurse ../shared/src/banking_shared ./banking_shared
         posix:
           shell: sh
-          run: cp -R ../shared/banking_shared ./banking_shared
+          run: |
+            set -eu
+            test ! -e ./banking_account && test ! -e ./banking_shared
+            cp -R ./src/banking_account ./banking_account
+            cp -R ../shared/src/banking_shared ./banking_shared
       postpackage:
         windows:
           shell: pwsh
-          run: Remove-Item -Recurse -Force ./banking_shared
+          run: Remove-Item -Recurse -Force ./banking_account, ./banking_shared
         posix:
           shell: sh
-          run: rm -rf ./banking_shared
+          run: rm -rf ./banking_account ./banking_shared
   transaction:
     resourceName: ${AZURE_TRANSACTION_APP_NAME}
     project: ./app/business-api/transaction
@@ -58,17 +74,25 @@ services:
       prepackage:
         windows:
           shell: pwsh
-          run: Copy-Item -Recurse -Force ../shared/banking_shared ./banking_shared
+          run: |
+            $ErrorActionPreference = 'Stop'
+            if ((Test-Path ./banking_transaction) -or (Test-Path ./banking_shared)) { throw 'Package staging paths already exist' }
+            Copy-Item -Recurse ./src/banking_transaction ./banking_transaction
+            Copy-Item -Recurse ../shared/src/banking_shared ./banking_shared
         posix:
           shell: sh
-          run: cp -R ../shared/banking_shared ./banking_shared
+          run: |
+            set -eu
+            test ! -e ./banking_transaction && test ! -e ./banking_shared
+            cp -R ./src/banking_transaction ./banking_transaction
+            cp -R ../shared/src/banking_shared ./banking_shared
       postpackage:
         windows:
           shell: pwsh
-          run: Remove-Item -Recurse -Force ./banking_shared
+          run: Remove-Item -Recurse -Force ./banking_transaction, ./banking_shared
         posix:
           shell: sh
-          run: rm -rf ./banking_shared
+          run: rm -rf ./banking_transaction ./banking_shared
   responses-bff:
     resourceName: ${AZURE_RESPONSES_BFF_APP_NAME}
     project: ./app/responses-bff
@@ -78,17 +102,25 @@ services:
       prepackage:
         windows:
           shell: pwsh
-          run: Copy-Item -Recurse -Force ../business-api/shared/banking_shared ./banking_shared
+          run: |
+            $ErrorActionPreference = 'Stop'
+            if ((Test-Path ./bff) -or (Test-Path ./banking_shared)) { throw 'Package staging paths already exist' }
+            Copy-Item -Recurse ./src/bff ./bff
+            Copy-Item -Recurse ../business-api/shared/src/banking_shared ./banking_shared
         posix:
           shell: sh
-          run: cp -R ../business-api/shared/banking_shared ./banking_shared
+          run: |
+            set -eu
+            test ! -e ./bff && test ! -e ./banking_shared
+            cp -R ./src/bff ./bff
+            cp -R ../business-api/shared/src/banking_shared ./banking_shared
       postpackage:
         windows:
           shell: pwsh
-          run: Remove-Item -Recurse -Force ./banking_shared
+          run: Remove-Item -Recurse -Force ./bff, ./banking_shared
         posix:
           shell: sh
-          run: rm -rf ./banking_shared
+          run: rm -rf ./bff ./banking_shared
   web:
     resourceName: ${AZURE_WEB_APP_NAME}
     project: ./app/frontend/banking-web
