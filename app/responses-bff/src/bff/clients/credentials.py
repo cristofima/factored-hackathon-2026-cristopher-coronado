@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from azure.identity.aio import AzureCliCredential, ManagedIdentityCredential
 
-from bff.settings import Settings
+from bff.config.settings import Settings
 
 
 def create_azure_credential(

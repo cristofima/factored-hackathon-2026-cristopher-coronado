@@ -20,10 +20,10 @@ import pytest
 from asgi_lifespan import LifespanManager
 from httpx import ASGITransport, AsyncClient
 
-from bff.auth import AuthenticatedUser
-from bff.internal_identity import create_internal_identity
+from bff.identity.models import AuthenticatedUser
+from bff.identity.internal_identity import create_internal_identity
 from bff.main import create_app as _create_app
-from bff.settings import Settings
+from bff.config.settings import Settings
 
 
 def create_app(settings: Settings, **kwargs: Any) -> FastAPI:

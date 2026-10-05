@@ -10,12 +10,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 
-from bff.auth import router as auth_router
-from bff.credentials import create_azure_credential
-from bff.responses import AsyncCredential, router as responses_router
-from bff.settings import Settings
-from bff.tracing import configure_tracing
-from bff.admin import customer_router, router as admin_router
+from bff.routers.auth import router as auth_router
+from bff.clients.credentials import create_azure_credential
+from bff.identity.responses import AsyncCredential
+from bff.routers.responses import router as responses_router
+from bff.config.settings import Settings
+from bff.config.tracing import configure_tracing
+from bff.routers.admin import customer_router, router as admin_router
 
 
 CredentialFactory = Callable[[Settings], AsyncCredential]

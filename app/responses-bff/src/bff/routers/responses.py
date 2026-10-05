@@ -6,94 +6,21 @@ import hashlib
 import hmac
 import secrets
 from collections.abc import AsyncIterator
-from typing import Annotated, Any, Protocol
+from typing import Annotated, Any
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import Response, StreamingResponse
 
-from bff.auth import AuthenticatedUser, get_customer_user
-from bff.internal_identity import create_internal_identity
-from bff.settings import Settings
-
-
-class AsyncCredential(Protocol):
-    """Credential operations used by the BFF."""
-
-    async def get_token(self, *scopes: str) -> Any: ...
-
-    async def close(self) -> None: ...
+from bff.identity.models import AuthenticatedUser
+from bff.identity.authentication import get_customer_user
+from bff.identity.conversation import _conversation_token, _validate_conversation
+from bff.identity.responses import AsyncCredential, _upstream_headers
+from bff.clients.responses import _stream_response, read_response, send_response
+from bff.config.settings import Settings
 
 
 router = APIRouter(prefix="/responses")
-
-
-def _conversation_token(user_id: str, settings: Settings) -> str:
-    conversation_id = secrets.token_urlsafe(24)
-    signature = _conversation_signature(user_id, conversation_id, settings)
-    return f"{conversation_id}_{signature}"
-
-
-def _validate_conversation(token: str, user_id: str, settings: Settings) -> None:
-    try:
-        conversation_id, signature = token.rsplit("_", maxsplit=1)
-    except ValueError:
-        raise _forbidden_conversation() from None
-
-    expected = _conversation_signature(user_id, conversation_id, settings)
-    if not hmac.compare_digest(signature, expected):
-        raise _forbidden_conversation()
-
-
-def _conversation_signature(user_id: str, conversation_id: str, settings: Settings) -> str:
-    if not settings.jwt_secret_key:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"code": "SERVICE_UNAVAILABLE"},
-        )
-    return hmac.new(
-        settings.jwt_secret_key.encode(),
-        f"{user_id}:{conversation_id}".encode(),
-        hashlib.sha256,
-    ).hexdigest()
-
-
-def _forbidden_conversation() -> HTTPException:
-    return HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail={"code": "ACCESS_DENIED"},
-    )
-
-
-async def _upstream_headers(
-    request: Request,
-    user: AuthenticatedUser,
-    stream: bool,
-) -> dict[str, str]:
-    settings: Settings = request.app.state.settings
-    headers = {"Accept": "text/event-stream" if stream else "application/json"}
-    if not settings.internal_identity_secret:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"code": "SERVICE_UNAVAILABLE"},
-        )
-    internal_identity = create_internal_identity(user, settings.internal_identity_secret)
-    if settings.responses_upstream_mode == "foundry":
-        credential: AsyncCredential = request.app.state.azure_credential
-        token = await credential.get_token(settings.responses_token_scope)
-        headers["Authorization"] = f"Bearer {token.token}"
-        headers["x-ms-user-identity"] = internal_identity
-    else:
-        headers["x-agent-user-id"] = internal_identity
-    return headers
-
-
-async def _stream_response(response: httpx.Response) -> AsyncIterator[bytes]:
-    try:
-        async for chunk in response.aiter_raw():
-            yield chunk
-    finally:
-        await response.aclose()
 
 
 @router.post("")
@@ -138,7 +65,7 @@ async def create_response(
         json=upstream_payload,
         headers=await _upstream_headers(request, user, bool(payload.get("stream"))),
     )
-    upstream = await client.send(upstream_request, stream=True)
+    upstream = await send_response(client, upstream_request)
 
     response_headers = {"X-Conversation-Id": conversation}
     content_type = upstream.headers.get("content-type", "application/json")

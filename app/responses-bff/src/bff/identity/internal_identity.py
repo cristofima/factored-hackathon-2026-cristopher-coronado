@@ -7,7 +7,7 @@ import hashlib
 import hmac
 import json
 
-from bff.auth import AuthenticatedUser
+from bff.identity.models import AuthenticatedUser
 
 
 def create_internal_identity(user: AuthenticatedUser, secret: str) -> str:

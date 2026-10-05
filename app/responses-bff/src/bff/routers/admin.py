@@ -6,8 +6,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from bff.auth import LoginRequest, UserProfile, bearer_scheme, get_authenticated_user
-from bff.auth_client import auth_request
+from bff.identity.models import LoginRequest, UserProfile
+from bff.identity.authentication import bearer_scheme, get_authenticated_user
+from bff.clients.identity import auth_request
 
 router = APIRouter(prefix="/admin/operators")
 customer_router = APIRouter(prefix="/admin/customers")
