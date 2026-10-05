@@ -8,9 +8,42 @@ import sqlalchemy as sa
 from pydantic import ValidationError
 from sqlalchemy.engine import Connection
 
-from banking_shared.models import Customer
+from banking_shared.models import (
+    CardProtection, CaseConversationSnapshot, Customer, Product, RuntimePosting,
+    SQLModel, SupportCase, SupportCaseEvent,
+)
 from banking_shared.customer_status import normalize_customer_status
 from .test_identity_migrations import additive, legacy, revision, run, table
+
+
+@pytest.mark.parametrize("model", [
+    SupportCase, SupportCaseEvent, RuntimePosting, CardProtection, CaseConversationSnapshot,
+])
+def test_support_models_have_qualified_metadata(model: type[SQLModel]) -> None:
+    assert model.__table__.schema == "support"
+    assert SQLModel.metadata.tables[f"support.{model.__tablename__}"] is model.__table__
+
+
+@pytest.mark.parametrize("model,column,target", [
+    (SupportCaseEvent, "case_id", "support.support_cases.case_id"),
+    (CaseConversationSnapshot, "case_id", "support.support_cases.case_id"),
+    (RuntimePosting, "case_id", "support.support_cases.case_id"),
+    (CardProtection, "case_id", "support.support_cases.case_id"),
+    (SupportCase, "customer_id", "customers.customer_id"),
+    (SupportCase, "product_id", "products.product_id"),
+    (RuntimePosting, "customer_id", "customers.customer_id"),
+    (RuntimePosting, "product_id", "products.product_id"),
+    (CardProtection, "product_id", "products.product_id"),
+])
+def test_support_foreign_keys_preserve_schema_boundaries(
+    model: type[SQLModel], column: str, target: str,
+) -> None:
+    foreign_keys = model.__table__.c[column].foreign_keys
+    assert {foreign_key.target_fullname for foreign_key in foreign_keys} == {target}
+    target_schema = "support" if target.startswith("support.") else None
+    assert {foreign_key.column.table.schema for foreign_key in foreign_keys} == {target_schema}
+    assert Customer.__table__.schema is None
+    assert Product.__table__.schema is None
 
 
 @pytest.fixture(autouse=True)
@@ -84,6 +117,8 @@ def test_fresh_historical_replay(monkeypatch: pytest.MonkeyPatch) -> None:
         paths = sorted((Path(__file__).parents[1] / "alembic" / "versions").glob("*.py"))
         for path in paths:
             module = revision(path.name)
+            if module.revision == "20261005_0012":
+                break  # The support-schema migration requires PostgreSQL.
             if module.revision == "20261003_0006":
                 monkeypatch.setattr(module.context, "get_x_argument", lambda **kwargs: {})
             run(connection, module)
