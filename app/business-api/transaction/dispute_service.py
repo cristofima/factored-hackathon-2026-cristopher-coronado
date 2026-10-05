@@ -6,7 +6,8 @@ triage uses fraud_score (populated at ingestion, never computed by the agent) to
 classify low-risk cases and persist review routing. Every approved case stays
 IN_REVIEW until explicit resolution; no score triggers automatic closure.
 Real operator takeover is independent from the retained historical ServiceAgent catalog.
-No human investigation, legitimacy verdict, or financial effect is recorded. See
+New intake persists only after consent; operator verdicts and financial effects remain
+separate explicit operations. See
 app/business-api/data/scripts/evaluate_fraud_threshold.py for the threshold's offline
 precision/recall evidence.
 """
@@ -19,13 +20,21 @@ from decimal import Decimal
 
 from banking_shared.database import create_session
 from banking_shared.models import (
+    CardProtection,
+    RuntimePosting,
     Product,
     SupportCase,
     SupportCaseEvent,
     TransactionRecord,
 )
 from banking_shared.product_types import CARD_PRODUCT_TYPES
-from models import DisputeCase, DisputeCaseEvent
+from models import DisputeCase, DisputeCaseEvent, DisputePreview
+from dispute_preview import (
+    DisputePreviewError, configured_preview_secret, evidence_digest, issue_preview, read_preview,
+)
+from services import _to_transaction
+from case_projections import effects, protection as protection_details
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 logger = logging.getLogger(__name__)
@@ -67,8 +76,88 @@ class CardOnlyDisputeError(ValueError):
 
 
 class SupportCaseService:
-    def __init__(self, session_factory: SessionFactory = create_session) -> None:
+    def __init__(
+        self, session_factory: SessionFactory = create_session, preview_secret: str | None = None,
+    ) -> None:
         self._session_factory = session_factory
+        self._preview_secret = preview_secret
+
+    def _signing_secret(self) -> str:
+        return self._preview_secret or configured_preview_secret()
+
+    def preview_transaction_dispute(
+        self, transaction_id: str, customer_id: str, reason: str,
+    ) -> DisputePreview:
+        _require_identifier(reason, "reason")
+        with self._session_factory() as session:
+            transaction, product = _eligible_intake(session, transaction_id, customer_id)
+            token, expires = issue_preview(
+                self._signing_secret(), customer_id, transaction_id, reason.strip(),
+                evidence_digest(transaction, product),
+            )
+            return DisputePreview(
+                previewToken=token, transactionId=transaction_id, reason=reason.strip(),
+                expiresAt=expires.isoformat(), transaction=_to_transaction(transaction, product),
+            )
+
+    def recover_transaction_dispute(
+        self, preview_token: str, customer_id: str,
+    ) -> DisputeCase | None:
+        claims = read_preview(self._signing_secret(), preview_token, customer_id)
+        with self._session_factory() as session:
+            case = session.get(SupportCase, f"CASE-{claims['jti']}")
+            if case is None:
+                return None
+            if (case.customer_id != customer_id or case.transaction_id != claims["transactionId"]
+                    or case.reason != claims["reason"]):
+                raise PermissionError("Dispute preview unavailable")
+            return _to_dispute_case(session, case, _get_case_product(session, case))
+
+    def accept_transaction_dispute(
+        self, preview_token: str, customer_id: str,
+    ) -> DisputeCase:
+        claims = read_preview(self._signing_secret(), preview_token, customer_id)
+        recovered = self.recover_transaction_dispute(preview_token, customer_id)
+        if recovered is not None:
+            return recovered
+        if datetime.now(timezone.utc).timestamp() >= claims["acceptUntil"]:
+            raise DisputePreviewError("DISPUTE_PREVIEW_EXPIRED")
+        case_id = f"CASE-{claims['jti']}"
+        with self._session_factory() as session:
+            try:
+                transaction, product = _eligible_intake(
+                    session, claims["transactionId"], customer_id, lock=True,
+                )
+            except ActiveDisputeError:
+                recovered = self.recover_transaction_dispute(preview_token, customer_id)
+                if recovered is not None:
+                    return recovered
+                raise
+            if datetime.now(timezone.utc).timestamp() >= claims["acceptUntil"]:
+                raise DisputePreviewError("DISPUTE_PREVIEW_EXPIRED")
+            if evidence_digest(transaction, product) != claims["evidence"]:
+                raise DisputePreviewError("DISPUTE_PREVIEW_STALE")
+            case = SupportCase(
+                case_id=case_id, customer_id=customer_id, product_id=product.product_id,
+                transaction_id=transaction.transaction_id, reason=claims["reason"],
+                status="WAITING_USER_APPROVAL", fraud_score_at_open=transaction.fraud_score,
+            )
+            session.add(case)
+            try:
+                session.flush()
+                _add_event(session, case_id, "CASE_OPENED", "customer",
+                           f"Dispute opened for transaction {transaction.transaction_id}")
+                _grant_approval(session, case, commit=False)
+                session.commit()
+            except IntegrityError:
+                session.rollback()
+                recovered = self.recover_transaction_dispute(preview_token, customer_id)
+                if recovered is not None:
+                    return recovered
+                _ensure_no_active_case(session, claims["transactionId"], customer_id)
+                raise
+            session.refresh(case)
+            return _to_dispute_case(session, case, product)
 
     def open_transaction_dispute(
         self,
@@ -100,7 +189,12 @@ class SupportCaseService:
                 fraud_score_at_open=transaction.fraud_score,
             )
             session.add(case)
-            session.flush()
+            try:
+                session.flush()
+            except IntegrityError:
+                session.rollback()
+                _ensure_no_active_case(session, transaction_id, customer_id)
+                raise
             _add_event(
                 session,
                 case.case_id,
@@ -114,11 +208,11 @@ class SupportCaseService:
                 "APPROVAL_REQUESTED",
                 "system",
                 "Customer confirmation required to proceed with the persisted dispute workflow; "
-                "card protection and financial effects are not implemented",
+                "no financial posting or card protection has occurred",
             )
             session.commit()
             session.refresh(case)
-            return _to_dispute_case(case, product)
+            return _to_dispute_case(session, case, product)
 
     def respond_to_approval(
         self,
@@ -135,7 +229,7 @@ class SupportCaseService:
                 raise ValueError(f"Case {case_id} is not awaiting approval")
 
             case = _decline_approval(session, case) if not approved else _grant_approval(session, case)
-            return _to_dispute_case(case, _get_case_product(session, case))
+            return _to_dispute_case(session, case, _get_case_product(session, case))
 
     def resolve_case(
         self,
@@ -144,26 +238,9 @@ class SupportCaseService:
         resolution_outcome: str,
         resolution_notes: str | None = None,
     ) -> DisputeCase:
-        logger.info("resolve_case called with case_id=%s", case_id)
-        _require_identifier(resolution_outcome, "resolution_outcome")
         with self._session_factory() as session:
-            case = _get_owned_case(session, case_id, customer_id)
-            if case.status != "IN_REVIEW":
-                raise ValueError(f"Case {case_id} is not in review")
-            _transition(case, "RESOLVED", resolution_outcome=resolution_outcome, resolution_notes=resolution_notes)
-            _apply_recommendation(case)
-            _add_event(
-                session,
-                case.case_id,
-                "RESOLVED",
-                "agent",
-                resolution_notes or "Case closed by the current rule-based process; no financial or card-protection "
-                "effects were executed, and no human verdict is recorded",
-            )
-            session.add(case)
-            session.commit()
-            session.refresh(case)
-            return _to_dispute_case(case, _get_case_product(session, case))
+            _get_owned_case(session, case_id, customer_id)
+        raise PermissionError("Assigned operator adjudication is required")
 
     def list_cases(self, customer_id: str) -> list[DisputeCase]:
         with self._session_factory() as session:
@@ -173,14 +250,14 @@ class SupportCaseService:
                 .order_by(SupportCase.opened_at.desc())
             )
             return [
-                _to_dispute_case(case, _get_case_product(session, case))
+                _to_dispute_case(session, case, _get_case_product(session, case))
                 for case in session.exec(statement).all()
             ]
 
     def get_case(self, case_id: str, customer_id: str) -> DisputeCase:
         with self._session_factory() as session:
             case = _get_owned_case(session, case_id, customer_id)
-            return _to_dispute_case(case, _get_case_product(session, case))
+            return _to_dispute_case(session, case, _get_case_product(session, case))
 
     def get_case_timeline(self, case_id: str, customer_id: str) -> list[DisputeCaseEvent]:
         with self._session_factory() as session:
@@ -210,7 +287,7 @@ class SupportCaseService:
             )
             session.commit()
             session.refresh(case)
-            return _to_dispute_case(case, _get_case_product(session, case))
+            return _to_dispute_case(session, case, _get_case_product(session, case))
 
 
 support_case_service_singleton = SupportCaseService()
@@ -232,7 +309,7 @@ def _decline_approval(session: Session, case: SupportCase) -> SupportCase:
     return case
 
 
-def _grant_approval(session: Session, case: SupportCase) -> SupportCase:
+def _grant_approval(session: Session, case: SupportCase, *, commit: bool = True) -> SupportCase:
     triage_outcome = _triage(case.fraud_score_at_open)
     case.triage_outcome = triage_outcome
     _transition(case, "IN_REVIEW")
@@ -270,9 +347,43 @@ def _grant_approval(session: Session, case: SupportCase) -> SupportCase:
         )
 
     session.add(case)
-    session.commit()
-    session.refresh(case)
+    if commit:
+        session.commit()
+        session.refresh(case)
     return case
+
+
+def _eligible_intake(
+    session: Session, transaction_id: str, customer_id: str, *, lock: bool = False,
+) -> tuple[TransactionRecord, Product]:
+    transaction = _get_owned_transaction(session, transaction_id, customer_id)
+    if lock:
+        locked_transaction = session.exec(select(TransactionRecord).where(
+            TransactionRecord.transaction_id == transaction_id,
+            TransactionRecord.customer_id == customer_id,
+        ).with_for_update().execution_options(populate_existing=True)).first()
+        if locked_transaction is None:
+            raise PermissionError("Transaction unavailable")
+        transaction = locked_transaction
+        if transaction.customer_id != customer_id:
+            raise PermissionError("Transaction unavailable")
+    product = _get_active_product(session, transaction.product_id, customer_id)
+    if lock:
+        locked_product = session.exec(select(Product).where(
+            Product.product_id == transaction.product_id,
+            Product.customer_id == customer_id,
+        ).with_for_update().execution_options(populate_existing=True)).first()
+        if locked_product is None:
+            raise PermissionError("Product unavailable")
+        product = locked_product
+        if product.product_status != ACTIVE_PRODUCT_STATUS:
+            raise PermissionError("Product unavailable")
+    if product.product_type not in CARD_PRODUCT_TYPES:
+        raise CardOnlyDisputeError("Only card transactions can be disputed")
+    _ensure_disputable_status(transaction)
+    _ensure_no_active_case(session, transaction_id, customer_id)
+    _ensure_within_dispute_window(transaction.transaction_date)
+    return transaction, product
 
 
 def _require_identifier(value: str, field_name: str) -> None:
@@ -313,6 +424,8 @@ def _get_active_product(session: Session, product_id: str, customer_id: str) -> 
 
 
 def _ensure_disputable_status(transaction: TransactionRecord) -> None:
+    if transaction.source_kind != "source":
+        raise CardOnlyDisputeError("Generated restitution movements cannot be disputed")
     if transaction.transaction_status != DISPUTABLE_TRANSACTION_STATUS:
         raise ValueError(f"Only {DISPUTABLE_TRANSACTION_STATUS} transactions can be disputed")
 
@@ -322,7 +435,7 @@ def _ensure_no_active_case(session: Session, transaction_id: str, customer_id: s
         select(SupportCase)
         .where(SupportCase.transaction_id == transaction_id)
         .where(SupportCase.customer_id == customer_id)
-        .where(SupportCase.status != "RESOLVED")
+        .where(SupportCase.status.in_(("OPEN", "WAITING_USER_APPROVAL", "IN_REVIEW", "PENDING_EFFECTS")))
     )
     if session.exec(statement).first() is not None:
         raise ActiveDisputeError("Transaction already has an active dispute case")
@@ -356,6 +469,7 @@ def _transition(
     resolution_outcome: str | None = None,
     resolution_notes: str | None = None,
 ) -> None:
+    case.case_version += 1
     case.status = new_status
     case.updated_at = datetime.now(timezone.utc)
     if new_status == "RESOLVED":
@@ -412,7 +526,9 @@ def _product_display_number(product: Product | None) -> str | None:
     return product_number
 
 
-def _to_dispute_case(case: SupportCase, product: Product | None) -> DisputeCase:
+def _to_dispute_case(session: Session, case: SupportCase, product: Product | None) -> DisputeCase:
+    posting = session.exec(select(RuntimePosting).where(RuntimePosting.case_id == case.case_id)).first()
+    protection = session.get(CardProtection, case.product_id)
     return DisputeCase(
         caseId=case.case_id,
         productNumber=_product_display_number(product),
@@ -422,6 +538,14 @@ def _to_dispute_case(case: SupportCase, product: Product | None) -> DisputeCase:
         triageOutcome=case.triage_outcome,
         resolutionOutcome=case.resolution_outcome,
         resolutionNotes=case.resolution_notes,
+        financialEffectsStatus="EXECUTED" if posting else ("PENDING" if case.status == "PENDING_EFFECTS" else "NOT_EXECUTED"),
+        cardProtectionStatus="BLOCKED" if protection and protection.blocked else "NOT_BLOCKED",
+        caseVersion=case.case_version,
+        verdict=case.verdict,
+        rationale=case.resolution_notes,
+        effectCode=case.effect_code,
+        effects=effects(session, case),
+        cardProtection=protection_details(session, case),
         recommendationType=case.recommendation_type,
         recommendationRationale=case.recommendation_rationale,
         recommendationOptedOut=case.recommendation_opted_out,
