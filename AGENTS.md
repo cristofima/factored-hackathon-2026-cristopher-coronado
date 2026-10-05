@@ -83,6 +83,7 @@ for configuration and Copilot Instructions for operational restrictions.
 | Evaluation policy and verified CI evidence | [Evaluation requirements](.github/copilot-instructions.md#evaluation-requirements)                                 |
 | Identity, bootstrap and administrator APIs | [Identity guide](app/business-api/identity/README.md)                                                              |
 | BFF identity facades and Responses proxy   | [BFF guide](app/responses-bff/README.md)                                                                           |
+| Frontend chat recovery and case evidence   | [Frontend recovery guide](app/frontend/banking-web/README.md#chat-recovery-and-case-evidence)                      |
 | Infrastructure                             | [Infrastructure guide](infra/README.md)                                                                            |
 
 ## Focused Checks
