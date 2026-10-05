@@ -37,4 +37,5 @@ jobs:
         with:
           project-path: app/business-api/transaction
           artifact-name: transaction-test-results
+          deployment-requirements: requirements.txt
           run-tests: "true"
