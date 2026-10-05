@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import csv
 import io
+from datetime import date
 from pathlib import Path
 
 import pytest
 
+from banking_data.analysis import export_fraud_transactions as fraud_export
 from banking_data.analysis.export_fraud_transactions import export_fraud_transactions, main
 
 
@@ -85,3 +87,122 @@ def test_mainExportsToNewFile(tmp_path: Path) -> None:
     assert main(["--source", str(source), "--output", str(destination)]) == 0
     with destination.open(newline="", encoding="utf-8") as stream:
         assert list(csv.DictReader(stream)) == [{"transaction_id": "a", "is_fraud": "true"}]
+
+
+def write_dated_partition(source: Path, partition_date: date) -> None:
+    partition = (
+        source / f"year={partition_date.year}" / f"month={partition_date.month:02}"
+        / f"day={partition_date.day:02}"
+    )
+    partition.mkdir(parents=True)
+    (partition / "transactions.csv").write_text(
+        f"transaction_id,is_fraud\n{partition_date.isoformat()},true\n", encoding="utf-8"
+    )
+
+
+@pytest.mark.parametrize("year_source", [False, True])
+def test_export_filters_inclusive_cross_month_range(tmp_path: Path, year_source: bool) -> None:
+    for day in [date(2025, 1, 30), date(2025, 1, 31), date(2025, 2, 1), date(2025, 2, 2)]:
+        write_dated_partition(tmp_path, day)
+    output = io.StringIO()
+    source = tmp_path / "year=2025" if year_source else tmp_path
+
+    count = export_fraud_transactions(
+        source, output, start_date=date(2025, 1, 31), end_date=date(2025, 2, 1)
+    )
+
+    assert count == 2
+    assert [row["transaction_id"] for row in csv.DictReader(io.StringIO(output.getvalue()))] == [
+        "2025-01-31", "2025-02-01"
+    ]
+
+
+@pytest.mark.parametrize("bounds, expected", [
+    (["--year", "2025"], ["2025-12-30", "2025-12-31"]),
+    (["--start-date", "2025-12-31", "--end-date", "2026-01-01"],
+     ["2025-12-31", "2026-01-01"]),
+    (["--start-date", "2026-01-01"], ["2026-01-01", "2026-01-02"]),
+    (["--end-date", "2025-12-31"], ["2025-12-30", "2025-12-31"]),
+])
+def test_main_selects_year_or_date_bounds(
+    tmp_path: Path, bounds: list[str], expected: list[str]
+) -> None:
+    for day in [date(2025, 12, 30), date(2025, 12, 31), date(2026, 1, 1), date(2026, 1, 2)]:
+        write_dated_partition(tmp_path / "source", day)
+    destination = tmp_path / "fraud.csv"
+
+    assert main(["--source", str(tmp_path / "source"), "--output", str(destination), *bounds]) == 0
+    with destination.open(newline="", encoding="utf-8") as stream:
+        assert [row["transaction_id"] for row in csv.DictReader(stream)] == expected
+
+
+@pytest.mark.parametrize("bounds", [
+    ["--year", "0"],
+    ["--year", "10000"],
+    ["--year", "2025", "--start-date", "2025-01-01"],
+    ["--start-date", "2026-01-02", "--end-date", "2026-01-01"],
+])
+def test_main_rejects_invalid_period_before_creating_output(
+    tmp_path: Path, bounds: list[str]
+) -> None:
+    destination = tmp_path / "fraud.csv"
+
+    assert main(["--output", str(destination), *bounds]) == 1
+    assert not destination.exists()
+
+
+@pytest.mark.parametrize("bounds, expected", [
+    ([], ["2026-01-01"]),
+    (["--year", "2025"], ["2025-01-01"]),
+    (["--start-date", "2025-01-01", "--end-date", "2026-01-01"],
+     ["2025-01-01", "2026-01-01"]),
+])
+def test_main_preserves_default_and_discovers_years(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, bounds: list[str], expected: list[str]
+) -> None:
+    source = tmp_path / "source"
+    write_dated_partition(source, date(2025, 1, 1))
+    write_dated_partition(source, date(2026, 1, 1))
+    monkeypatch.setattr(fraud_export, "DEFAULT_SOURCE", source / "year=2026")
+    destination = tmp_path / "fraud.csv"
+
+    assert main(["--output", str(destination), *bounds]) == 0
+    with destination.open(newline="", encoding="utf-8") as stream:
+        assert [row["transaction_id"] for row in csv.DictReader(stream)] == expected
+
+
+def test_export_root_without_bounds_includes_all_years(tmp_path: Path) -> None:
+    write_dated_partition(tmp_path, date(2025, 1, 1))
+    write_dated_partition(tmp_path, date(2026, 1, 1))
+
+    assert export_fraud_transactions(tmp_path, io.StringIO()) == 2
+
+
+def test_main_rejects_output_inside_transactions_root(tmp_path: Path) -> None:
+    write_dated_partition(tmp_path, date(2025, 1, 1))
+    destination = tmp_path / "fraud.csv"
+
+    assert main(["--source", str(tmp_path), "--year", "2025", "--output", str(destination)]) == 1
+    assert not destination.exists()
+
+
+def test_main_rejects_invalid_calendar_date() -> None:
+    with pytest.raises(SystemExit) as exc:
+        main(["--start-date", "2026-02-30"])
+    assert exc.value.code == 2
+
+
+def test_export_rejects_empty_period(tmp_path: Path) -> None:
+    write_dated_partition(tmp_path, date(2025, 1, 1))
+    output = io.StringIO()
+
+    with pytest.raises(ValueError, match="selected period"):
+        export_fraud_transactions(tmp_path, output, start_date=date(2026, 1, 1))
+    assert output.getvalue() == ""
+
+
+def test_export_rejects_invalid_partition_date(tmp_path: Path) -> None:
+    write_partition(tmp_path / "year=2026", "32", "transaction_id,is_fraud\na,true\n")
+
+    with pytest.raises(ValueError, match="Invalid date partition"):
+        export_fraud_transactions(tmp_path, io.StringIO(), start_date=date(2026, 1, 1))
