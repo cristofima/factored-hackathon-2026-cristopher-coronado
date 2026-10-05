@@ -219,6 +219,7 @@ def load_coverage(session: Session, customer_ids: tuple[str, ...]) -> tuple[date
 def load_observed_types(session: Session, customer_ids: tuple[str, ...]) -> set[str]:
     statement = (
         select(TransactionRecord.transaction_type)
+        .where(TransactionRecord.source_kind == "source")
         .where(TransactionRecord.transaction_status == INCLUDED_STATUS)
         .distinct()
     )
@@ -270,6 +271,7 @@ def load_movements(
             func.sum(excluded_amount).label("excluded_amount"),
             func.sum(excluded_count).label("excluded_transaction_count"),
         )
+        .where(TransactionRecord.source_kind == "source")
         .where(TransactionRecord.transaction_status == INCLUDED_STATUS)
         .group_by(TransactionRecord.product_id, transaction_month)
     )

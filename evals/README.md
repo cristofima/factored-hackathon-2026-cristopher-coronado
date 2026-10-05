@@ -6,23 +6,33 @@
 development-exposed synthetic confirmation set, not untouched held-out evidence.
 [dispute_freeze.json](dispute_freeze.json) freezes exact dataset bytes, canonical
 expanded inputs, case count, and source dependencies. Dependency hashing normalizes
-CRLF to LF for portability; dataset hashing remains exact. Workload or expansion
-changes require a new documented version/freeze.
+CRLF to LF for portability; dataset hashing remains exact. The scoped
+`.gitattributes` rule keeps the frozen dataset checkout in LF on Windows too.
+Freeze revision 3 records the reviewed `dispute-consent-v3` expansion for pre-intake
+consent, production preview/location models, and asynchronous SDK tool invocation.
+Revision 2 previously reviewed additive ADR 0009 projections and unexecuted defaults.
+The 25 source scenarios, labels, dataset version, and exact dataset bytes remain
+unchanged; canonical expanded inputs deliberately change to reflect the consent
+contract. Workload or expansion changes require a new documented version/freeze.
+Canonical expansion reads the dataset as UTF-8 before hashing compact, sorted-key
+UTF-8 JSON; platform-default decoding is not equivalent for localized text.
 
 Customer approval authorizes investigation only: every fraud-score band remains
 IN_REVIEW. Low scores route to fast-track review, high scores escalate, and missing
-scores require insufficient-signal review. Decline resolves as withdrawn_by_customer.
+scores require insufficient-signal review. Declining new intake creates no case;
+declining a legacy pending case resolves it as withdrawn_by_customer.
 Fixtures assert no posting, refund, credit, balance change, or product blocking.
-Reviewer assignment is not a verdict. The frozen replay records the authority boundary
-at alignment time: no approved operator adjudication and no simulated assigned verdict.
-Later approved operator queue/detail and exclusive claim work does not expand this
-workload's coverage or approve adjudication, reassignment, or financial effects.
+Reviewer assignment is not a verdict. ADR 0009 approves production operator verdicts
+and recorded financial effects; this investigation-only workload contains no simulated
+assigned verdict and does not exercise those operations. Reassignment remains out of scope.
 
 ## Offline comparator and scoring
 
 [run_dispute_replay.py](run_dispute_replay.py) implements finite-state intake from
 customer turns and synthetic MCP replies, not expected labels. Separate transaction
-confirmation precedes opening; explicit consent precedes approval. Its narrow
+confirmation precedes a read-only preview; explicit consent binds that preview to
+acceptance directly into IN_REVIEW. Ambiguous consent creates no case. Legacy pending
+cases retain their approval/decline path. Its narrow
 en/es/pt grammar and dollar-prefixed amounts do not prove general language understanding.
 [dispute_replay.py](dispute_replay.py) validates response models and checks complete
 turns, ordered tool arguments/results, consent, selection, status grounding, and
@@ -53,6 +63,34 @@ rtk proxy uv run --project app\agent --frozen --no-sync python -m pytest app\age
 The comparator's 25/25 is synthetic comparator completion, not model-quality evidence.
 These are historical session results recorded before subsequent operator/model-contract
 changes, not a rerun against the current worktree. Validate the freeze before reuse.
+
+## Current offline regression evidence
+
+With freeze revision 3, the requested combined offline suites passed **77 tests**
+with no warnings reported. The run used repository-root `PYTHONPATH` and
+`OTEL_SDK_DISABLED=true`:
+
+```powershell
+rtk proxy uv run --project app\agent --frozen --no-sync python -m pytest evals\tests app\agent\tests\test_dispute_replay.py app\agent\tests\test_mcp_replay.py app\agent\tests\test_replay_summary.py -q --tb=short
+```
+
+This includes consent regressions and existing tamper/freeze tests. No source
+scenario or label was changed for this repair. It is offline synthetic evidence,
+not real-model, live authorization, PostgreSQL, browser, or hosted acceptance.
+
+Historical results before Plan 11: after the reviewed projection fingerprint update and LF freeze restoration, the
+following repository-root commands passed. Both used repository-root `PYTHONPATH`
+and `OTEL_SDK_DISABLED=true`:
+
+| Command                                                                                                                                                             | Result                                                 |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `rtk proxy uv run --directory app\agent python -m pytest tests\test_hosted_workflow.py tests\test_dispute_replay.py ..\..\evals\tests\test_offline_alignment.py -q` | 91 passed, 24 existing Azure SDK deprecation warnings  |
+| `rtk proxy uv run --directory app\agent python -m pytest tests ..\..\evals\tests -q --tb=short`                                                                     | 134 passed, 24 existing Azure SDK deprecation warnings |
+
+These checks cover instruction contracts, mocked workflow behavior and synthetic
+replay/freeze guards. They do not establish real-model discovery, semantic quality,
+locale correctness, service authorization, financial settlement or hosted identity
+transport. No billable inference or cloud evaluation was run for this continuation.
 
 ## Consultation safeguards and session evidence
 
@@ -91,7 +129,10 @@ to unused names, including JSON/Markdown/JUnit sibling collisions. Use the print
 saved path rather than assuming overwrite. Complete redacted answers, SDK responses,
 stream updates, ordered calls, pending turns, unused replies, timeout evidence, and
 nested controlled failures are retained. Credential-like keys and token/secret
-strings are removed; nonsecret text is not truncated. Inspect redaction before sharing.
+strings are removed; nonsecret text is not truncated. Only the fixed nonproduction
+`SYNTHETIC-PREVIEW-TOKEN` marker is retained in `previewToken`/`preview_token` fields
+so saved synthetic evidence preserves consent binding during rescoring. Arbitrary
+preview capabilities remain redacted. Inspect redaction before sharing.
 
 Saved proposed evidence supports offline --rescore and --compare-baseline. Pairing
 requires identical frozen expanded inputs, dataset hash, case IDs/locales, and
@@ -152,8 +193,8 @@ mode ran for this alignment. Historical numbers are not v2 results.
 
 ## Remaining acceptance gates
 
-- Assigned-operator adjudication: blocked pending its separately approved contract;
-  queue/claim approval is not verdict acceptance or replay coverage.
+- Assigned-operator adjudication and financial effects are approved by ADR 0009,
+  but the frozen investigation-only replay does not exercise or establish their acceptance.
 - Real-model paired disputes, consultation behavior, semantic/locale review, and variability.
 - Live JWT role/version/introspection and real ownership/authz acceptance, separate
   from the mocked/seeded regression results above.

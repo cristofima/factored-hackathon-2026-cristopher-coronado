@@ -218,6 +218,10 @@ def _to_transaction(record: TransactionRecord, product: Product) -> Transaction:
         )
     return Transaction(
         id=record.transaction_id,
+        flowType="income" if record.source_kind == "runtime" else None,
+        originalTransactionId=record.original_transaction_id,
+        supportCaseId=record.support_case_id,
+        sourceKind=record.source_kind,
         type=record.transaction_type,
         recipientName=record.merchant_name,
         product_number=product_number,
@@ -225,6 +229,8 @@ def _to_transaction(record: TransactionRecord, product: Product) -> Transaction:
         amount=float(record.amount),
         currency=record.currency,
         timestamp=record.transaction_date.isoformat(),
+        country=record.transaction_country,
+        city=record.transaction_city,
         category=record.transaction_category,
         status=record.transaction_status,
     )

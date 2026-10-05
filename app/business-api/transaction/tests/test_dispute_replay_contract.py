@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
+import runpy
 import sys
+from typing import Annotated, Any
 from unittest.mock import MagicMock
 
 from fastmcp import Client, FastMCP
@@ -24,13 +26,17 @@ async def test_replay_schemas_match_independent_fastmcp_discovery() -> None:
     for name in ("account", "transaction"):
         source = ROOT / "app/business-api" / name / "mcp_tools.py"
         tree = ast.parse(source.read_text(encoding="utf-8"))
-        tree.body = [node for node in tree.body if isinstance(node, ast.FunctionDef)]
+        tree.body = [
+            node for node in tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        ]
         server = FastMCP("isolated-contract-discovery")
         namespace = {
             "mcp": server, "CurrentHeaders": CurrentHeaders,
             "service": MagicMock(), "dispute_service": MagicMock(),
-            "Annotated": __import__("typing").Annotated,
+            "Annotated": Annotated, "Any": Any,
         }
+        namespace.update(runpy.run_path(str(source.with_name("models.py"))))
         exec(compile(tree, str(source), "exec"), namespace)
         async with Client(server) as client:
             discovered = {tool.name: tool for tool in await client.list_tools()}

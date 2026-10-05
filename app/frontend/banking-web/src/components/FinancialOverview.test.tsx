@@ -93,6 +93,14 @@ beforeEach(() => {
 });
 
 describe("product financial overview", () => {
+  it("shows owned transaction location with unavailable fallback without translating values", async () => {
+    h.history.mockResolvedValue([{ ...movement, country: "CO", city: "Bogotá" }, { ...movement, id: "missing", country: null, city: null }]);
+    const content = text(await settle());
+    expect(content).toMatch(/Country\s*:\s*CO/);
+    expect(content).toMatch(/City\s*:\s*Bogotá/);
+    expect(content).toMatch(/Country\s*:\s*Not available/);
+    expect(content).toMatch(/City\s*:\s*Not available/);
+  });
   it("keeps the dashboard catalog-only with category filters and opaque links", async () => {
     let tree = await settle(true);
     expect(tiles(tree)).toHaveLength(0);
@@ -128,6 +136,13 @@ describe("product financial overview", () => {
     expect(text(tree)).toContain("**** 1234");
     h.productId = "bank-id"; tree = await settle();
     expect(actionCount(tree)).toBe(0);
+  });
+
+  it("shows recorded movement case and original transaction references", async () => {
+    h.history.mockResolvedValue([{ ...movement, supportCaseId: "case-1", originalTransactionId: "original-1", sourceKind: "dispute_effect" }]);
+    const tree = await settle();
+    expect(nodes(tree).find(node => node.props.to === "/support-cases/case-1")).toBeDefined();
+    expect(text(tree)).toMatch(/Original transaction\s+original-1/);
   });
 
   it("paginates complete history without changing complete-window totals", async () => {

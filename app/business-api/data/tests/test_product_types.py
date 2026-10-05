@@ -123,6 +123,7 @@ def test_loader_unknown_product_type_respects_customer_scope(
         batch_size=1, customer_ids="C1,C2" if unknown_is_scoped else "C1",
     )
     session = MagicMock()
+    session.get.return_value = None
     session_factory = MagicMock()
     session_factory.return_value.__enter__.return_value = session
     transaction_mapper = MagicMock(wraps=load_scoped_data.map_transaction)

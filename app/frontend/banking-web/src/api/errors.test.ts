@@ -11,6 +11,23 @@ describe("controlled API errors", () => {
     );
 
     it.each([
+        ["DISPUTE_PREVIEW_INVALID", "Dispute preview unavailable", 400],
+        ["DISPUTE_PREVIEW_EXPIRED", "Dispute preview expired", 400],
+        ["DISPUTE_PREVIEW_STALE", "Dispute preview unavailable", 409],
+        ["DISPUTE_UNAVAILABLE", "Dispute preview unavailable", 403],
+        ["DISPUTE_INELIGIBLE", "Dispute preview unavailable", 400],
+    ] as const)("preserves and localizes %s", async (code, key, status) => {
+        const error = await readApiError(Response.json({ detail: { code } }, { status }));
+        expect(error.code).toBe(code);
+        expect(errorTranslationKey(error, "Request failed")).toBe(key);
+        for (const locale of ["en", "es", "pt"]) {
+            const message = createUiI18n(locale).t(key);
+            expect(message).not.toBe(code);
+            if (locale !== "en") expect(message).not.toBe(key);
+        }
+    });
+
+    it.each([
         { detail: "Private English backend failure" },
         { detail: { code: "UNKNOWN_PRIVATE_ERROR" } },
         { detail: [{ msg: "Validation failed" }] },

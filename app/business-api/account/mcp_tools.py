@@ -1,3 +1,6 @@
+from asyncio import to_thread
+
+from models import CardDiscoveryResult
 from fastmcp import FastMCP
 from fastmcp.server.dependencies import CurrentHeaders
 import logging
@@ -47,6 +50,24 @@ def get_credit_cards(
     headers: dict[str, str] = CurrentHeaders(),
 ):
     return card_service_singleton.get_credit_cards(product_number, get_customer_id(headers))
+
+
+@mcp.tool(
+    name="discoverCardsBySuffix",
+    description=(
+        "Discover authenticated customer-owned Debit Card and Credit Card products by exactly "
+        "four final digits, without a bank account number or inferred account association. "
+        "Returns at most five masked candidates and explicit ambiguity/truncation. Each usable "
+        "lookup_product_number is a verified full key for internal agent tool calls only, "
+        "never user-facing prose. Never select the first ambiguous match or reconstruct a key."
+    ),
+)
+async def discover_cards_by_suffix(
+    suffix: Annotated[str, "Exactly four final ASCII digits, for example 7036"],
+    headers: dict[str, str] = CurrentHeaders(),
+) -> CardDiscoveryResult:
+    customer_id = get_customer_id(headers)
+    return await to_thread(card_service_singleton.discover_cards_by_suffix, suffix, customer_id)
 
 
 @mcp.tool(name="getCardDetails", description="Get the details of a single credit card")

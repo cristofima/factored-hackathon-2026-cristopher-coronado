@@ -36,7 +36,9 @@ def sanitize(value: Any) -> Any:
         return {key: sanitize(item) for key, item in value.items()
                 if not any(word in key.lower() for word in (
                     "authorization", "secret", "password", "token", "api_key", "credential"))
-                or key in {"input_token_count", "output_token_count", "total_token_count"}}
+                or key in {"input_token_count", "output_token_count", "total_token_count"}
+                or (key in {"previewToken", "preview_token"}
+                    and item == "SYNTHETIC-PREVIEW-TOKEN")}
     if isinstance(value, list):
         return [sanitize(item) for item in value]
     if isinstance(value, str):

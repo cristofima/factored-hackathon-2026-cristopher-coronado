@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
+import { isTerminalCase } from "@/api/supportCaseContracts";
 import { listSupportCases } from "@/api/disputeClient";
 import { useAuth } from "@/context/AuthContext";
 import type { SupportCase } from "@/models/SupportCase";
 
 export function activeTransactionCases(cases: SupportCase[]): Map<string, SupportCase> {
-  return new Map(cases.filter((item) => item.status !== "RESOLVED")
+  return new Map(cases.filter((item) => !isTerminalCase(item.status))
     .map((item) => [item.transactionId, item]));
 }
 
 export function useDisputeEligibility(enabled: boolean) {
   const { user, sessionKey } = useAuth();
   const customerId = user?.id;
-  const scope = JSON.stringify([customerId, sessionKey]);
+  const scope = JSON.stringify([customerId, sessionKey, user?.identityVersion]);
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<{
     scope: string; attempt: number; cases: SupportCase[]; status: "ready" | "error";

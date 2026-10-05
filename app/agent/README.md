@@ -13,6 +13,68 @@ timelines, and follow-ups to Transaction. Ambiguous references require customer
 selection; status follow-ups refresh case details and event questions fetch the
 timeline. Missing and foreign cases are described equivalently as unavailable.
 Customer consent and `IN_REVIEW` do not establish operator takeover or a verdict.
+Manual-created cases use the same persisted follow-up tools; creating one does not
+invoke a background model.
+
+Discovery accepts merchant, approximate date, amount and masked-card clues, with
+explicit selection among at most five readable tool-backed candidates. Full verified
+product numbers remain necessary where the existing lookup contract requires them;
+masked digits and database IDs are not lookup keys. Latest-movement lookup covers
+only five movements, and MCP tools have no date/pagination arguments. No match is
+reported within that limited searched scope, not as proof of exhaustive history.
+Incorrect-amount complaints preserve the expected amount in the reason under the
+existing full-original-amount policy, never a promised partial refund.
+
+## Pre-intake consent and localized context
+
+Selected-charge confirmation is separate from explicit case consent. The Transaction
+agent first calls `previewTransactionDispute` with the selected transaction and reason.
+The preview is read-only and contains no persisted case or case ID. Explicit consent
+to create the case and request review is required before `reportTransactionDispute`
+accepts the signed preview token. Decline creates no case or event; unclear or unrelated
+affirmation requires clarification. Acceptance records intake, consent and routing
+atomically in `IN_REVIEW`, without a second review-consent step.
+
+The shared frontend proposal displays tool-backed amount/currency, date, masked card,
+merchant and optional owned country/city. Proposal tokens stay in transport, never
+assistant prose. Acceptance lasts ten minutes; read-only `recoverTransactionDispute`
+recovery lasts 24 hours from issuance. Ambiguous failures require recovery, not blind
+resubmission, and a null recovery result remains uncertain. Successful intake responses
+produce factual receipts only after confirmed persistence/readback. Sequential duplicate
+intake recovers an owned active case through list/detail readback. Eligibility and
+ownership remain service decisions. Existing `WAITING_USER_APPROVAL` cases retain their
+legacy consent path. See the [Transaction contract](../business-api/transaction/README.md#customer-dispute-proposal-and-consent).
+
+The authenticated [locale provider](app/helpers/user_profile_provider.py) injects the
+stored en/es/pt response language once per request. Generated prose and human-readable
+status labels use that language; canonical structured keys, status codes and tool names
+remain unchanged. Spanish generated labels consistently use `reclamo`/`reclamos` with
+masculine grammar, not `disputa` or `reclamación`. Quoted customer reasons and original
+audit text remain verbatim. Agent instructions and tool descriptions remain authored
+in English; frontend catalogs do not translate agent Markdown.
+
+After REST-recorded acceptance, chat calls `getSupportCase` for the supplied case
+and acknowledges confirmed readback, without recreation or second consent.
+
+Focused localization checks, from the repository root:
+
+```powershell
+$env:PYTHONPATH = (Get-Location).Path
+$env:OTEL_SDK_DISABLED = 'true'
+rtk proxy uv run --directory app\agent python -m pytest tests\test_internal_identity.py tests\test_hosted_workflow.py tests\test_settings.py -q
+```
+
+Result: 80 passed, 24 dependency deprecation warnings. Scripted SDK continuations cover accept,
+decline, unclear consent and REST-accepted readback; they prove session/tool plumbing,
+not real-model judgment. The owner reported the feature working; full browser locale,
+real-model consent, PostgreSQL contention and hosted acceptance remain separate gates.
+
+Assigned-operator verdicts and recorded financial effects are implemented in the
+Transaction service, not executed by this agent. An invalid verdict has no compensation;
+a valid pending verdict is not a completed effect. Completion claims require returned
+financial-effect status and movement evidence. Card protection requires independent
+returned evidence and is application-local, not external processor enforcement.
+Stored synthetic fraud scores are routing signals, not an investigation or proof.
 Deterministic instruction-contract tests verify these requirements are present,
 not that a real model follows them; persisted and browser validation remain separate.
 
@@ -84,10 +146,40 @@ Local tasks load the agent's own `.env` and use the developer's Azure credential
 
 Hosted deployment is owned by [`azure.yaml`](azure.yaml) and uses managed identity. Foundry injects `FOUNDRY_PROJECT_ENDPOINT` into the hosted container; `MODEL_DEPLOYMENT_NAME=gpt-4.1-mini` is an application-defined declaration in the manifest. Neither manifest provisions the model deployment, and hosted deployment has not been verified by the local test suite.
 
+### Optional per-agent model deployments
+
+Each agent can use a distinct deployment in the same Foundry project. Unset or
+empty overrides use the configured `MODEL_DEPLOYMENT_NAME` shared fallback.
+The shared setting is required only for agents without a nonempty override; it
+can be unset when all three overrides are configured. There is no automatic
+runtime deployment default:
+
+```env
+TRIAGE_MODEL_DEPLOYMENT_NAME=model-router
+ACCOUNT_MODEL_DEPLOYMENT_NAME=gpt-5.4
+TRANSACTION_MODEL_DEPLOYMENT_NAME=gpt-5.4
+```
+
+These values are deployment names, not automatic model provisioning. The Responses
+host creates one client per distinct effective deployment, reusing it when names
+match. Direct workflow callers can also pass `account_chat_client` and
+`transaction_chat_client`; omitted clients reuse the triage client. Identity,
+locale, tools, and the Account/Transaction handoff topology remain unchanged.
+
+Microsoft Learn documents [model-router agentic tool support](https://learn.microsoft.com/en-us/azure/foundry/openai/concepts/model-router)
+and [Foundry Responses inference through a router deployment](https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/model-router#test-model-router-with-foundry-responses-and-chat-completions).
+The [GPT-5.4 catalog](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure#gpt-54)
+lists Responses, Chat Completions, and function/tool calling support. Router model
+eligibility and deployment availability depend on region, access, and deployment
+configuration. Configure an eligible tool-capable routing pool; no project
+availability or live end-to-end compatibility is established by offline tests.
+The hosted manifest still declares the shared mini deployment; optional overrides
+must also be supplied to the deployed host environment to take effect there.
+
 ## Validation
 
 ```powershell
-uv run python -m pytest tests/test_hosted_workflow.py tests/test_internal_identity.py tests/test_settings.py tests/test_mcp_replay.py -q
+uv run python -m pytest tests/test_hosted_workflow.py tests/test_internal_identity.py tests/test_settings.py tests/test_model_configuration.py tests/test_mcp_replay.py -q
 ```
 
 The focused suite passed with 23 tests covering handoff completion, safe ownership
@@ -157,6 +249,18 @@ for each request. The hosting runtime restores the matching conversation checkpo
 inside that request before delivering new input; different requests do not share
 mutable executor state. This uses an internal extension point of the installed
 hosting SDK and must be revalidated when upgrading it.
+
+[The checkpoint-aware handoff builder](app/helpers/checkpointed_handoff.py)
+also synchronizes each fresh restored turn to the specialists before routing.
+The installed orchestration SDK otherwise broadcasts only the initial input,
+allowing a specialist's stale final answer to terminate a follow-up without an
+answer. The adapter preserves normal completion, function approvals and
+`request_info` continuations. It uses a narrow protected builder hook; revalidate
+it when upgrading the SDK and remove it when upstream fixes fresh-turn broadcast.
+[Actual-host regression tests](tests/test_responses_handoff_checkpoints.py) cover
+both conversation-ID and previous-response-ID restoration, repeated turns,
+cross-specialist routing, exactly-once input delivery and separate response chains.
+These deterministic tests do not establish hosted or real-model acceptance.
 
 The default checkpoint provider uses `FoundryStateStore`. Outside Foundry hosting,
 the installed SDK writes JSON files under `~/.agentserver/state_stores`, or under

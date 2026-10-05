@@ -41,7 +41,7 @@ async def test_early_approval_and_decline_mismatch_fail_scoring() -> None:
     result["tool_calls"][-1]["turn"] = 0
     assert "consent" in score_case(case, result)["failed_checks"]
     result["tool_calls"][-1]["turn"] = 2
-    result["tool_calls"][-1]["arguments"]["approved"] = False
+    result["tool_calls"][-1]["arguments"]["preview_token"] = "OTHER-PREVIEW"
     assert not score_case(case, result)["passed"]
 
 
@@ -99,6 +99,7 @@ async def test_escalation_relay_translates_human_text_and_preserves_codes(
     assert translation in answer
     assert "escalated" not in answer
     assert "IN_REVIEW" in answer
+    assert case["transaction"][-1]["result"]["status"] == "IN_REVIEW"
     assert score_case(case, result)["passed"]
 
 

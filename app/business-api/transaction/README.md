@@ -4,6 +4,65 @@ Transaction REST reads and customer dispute routes verify the browser applicatio
 MCP tools use the separate short-lived internal agent bearer; it cannot authorize
 operator access. Business logic retains customer ownership checks.
 
+## Customer dispute proposal and consent
+
+New intake is a read-only proposal followed by explicit consent to create a case
+and request review. Identifying a charge is not consent. Both the direct action
+and customer chat use the same service contract:
+
+| Route                              | Request                   | Result                                                                                                                  |
+| ---------------------------------- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/support-cases/preview`  | `transactionId`, `reason` | HTTP 200 proposal with `previewToken`, `transactionId`, `reason`, `expiresAt`, `transaction`; no case or events written |
+| `POST /api/support-cases`          | `previewToken`            | HTTP 201 persisted case with consent and routing recorded atomically; new case enters `IN_REVIEW`                       |
+| `POST /api/support-cases/recovery` | `previewToken`            | HTTP 200 accepted case or null; read-only recovery                                                                      |
+
+MCP equivalents are `previewTransactionDispute(transaction_id, reason)`,
+`reportTransactionDispute(preview_token)` and `recoverTransactionDispute(preview_token)`.
+The retired root request body containing only transaction/reason returns HTTP 422.
+Every REST request still checks current Identity; services enforce customer ownership.
+
+The stateless signed proposal binds customer, transaction, reason and persisted
+evidence. Acceptance expires after ten minutes; recovery is bounded to 24 hours
+from issuance. Tokens are transport values, never visible assistant prose, and
+integrity alone is not proof of human consent. No new configuration or migration
+is required: signing uses the existing JWT key with a dedicated audience, and the
+proposal nonce determines the accepted case ID. Acceptance rechecks ownership,
+card eligibility, the real-clock 365-day window and evidence under locks. Stale
+proposals must be replaced and consent obtained again.
+
+Repeated acceptance recovers the same case without reopening a terminal case.
+Ambiguous transport failure uses read-only recovery, not blind resubmission; a null
+recovery result is not proof that an in-flight write failed. Declining a proposal
+writes no SupportCase or event. Existing persisted `WAITING_USER_APPROVAL` cases
+retain their approval/decline path and historical audit; new cases require no
+second review consent. Review is not adjudication, compensation or card protection.
+
+Customer transaction context includes optional country/city only from owned
+persisted records, never staff fraud signals or invented location. Visible labels
+use profile-driven en/es/pt catalogs while canonical transport values stay unchanged.
+The preview's `Card` label is `Card`/`Tarjeta`/`Cartão`. Spanish display and generated
+agent wording consistently use `reclamo`/`reclamos` with masculine grammar. Canonical
+English tool names, keys and codes, Portuguese dispute terminology, customer-entered
+reasons and original audit text remain unchanged. See the
+[frontend localization guide](../../frontend/banking-web/README.md#localization).
+After application-recorded acceptance, chat reads the supplied case with
+`getSupportCase` and acknowledges the confirmed receipt instead of creating again.
+Only confirmed persistence/readback permits a successful case receipt.
+
+The owner subsequently reported the feature working. The localization follow-up
+passed 53 focused frontend tests and 80 focused agent tests; exact commands and
+limitations are in the linked frontend and [agent guide](../../agent/README.md#pre-intake-consent-and-localized-context).
+This observation does not complete the browser or real-model acceptance matrix.
+
+Offline validation of this slice: Transaction **278 passed, 7 skipped** (one existing
+warning); focused agent suites **80 passed** (24 SDK deprecation warnings); nine
+frontend suites **183 passed**, lint **0 errors/14 existing warnings**, build passed
+with its existing bundle-size warning. Scripted-model tests exercise actual SDK
+session/tool continuation, not real-model consent semantics. Vite build does not
+prove clean TypeScript diagnostics. Browser, hosted transport, real-model locale
+quality, approved-data parity and PostgreSQL acceptance contention remain separate
+unexecuted gates for this change.
+
 ## Operator queue and takeover
 
 Every operator request validates the HS256 application JWT and calls Identity's
@@ -47,12 +106,66 @@ audit failure rolls back the claim. Consent requires a customer `APPROVAL_GRANTE
 event. Archived `legacy_assigned_agent_id` neither grants nor blocks operator authority.
 New reviews no longer assign synthetic ServiceAgent reviewers. Stored fraud-score
 routing is retained; missing scores still escalate without estimating a score.
-Taking over does not resolve a case or change balances. There is no operator verdict,
-financial action, reassignment, new login or conversational specialist endpoint.
+Taking over does not resolve a case or change balances. Assigned operators can then
+adjudicate the consented case through the separate versioned endpoints below.
+Reassignment, new login and conversational specialists remain out of scope.
+
+## Adjudication and recorded financial effects
+
+All paths below use `/api/operator/support-cases/{case_id}` and return owned detail.
+
+| Method and suffix       | JSON request fields                                                                                                                             |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /adjudicate`      | `verdict` (`valid` or `invalid`), nonblank `rationale`, `expected_case_version`, `expected_evidence_version`, optional `destination_product_id` |
+| `POST /effects/retry`   | `expected_case_version`, optional `destination_product_id`                                                                                      |
+| `POST /card-protection` | `expected_case_version`, nonblank `rationale`, `blocked`                                                                                        |
+
+Only the persisted assigned operator can act. A verdict is accepted exactly once on
+`IN_REVIEW`. Invalid closes as `RESOLVED_INVALID` without posting. Valid first commits
+`PENDING_EFFECTS`; execution then atomically records the full positive original amount
+and currency, actual-time linked refund movement, runtime balance delta, audit and
+`RESOLVED_VALID` closure. Failed effects remain pending and retry never creates another
+verdict. Lifetime entitlement is unique per original transaction across cases; active
+intake is also protected by a database unique index. Legacy `RESOLVED` does not retrocredit.
+
+Debit-card restitution targets an owned active same-currency Savings Account, with
+Checking Account fallback only when no eligible Savings exists. Exactly one preferred
+choice can be selected automatically; multiple choices require an explicit destination
+from that tier. No card/account relationship is inferred and no extra consent is added.
+Credit-card restitution uses a negative delta against positive outstanding-debt balances.
+Source balances and original movements remain ingestion anchors: separate runtime
+postings preserve deltas when source data refreshes, and generated refunds appear in
+normal Transaction reads without entering source-load verification or monthly snapshots.
+
+Owned detail adds `caseVersion`, `evidenceVersion`, `evidence`, `verdict`, `rationale`,
+`eligibleDestinations`, `effects`, `effectCode`, and `cardProtection`. Effects expose
+`movementId`, `destinationProductId`, `amount`, `currency`, `balanceDelta`, `executedAt`.
+Pending codes include `DESTINATION_REQUIRED`, `DESTINATION_UNAVAILABLE`,
+`DESTINATION_NOT_ELIGIBLE`, `EVIDENCE_CHANGED`, `EVIDENCE_UNAVAILABLE`,
+`CREDIT_ALREADY_APPLIED`, and `EFFECT_EXECUTION_FAILED`. Conflicts return HTTP 409 with
+controlled `detail.code`; stale clients must reload before sending new versions.
+
+Card protection is an independent, rationale-audited local product overlay preserving
+prior source status. Verdicts neither block nor unblock cards. It is not external
+payment-processor enforcement; bank-account-only cases cannot use this command.
+Operator detail also exposes nullable `productProtectionStatus`: the actual source
+product status with `Blocked` overlaid only for recorded local protection, never the
+transaction evidence status or an assumed Active state.
+
+Customer owned list/detail retains `financialEffectsStatus` and `cardProtectionStatus`
+and adds `caseVersion`, nullable `verdict`, `rationale`, `effectCode`, `effects`, and
+`cardProtection`. The effects object uses the same six fields as operator detail;
+amount and signed balance delta are Decimal strings. Protection exposes `blocked`,
+nullable `priorStatus`, `rationale`, cause `caseId`, ISO `updatedAt`, and fixed
+`scope: LOCAL_PRODUCT_ONLY`. The current product-scoped protection record can originate
+from another case on the same card. Missing records remain null; legacy/invalid status
+never invents financial effects. Customer reasons and stored audit text remain unchanged.
+Customer `/resolve` is retired and always
+returns HTTP 403 `OPERATOR_ADJUDICATION_REQUIRED` after customer authentication.
 
 ## Schema prerequisite
 
-Apply the data module's Alembic migrations through revision `20261004_0010` before
+Apply the data module's Alembic migrations through revision `20261004_0011` before
 running this version. Revision 0009 adds claim/time/version/audit fields; revision
 0010 binds nullable real ownership to `operators.user_id` with deletion restricted.
 Claim requires that persisted Operator as well as current Identity introspection;
@@ -65,11 +178,10 @@ text and genuine ownership are preserved; simulated IDs are never converted to r
 ownership. Orphan real owners fail migration preflight. Downgrade is deliberately
 refused to preserve history.
 
-Customer resolution permissions remain unchanged: the owning customer can still
-resolve an `IN_REVIEW` case after takeover. This changes status, not real ownership
-or claim audit, and operator-owned detail remains readable. Claim exclusivity covers
-competing operators, not exclusive verdict authority; customer resolution and claim
-are not jointly serialized.
+Revision 0011 adds versioned evidence/verdicts, runtime postings, generated-movement
+linkage and local card protection. Upgrade refuses existing duplicate active disputes;
+downgrade refuses discarding recorded financial evidence. Migration 0011 requires
+separate reviewed local execution; source and synthetic tests do not prove rollout.
 
 ## Validation
 
@@ -85,15 +197,45 @@ rtk proxy uv run --directory app\business-api\data python -m pytest tests\test_o
 pointing at an explicitly authorized disposable test database, never production.
 It creates a uniquely named schema with synthetic records and drops that schema on
 completion. Two competing sessions must produce exactly one winner, one controlled
-conflict and one claim audit, with no resolution. It does not load credential files.
+conflict and one claim audit, with no resolution. Repeated claims by either operator
+must conflict without changing timestamps, version or audit identity. Failure injection
+after audit flush and before commit checks rollback of ownership, timestamps, version
+and audit, preservation of customer consent, and a subsequent successful claim by the
+other operator. Listeners are attached only to the failing session. It does not load
+credential files.
 
 ```powershell
 rtk proxy uv run --directory app\business-api\transaction python -m pytest tests\test_operator_postgres.py -q
 ```
 
-Without explicit configuration this test skips. SQLite regressions do not prove
-PostgreSQL concurrency or deployed end-to-end identity transport. Those gates remain
-open; no disposable-database concurrency execution is recorded here.
+Without explicit configuration these tests skip. SQLite regressions do not prove
+PostgreSQL concurrency or deployed end-to-end identity transport. A subsequent
+
+The operator-effects implementation was validated with the following suites:
+
+```powershell
+rtk proxy uv run --directory app\business-api\transaction python -m pytest tests -q --tb=short
+rtk proxy uv run --directory app\business-api\account python -m pytest tests -q --tb=short
+rtk proxy uv run --directory app\business-api\data python -m pytest tests -q --tb=short
+```
+
+Results: Transaction **230 passed, 7 skipped**; Account **85 passed, 1 skipped**;
+Data **118 passed**. A separately authorized loopback PostgreSQL run passed all
+**6** isolated concurrency tests, including effects retry, lifetime entitlement
+and concurrent active intake. These results do not prove migration 0011 rollout,
+browser acceptance or hosted identity transport.
+
+A read-only local persisted-data check found 100,102 Credit Card product balances:
+97,939 positive, 2,163 zero, none negative or missing. Credit Card restitution
+subtracts the original amount from the stored balance through the runtime ledger.
+This confirms the sign representation, not external settlement or issuer enforcement. A subsequent
+user-authorized localhost PostgreSQL run of `test_operator_cases.py` and
+`test_operator_postgres.py` passed **18 tests**, including all three PostgreSQL
+cases. Connection configuration was loaded internally and verified as loopback;
+only uniquely named synthetic schemas were written. Read-only cleanup verification
+found **0 remaining operator test schemas**. This verifies service-level contention,
+repeat conflicts and rollback/recovery, not runtime Identity checks, browser
+acceptance, claim-versus-customer-resolution races or final-verdict authority.
 
 Separately authorized local PostgreSQL execution on 2026-10-04 upgraded revision
 `20261003_0008` to `20261004_0010`. Backup integrity and read-only preservation checks
@@ -105,3 +247,15 @@ remote rollout were not performed. See the [data guide](../data/README.md#scope)
 After assigned-list integration, the focused `tests\test_operator_cases.py` run
 passed 13 tests. This is synthetic service coverage, not authenticated browser
 acceptance or operator-verdict authority.
+
+The extended rollback regressions were verified locally from the repository root:
+
+```powershell
+$env:OPERATOR_TEST_ALLOW_WRITES = "0"
+Set-Location app\business-api\transaction
+& .\.venv\Scripts\python.exe -m pytest tests\test_operator_cases.py tests\test_operator_postgres.py -q
+```
+
+Result: **15 passed, 3 skipped**. The PostgreSQL cases were intentionally disabled;
+this verifies the offline rollback/recovery checks and collection, not PostgreSQL
+execution. The existing FastAPI/Starlette test-client deprecation warning remains.

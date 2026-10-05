@@ -165,10 +165,12 @@ async def test_invalid_json_fails_closed(monkeypatch: pytest.MonkeyPatch) -> Non
 
 DISPUTE_REQUESTS = [
     ("GET", "", None, "list_cases"),
+    ("POST", "", {"previewToken": "synthetic-preview"}, "accept_transaction_dispute"),
     (
-        "POST", "", {"transactionId": "tx-1", "reason": "Unrecognized purchase"},
-        "open_transaction_dispute",
+        "POST", "/preview", {"transactionId": "tx-1", "reason": "Unrecognized purchase"},
+        "preview_transaction_dispute",
     ),
+    ("POST", "/recovery", {"previewToken": "synthetic-preview"}, "recover_transaction_dispute"),
     ("GET", "/case-1", None, "get_case"),
     ("GET", "/case-1/timeline", None, "get_case_timeline"),
     ("POST", "/case-1/approval", {"approved": True}, "respond_to_approval"),
@@ -236,6 +238,12 @@ async def test_dispute_routes_recheck_identity_before_every_service_call(
         "status": "WAITING_USER_APPROVAL", "openedAt": "2026-10-01T00:00:00Z",
         "updatedAt": "2026-10-01T00:00:00Z",
     }
+    if service_method == "preview_transaction_dispute":
+        service.preview_transaction_dispute.return_value = {
+            "previewToken": "synthetic-preview", "transactionId": "tx-1",
+            "reason": "Unrecognized purchase", "expiresAt": "2026-10-01T00:10:00Z",
+            "transaction": {"id": "tx-1"},
+        }
     payload = claims()
     profile = {key: value for key, value in payload.items() if key not in ("iss", "aud", "exp")}
     calls = 0
@@ -265,8 +273,13 @@ async def test_dispute_routes_recheck_identity_before_every_service_call(
             method, "/api/support-cases" + path, json=body,
             headers={"Authorization": "Bearer " + token},
         )
-        assert first.status_code == (201 if method == "POST" and not path else 200)
-        getattr(service, service_method).assert_called_once()
+        expected_status = 403 if service_method == "resolve_case" else (201 if method == "POST" and not path else 200)
+        assert first.status_code == expected_status
+        if service_method == "resolve_case":
+            assert first.json() == {"detail": {"code": "OPERATOR_ADJUDICATION_REQUIRED"}}
+            service.resolve_case.assert_not_called()
+        else:
+            getattr(service, service_method).assert_called_once()
         service.reset_mock()
         second = await client.request(
             method, "/api/support-cases" + path, json=body,

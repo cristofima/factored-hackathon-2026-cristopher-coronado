@@ -1,1 +1,2 @@
 *.sh text eol=lf
+evals/dispute_cases.json text eol=lf

@@ -17,6 +17,11 @@ class Transaction(BaseModel):
     amount: Optional[float] = None
     currency: Optional[str] = None
     timestamp: Optional[str] = None
+    country: str | None = None
+    city: str | None = None
+    originalTransactionId: str | None = None
+    supportCaseId: str | None = None
+    sourceKind: str = "source"
     category: Optional[str] = None
     #paid, pending, failed
     status: Optional[str] = None
@@ -41,8 +46,14 @@ class DisputeCase(BaseModel):
     triageOutcome: Optional[str] = None
     resolutionOutcome: Optional[str] = None
     resolutionNotes: Optional[str] = None
-    financialEffectsStatus: Literal["NOT_IMPLEMENTED"] = "NOT_IMPLEMENTED"
-    cardProtectionStatus: Literal["NOT_IMPLEMENTED"] = "NOT_IMPLEMENTED"
+    financialEffectsStatus: str = "NOT_EXECUTED"
+    cardProtectionStatus: str = "NOT_BLOCKED"
+    caseVersion: int = 0
+    verdict: str | None = None
+    rationale: str | None = None
+    effectCode: str | None = None
+    effects: dict[str, str] | None = None
+    cardProtection: dict[str, object] | None = None
     recommendationType: Optional[str] = None
     recommendationRationale: Optional[str] = None
     recommendationOptedOut: bool = False
@@ -62,6 +73,18 @@ class DisputeCaseEvent(BaseModel):
 class OpenDisputeRequest(BaseModel):
     transactionId: str
     reason: str
+
+
+class AcceptDisputeRequest(BaseModel):
+    previewToken: str
+
+
+class DisputePreview(BaseModel):
+    previewToken: str
+    transactionId: str
+    reason: str
+    expiresAt: str
+    transaction: Transaction
 
 
 class DisputeApprovalRequest(BaseModel):

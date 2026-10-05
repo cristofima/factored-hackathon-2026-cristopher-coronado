@@ -34,7 +34,10 @@ versioned exclusive claim). Transaction clients call its absolute `VITE_*_API_UR
 origin directly with the application JWT, never through a dev-server proxy.
 `src/pages/` holds one page per screen, including `SupportCases.tsx`,
 `SupportCaseDetail.tsx` and role-guarded `OperatorCases.tsx`. `src/locales/` holds the static `en`/`es`/`pt` UI catalogs
-consumed by `UiLocaleProvider`.
+consumed by `UiLocaleProvider`. `src/components/DisputePreviewConsent.tsx` shares
+proposal context, accept/decline and bounded recovery between `ReportDisputeDialog`
+and the chat `DisputePreview` widget. Legacy `DisputeConsent` handles only persisted
+pending-case decisions; generic MCP permission controls remain separate.
 
 ### `app/responses-bff/bff/`
 
@@ -51,7 +54,8 @@ that boundary was deliberately removed in the 2026-10-01 direct-API migration (s
 
 Dedicated FastAPI identity service: Argon2 login, HS256 issuance, customer/operator/
 admin profiles, fixed-role operator management, active/inactive lifecycle, identity
-version and atomic audit. An explicit seed service bootstraps an admin from external
+version and atomic audit. Access JWTs default to 60 minutes; refresh sessions and
+renewal modals are deferred. An explicit seed service bootstraps an admin from external
 credentials; it never runs at startup. Protected introspection uses a separate
 `AUTH_INTERNAL_SECRET`. Staff have no `customer_id` and cannot use financial REST
 or customer chat. See [ADR 0006](docs/adr/0006-dedicated-auth-users-and-staff-identities.md).
@@ -62,7 +66,10 @@ or customer chat. See [ADR 0006](docs/adr/0006-dedicated-auth-users-and-staff-id
 `agents/azure_chat/hosted_workflow.py` builds the triage + Account + Transaction
 specialist agents as one `HandoffBuilder` workflow using `FoundryChatClient` and MCP
 tools; it constructs a request-local workflow per call to avoid shared mutable
-executor state. `tools/` holds the MCP client wiring. `routers/` exposes the local
+executor state. `helpers/user_profile_provider.py` injects authenticated locale and
+localized human-label instructions. Transaction intake requires preview and explicit
+consent before mutation; REST-accepted cases continue via `getSupportCase` readback.
+`tools/` holds the MCP client wiring. `routers/` exposes the local
 `/responses` endpoint CRUDmakers's BFF proxies to.
 
 ### `app/business-api/account/` and `app/business-api/transaction/`
@@ -75,10 +82,20 @@ authenticated via `internal_identity.py`'s 60-second bearer), `routers.py` /
 `models.py` (Pydantic/SQLModel types). Transaction additionally owns
 `dispute_service.py` (customer consent, review classification against the dataset's
 `fraud_score`, and separately authorized resolution) and `dispute_routers.py`
-(`/api/support-cases`). Consent moves every classification to `IN_REVIEW`; a score
-never resolves a case. The approved operator ownership contract is documented in
+(`/api/support-cases`). Read-only preview precedes explicit consent; signed-token
+acceptance atomically creates the case, consent and routing in `IN_REVIEW`, while
+preview/decline create no case/events. Acceptance lasts ten minutes; read-only recovery
+lasts 24 hours from issuance and never treats null as proof of a failed write.
+Legacy `WAITING_USER_APPROVAL` cases retain their decision path. See the
+[consent contract](app/business-api/transaction/README.md#customer-dispute-proposal-and-consent).
+A score never resolves a case. The approved operator ownership contract is documented in
 [ADR 0008](docs/adr/0008-operator-ownership-without-service-agent-catalog.md): exclusive
-claim records responsibility, not adjudication or financial authority.
+claim records responsibility, not adjudication or financial authority by itself.
+[ADR 0009](docs/adr/0009-operator-verdicts-with-recorded-financial-effects.md)
+approves the separate assigned-operator verdict and recorded-compensation boundary:
+valid cases stay pending until actual financial effects succeed; debit compensation
+uses owned savings/checking allocation, not an inferred card-account relationship.
+Card protection is separately audited and does not imply processor enforcement.
 Both services enable `CORSMiddleware` via `CORS_ALLOWED_ORIGINS`.
 
 ### `app/business-api/shared/banking_shared/`
@@ -126,7 +143,11 @@ separately. Commands against the agent stack need `--cwd app/agent`.
 - **Tool schemas and agent instructions stay English-only.** Only the final
   response text is locale-driven, from the authenticated user's stored `locale`
   (`es`/`pt`/`en`, `en` fallback), injected once per request by a context provider,
-  never inferred from the current message's language.
+  never inferred from the current message's language. Human-facing status labels
+  are translated without changing canonical transport codes. Frontend catalogs map
+  Card to Card/Tarjeta/Cartão; Spanish generated/display terminology uses
+  `reclamo`/`reclamos` with masculine grammar. Customer reasons and original audit
+  text remain verbatim; frontend catalogs never translate agent Markdown.
 - **Dispute legitimacy is never an LLM decision.** `dispute_service.py`'s triage
   is a deterministic routing check against the dataset's precomputed `fraud_score`;
   missing scores stay in review without estimation. The agent's only job is intake

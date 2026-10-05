@@ -7,6 +7,7 @@ from decimal import Decimal
 
 from banking_shared.database import create_session
 from banking_shared.models import Customer, Product
+from banking_shared.runtime import project_runtime
 from banking_shared.product_types import (
     ACCOUNT_PRODUCT_TYPES,
     CARD_PRODUCT_TYPES,
@@ -18,10 +19,13 @@ from models import (
     AccountSummary,
     Beneficiary,
     Card,
+    CardDiscoveryCandidate,
+    CardDiscoveryResult,
     CardSummary,
     PaymentMethod,
     PaymentMethodSummary,
 )
+from sqlalchemy import func
 from sqlmodel import Session, select
 
 logger = logging.getLogger(__name__)
@@ -54,7 +58,7 @@ class AccountService:
                     .order_by(Product.product_id)
                 ).all()
             )
-            return _to_account(account_product, customer, cards)
+            return _to_account(project_runtime(session, account_product), customer, [project_runtime(session, card) for card in cards])
 
     def get_payment_method_details(
         self,
@@ -68,7 +72,7 @@ class AccountService:
         _require_identifier(payment_method_id, "PaymentMethodId")
         with self._session_factory() as session:
             product = _get_owned_product(session, payment_method_id, customer_id)
-            return _to_payment_method(product)
+            return _to_payment_method(project_runtime(session, product))
 
     def get_registered_beneficiary(
         self,
@@ -90,7 +94,7 @@ class AccountService:
                 .where(Product.product_type.in_(ACCOUNT_PRODUCT_TYPES))
                 .order_by(Product.product_id)
             ).all()
-            return [_to_account_summary(product) for product in products]
+            return [_to_account_summary(project_runtime(session, product)) for product in products]
 
 
 class UserService:
@@ -116,7 +120,7 @@ class UserService:
                     .order_by(Product.product_id)
                 ).all()
             )
-            return [_to_account(product, customer, []) for product in products]
+            return [_to_account(project_runtime(session, product), customer, []) for product in products]
 
 
 class CardService:
@@ -134,14 +138,14 @@ class CardService:
                 .where(Product.product_type.in_(CARD_PRODUCT_TYPES))
                 .order_by(Product.product_id)
             ).all()
-            return [_to_card(product) for product in products]
+            return [_to_card(project_runtime(session, product)) for product in products]
 
     def get_card_details(self, card_id: str, customer_id: str) -> Card | None:
         logger.info("Request to get_card_details for card_id=%s", card_id)
         _require_identifier(card_id, "CardId")
         with self._session_factory() as session:
             product = _get_owned_product(session, card_id, customer_id, CARD_PRODUCT_TYPES)
-            return _to_card(product)
+            return _to_card(project_runtime(session, product))
 
     def list_cards(self, customer_id: str) -> list[CardSummary]:
         logger.info("Request to list_cards for customer_id: %s", customer_id)
@@ -152,7 +156,45 @@ class CardService:
                 .where(Product.product_type.in_(CARD_PRODUCT_TYPES))
                 .order_by(Product.product_id)
             ).all()
-            return [_to_card_summary(product) for product in products]
+            return [_to_card_summary(project_runtime(session, product)) for product in products]
+
+    def discover_cards_by_suffix(self, suffix: str, customer_id: str) -> CardDiscoveryResult:
+        if not re.fullmatch(r"[0-9]{4}", suffix):
+            raise ValueError("Card suffix must be exactly four ASCII digits")
+        _require_identifier(customer_id, "CustomerId")
+        with self._session_factory() as session:
+            products = session.exec(
+                select(Product)
+                .where(Product.customer_id == customer_id)
+                .where(Product.product_type.in_(CARD_PRODUCT_TYPES))
+                .where(func.rtrim(Product.product_number, " \t\n\r\v\f-").endswith(suffix))
+                .order_by(Product.product_id)
+                .limit(6)
+            ).all()
+            candidates = [
+                CardDiscoveryCandidate(
+                    masked_number=_masked_card_number(product.product_number),
+                    type=product.product_type,
+                    currency=product.currency,
+                    status=project_runtime(session, product).product_status,
+                    lookup_product_number=_verified_card_lookup_number(
+                        session, product, customer_id
+                    ),
+                )
+                for product in products[:5]
+            ]
+            if not products:
+                return CardDiscoveryResult(status="NO_MATCH", candidates=[])
+            if len(products) > 1:
+                return CardDiscoveryResult(
+                    status="TOO_MANY_MATCHES" if len(products) > 5 else "AMBIGUOUS",
+                    candidates=candidates,
+                    truncated=len(products) > 5,
+                )
+            return CardDiscoveryResult(
+                status="MATCH" if candidates[0].lookup_product_number else "LOOKUP_UNAVAILABLE",
+                candidates=candidates,
+            )
 
     def recharge_card(self, card_id: str, amount: float, customer_id: str) -> Card:
         self._authorize_card(card_id, customer_id)
@@ -198,6 +240,19 @@ def _get_owned_product(
     if len(products) != 1:
         raise PermissionError("Account does not belong to the authenticated customer")
     return products[0]
+
+
+def _verified_card_lookup_number(
+    session: Session, product: Product, customer_id: str
+) -> str | None:
+    number = product.product_number
+    if not number or not re.fullmatch(r"[0-9]{12,19}", re.sub(r"[\s-]", "", number)):
+        return None
+    try:
+        verified = _get_owned_product(session, number, customer_id)
+    except PermissionError:
+        return None
+    return number if verified.product_id == product.product_id else None
 
 
 def _to_account(product: Product, customer: Customer, cards: list[Product]) -> Account:

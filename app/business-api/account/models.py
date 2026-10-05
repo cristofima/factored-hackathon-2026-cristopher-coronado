@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Literal, Optional
 from pydantic import BaseModel, Field
 
 
@@ -70,4 +70,23 @@ class AccountSummary(BaseModel):
 class CardSummary(AccountSummary):
     expires: Optional[str] = None
     credit_limit: Optional[str] = None
+
+
+class CardDiscoveryCandidate(BaseModel):
+    masked_number: str | None
+    type: str
+    currency: str
+    status: str | None
+    lookup_product_number: str | None = Field(
+        default=None,
+        description="Verified full persisted lookup key for agent tool calls only; never display",
+    )
+
+
+class CardDiscoveryResult(BaseModel):
+    status: Literal[
+        "MATCH", "NO_MATCH", "AMBIGUOUS", "TOO_MANY_MATCHES", "LOOKUP_UNAVAILABLE"
+    ]
+    candidates: list[CardDiscoveryCandidate]
+    truncated: bool = False
 

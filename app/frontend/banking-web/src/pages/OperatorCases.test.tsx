@@ -76,7 +76,7 @@ describe("operator review queue", () => {
     const output = elements(render());
     const groups = output.filter(e => e.type === "dl");
     expect(groups).toHaveLength(2);
-    expect(elements(groups[0]).filter(e => e.type === "dt" || e.type === "dd").map(text)).toEqual(["Reason", reason]);
+    expect(elements(groups[0]).filter(e => e.type === "dt" || e.type === "dd").map(text)).toEqual(["Customer statement", reason]);
     expect(groups[0].props.className).toContain("border");
     const reasonValue = elements(groups[0]).find(e => e.type === "dd")!;
     expect(reasonValue.props.className).toContain("whitespace-pre-wrap");
@@ -115,7 +115,7 @@ describe("operator review queue", () => {
     h.states = []; h.refs = []; h.caseId = "case-id"; h.detail.data = ownedCase;
     expect(text(render())).toContain("Customer-entered reason");
     expect(text(render())).toContain("Assigned to you");
-    expect(elements(render()).some(e => e.type === "dt" && text(e) === "Reason")).toBe(true);
+    expect(elements(render()).some(e => e.type === "dt" && text(e) === "Customer statement")).toBe(true);
     expect(elements(render()).some(e => e.type === "dd" && text(e) === ownedCase.reason)).toBe(true);
     expect(elements(render()).some(e => e.props.perspective === "operator" && e.props.events === ownedCase.events)).toBe(true);
     expect(ownedCase.reason).toBe("Customer-entered reason");

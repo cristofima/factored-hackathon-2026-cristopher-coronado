@@ -33,6 +33,20 @@ describe("Transaction API pagination", () => {
         vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status })));
         await expect(getTransactions("account", "2026-06-01", "2026-06-17", new AbortController().signal)).rejects.toThrow();
     });
+    it("preserves recorded case and original movement linkage", async () => {
+        const linked = { ...record("refund"), originalTransactionId: "original", supportCaseId: "case-1", sourceKind: "dispute_effect" };
+        vi.stubGlobal("fetch", vi.fn().mockResolvedValue(page([linked], 1)));
+        const [transaction] = await getTransactions("account", "2026-06-01", "2026-06-17", new AbortController().signal);
+        expect(transaction).toMatchObject({ originalTransactionId: "original", supportCaseId: "case-1", sourceKind: "dispute_effect" });
+    });
+    it("preserves owned country and nullable city without exposing fraud metadata", async () => {
+        const located = { ...record("tx"), country: "CO", city: null, fraud_score: 0.2, is_fraud: true };
+        vi.stubGlobal("fetch", vi.fn().mockResolvedValue(page([located], 1)));
+        const [transaction] = await getTransactions("account", "2026-06-01", "2026-06-17", new AbortController().signal);
+        expect(transaction).toMatchObject({ country: "CO", city: null });
+        expect(transaction).not.toHaveProperty("fraud_score");
+        expect(transaction).not.toHaveProperty("is_fraud");
+    });
     it("returns a verified empty page", async () => {
         vi.stubGlobal("fetch", vi.fn().mockResolvedValue(page([], 0)));
         expect(await getTransactions("account", "2026-06-01", "2026-06-17", new AbortController().signal)).toEqual([]);

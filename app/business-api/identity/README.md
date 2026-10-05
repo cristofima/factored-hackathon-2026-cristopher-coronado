@@ -76,7 +76,11 @@ Supply environment values explicitly; the service never discovers credential fil
 | `JWT_SECRET_KEY`              | HS256 key, at least 32 characters                   |
 | `JWT_ISSUER` / `JWT_AUDIENCE` | Shared application JWT issuer/audience              |
 | `AUTH_INTERNAL_SECRET`        | Protected introspection key, at least 32 characters |
-| `ACCESS_TOKEN_MINUTES`        | 15 by default, range 1–60                           |
+| `ACCESS_TOKEN_MINUTES`        | 60 by default, range 1–60                           |
+
+Access expiry is absolute from issuance, not an inactivity timeout. Explicit environment
+values override the default. Restart Identity after changing the lifetime;
+already-issued JWTs retain their original expiry.
 
 From repository root, only after authorizing stack startup:
 

@@ -9,11 +9,26 @@ from dispute_service import (
     support_case_service_singleton as service,
 )
 from jwt_identity import get_jwt_customer_id
-from models import DisputeApprovalRequest, DisputeCase, OpenDisputeRequest, ResolveCaseRequest
+from dispute_preview import DisputePreviewError
+from models import (
+    AcceptDisputeRequest, DisputeApprovalRequest, DisputeCase, DisputePreview,
+    OpenDisputeRequest, ResolveCaseRequest,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _intake_error(error: Exception) -> HTTPException:
+    if isinstance(error, PermissionError):
+        return HTTPException(403, detail={"code": "DISPUTE_UNAVAILABLE"})
+    if isinstance(error, ActiveDisputeError):
+        return HTTPException(409, detail={"code": "DISPUTE_ALREADY_ACTIVE"})
+    if isinstance(error, CardOnlyDisputeError):
+        return HTTPException(400, detail={"code": "DISPUTE_CARD_ONLY"})
+    code = error.code if isinstance(error, DisputePreviewError) else "DISPUTE_INELIGIBLE"
+    return HTTPException(400, detail={"code": code})
 
 
 @router.get("")
@@ -22,32 +37,40 @@ def list_support_cases(customer_id: Annotated[str, Depends(get_jwt_customer_id)]
     return service.list_cases(customer_id)
 
 
-@router.post("", status_code=status.HTTP_201_CREATED)
-def open_support_case(
+@router.post("/preview")
+def preview_support_case(
     request: OpenDisputeRequest,
     customer_id: Annotated[str, Depends(get_jwt_customer_id)],
-) -> DisputeCase:
-    """Open a transaction-dispute support case from a direct report action."""
+) -> DisputePreview:
+    """Read owned eligible context without creating a case or audit events."""
     try:
-        return service.open_transaction_dispute(request.transactionId, customer_id, request.reason)
-    except PermissionError as error:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(error)) from error
-    except ActiveDisputeError as error:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={"code": "DISPUTE_ALREADY_ACTIVE"},
-        ) from error
-    except CardOnlyDisputeError as error:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"code": "DISPUTE_CARD_ONLY"},
-        ) from error
-    except ValueError as ve:
-        logger.exception("Validation error while opening a support case")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve)) from ve
-    except Exception:
-        logger.exception("Unexpected error while opening a support case")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal error")
+        return service.preview_transaction_dispute(request.transactionId, customer_id, request.reason)
+    except (PermissionError, ValueError) as error:
+        raise _intake_error(error) from error
+
+
+@router.post("/recovery")
+def recover_support_case(
+    request: AcceptDisputeRequest,
+    customer_id: Annotated[str, Depends(get_jwt_customer_id)],
+) -> DisputeCase | None:
+    """Read the confirmed result of the same proposal without resubmitting intake."""
+    try:
+        return service.recover_transaction_dispute(request.previewToken, customer_id)
+    except (PermissionError, ValueError) as error:
+        raise _intake_error(error) from error
+
+
+@router.post("", status_code=status.HTTP_201_CREATED)
+def open_support_case(
+    request: AcceptDisputeRequest,
+    customer_id: Annotated[str, Depends(get_jwt_customer_id)],
+) -> DisputeCase:
+    """Accept a verified proposal and atomically create the consented case."""
+    try:
+        return service.accept_transaction_dispute(request.previewToken, customer_id)
+    except (PermissionError, ValueError) as error:
+        raise _intake_error(error) from error
 
 
 @router.get("/{case_id}")
@@ -96,31 +119,18 @@ def resolve_support_case(
     request: ResolveCaseRequest,
     customer_id: Annotated[str, Depends(get_jwt_customer_id)],
 ):
-    """Resolve an escalated case under manual review.
-
-    Simulated-reviewer action only; the conversational agent never calls this.
-    """
-    try:
-        return service.resolve_case(
-            case_id, customer_id, request.resolutionOutcome, request.resolutionNotes
-        )
-    except PermissionError as error:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(error)) from error
-    except ValueError as ve:
-        logger.exception("Validation error while resolving a support case")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve)) from ve
+    """Retired customer resolution boundary; assigned operator adjudication only."""
+    raise HTTPException(status_code=403, detail={"code": "OPERATOR_ADJUDICATION_REQUIRED"})
 
 
 @router.post("/{case_id}/recommendation/dismiss")
 def dismiss_support_case_recommendation(
     case_id: str,
     customer_id: Annotated[str, Depends(get_jwt_customer_id)],
-):
-    """Record the customer's explicit opt-out of the post-resolution recommendation."""
+) -> DisputeCase:
     try:
         return service.dismiss_recommendation(case_id, customer_id)
     except PermissionError as error:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(error)) from error
-    except ValueError as ve:
-        logger.exception("Validation error while dismissing a support case recommendation")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve)) from ve
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error

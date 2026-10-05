@@ -194,6 +194,10 @@ def upsert_batches(
     primary_keys = [column.name for column in model.__table__.primary_key.columns]
     for batch in batched(rows, batch_size):
         for row in batch:
+            if model is TransactionRecord:
+                existing = session.get(TransactionRecord, row["transaction_id"])
+                if existing is not None and existing.source_kind != "source":
+                    raise ValueError("Source ingestion cannot overwrite a runtime movement")
             statement = insert(model).values(row)
             updates = {
                 column.name: getattr(statement.excluded, column.name)
@@ -201,7 +205,10 @@ def upsert_batches(
                 if column.name not in primary_keys
             }
             session.exec(
-                statement.on_conflict_do_update(index_elements=primary_keys, set_=updates)
+                statement.on_conflict_do_update(
+                    index_elements=primary_keys, set_=updates,
+                    where=model.source_kind == "source" if model is TransactionRecord else None,
+                )
             )
             processed += 1
     return processed

@@ -1,29 +1,8 @@
-export interface SupportCase {
-    caseId: string;
-    productNumber: string | null;
-    transactionId: string;
-    reason: string;
-    status: string;
-    triageOutcome: string | null;
-    resolutionOutcome: string | null;
-    resolutionNotes: string | null;
-    recommendationType: string | null;
-    recommendationRationale: string | null;
-    recommendationOptedOut: boolean;
-    openedAt: string;
-    updatedAt: string;
-    resolvedAt: string | null;
-    financialEffectsStatus?: string;
-    cardProtectionStatus?: string;
-}
+import type { z } from "zod";
+import type { supportCaseSchema, supportCaseEventSchema } from "@/api/supportCaseContracts";
 
-export interface SupportCaseEvent {
-    eventType: string;
-    actor: string;
-    message: string | null;
-    displayMessage?: string | null;
-    createdAt: string;
-}
+export type SupportCase = z.infer<typeof supportCaseSchema>;
+export type SupportCaseEvent = z.infer<typeof supportCaseEventSchema>;
 
 export function supportCaseEventMessageKey(event: SupportCaseEvent): string {
     if (event.eventType === "RESOLVED") {

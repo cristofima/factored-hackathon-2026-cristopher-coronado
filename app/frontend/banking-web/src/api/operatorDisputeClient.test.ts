@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { claimOperatorCase, getOperatorCase, listOperatorCases } from "./operatorDisputeClient";
+import { adjudicateOperatorCase, retryOperatorEffects, protectOperatorCard, claimOperatorCase, getOperatorCase, listOperatorCases } from "./operatorDisputeClient";
 
 vi.mock("./authToken", () => ({ getAuthToken: vi.fn(() => "test-only-token") }));
 afterEach(() => vi.unstubAllGlobals());
@@ -75,6 +75,11 @@ describe("operator dispute transport", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(detail))));
     expect(await getOperatorCase("case-id")).toEqual(detail);
   });
+  it.each(["Active", "Blocked", null])("decodes actual product protection state %j and nullable recorded prior state", async productProtectionStatus => {
+    const detail = { ...claimed, productProtectionStatus, cardProtection: { blocked: true, priorStatus: null, rationale: "Recorded reason", caseId: "prior-case", updatedAt: "2026-10-04T12:00:00Z", scope: "LOCAL_PRODUCT_ONLY" } };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(detail))));
+    expect(await getOperatorCase("case-id")).toEqual(detail);
+  });
   it("preserves the owner-only not-found response", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ detail: { code: "CASE_NOT_FOUND" } }), { status: 404 })));
     await expect(getOperatorCase("foreign-case")).rejects.toMatchObject({ code: "CASE_NOT_FOUND" });
@@ -112,4 +117,36 @@ describe("operator dispute transport", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ supportCase, timeline: [{}] }))));
     await expect(getOperatorCase("case-id")).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
   });
+});
+
+describe("operator adjudication contract", () => {
+  const body = {verdict: "valid" as const, rationale: " reviewed evidence ", expected_case_version: 2, expected_evidence_version: 1, destination_product_id: "savings"};
+  it("sends exact versioned request and decodes actual financial posting", async () => {
+    const detail = {...claimed, status: "RESOLVED_VALID", caseVersion: 3, evidenceVersion: 1, verdict: "valid", rationale: "reviewed evidence", effects: {movementId: "REFUND-1", destinationProductId: "savings", amount: "15.50", currency: "USD", balanceDelta: "15.50", executedAt: supportCase.openedAt}};
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(detail))); vi.stubGlobal("fetch", fetch);
+    expect(await adjudicateOperatorCase("case-id", body)).toEqual(detail);
+    expect(fetch.mock.calls[0][0]).toContain("/case-id/adjudicate"); expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({...body, rationale: "reviewed evidence"});
+  });
+  it.each([{rationale: " "}, {rationale: "x".repeat(1001)}, {expected_case_version: -1}, {expected_evidence_version: 0}, {verdict: "approve"}, {destination_product_id: ""}])("rejects invalid action before transport %j", async invalid => {
+    const fetch = vi.fn(); vi.stubGlobal("fetch", fetch); await expect(adjudicateOperatorCase("case-id", {...body, ...invalid} as typeof body)).rejects.toMatchObject({code: "INVALID_REQUEST"}); expect(fetch).not.toHaveBeenCalled();
+  });
+  it("uses separate retry and local-only protection routes", async () => {
+    const detail = {...claimed, cardProtection: {blocked: true, priorStatus: "Active", rationale: "reviewed risk", caseId: "case-id", updatedAt: supportCase.openedAt, scope: "LOCAL_PRODUCT_ONLY"}};
+    const fetch = vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify(detail)))); vi.stubGlobal("fetch", fetch);
+    await retryOperatorEffects("case-id", {expected_case_version: 4, destination_product_id: "savings"}); await protectOperatorCard("case-id", {expected_case_version: 4, rationale: "reviewed risk", blocked: true});
+    expect(fetch.mock.calls[0][0]).toContain("/effects/retry"); expect(fetch.mock.calls[1][0]).toContain("/card-protection"); expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual({expected_case_version: 4, rationale: "reviewed risk", blocked: true});
+  });
+  it("omits an unselected destination and rejects null before transport", async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(claimed)));
+    vi.stubGlobal("fetch", fetch);
+    await retryOperatorEffects("case-id", { expected_case_version: 4 });
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ expected_case_version: 4 });
+    const invalid = { expected_case_version: 4, destination_product_id: null } as unknown as Parameters<typeof retryOperatorEffects>[1];
+    await expect(retryOperatorEffects("case-id", invalid)).rejects.toMatchObject({ code: "INVALID_REQUEST" });
+    await expect(adjudicateOperatorCase("case-id", { ...body, ...invalid })).rejects.toMatchObject({ code: "INVALID_REQUEST" });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+  it("rejects malformed effects without fabricating a balance", async () => { vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({...claimed, effects: {amount: 10}})))); await expect(adjudicateOperatorCase("case-id", body)).rejects.toMatchObject({code: "SERVICE_UNAVAILABLE"}); });
+  it.each(["CASE_VERSION_CONFLICT", "EVIDENCE_VERSION_CONFLICT", "CASE_VERDICT_CONFLICT", "DESTINATION_NOT_ELIGIBLE", "CREDIT_ALREADY_APPLIED", "DESTINATION_UNAVAILABLE"]) ("preserves controlled action error %s", async code => { vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({detail: {code}}), {status: 409}))); await expect(adjudicateOperatorCase("case-id", body)).rejects.toMatchObject({code}); });
+  it("aborts mutation decoding without accepting a stale result", async () => { const controller = new AbortController(); vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ok: true, json: async () => {controller.abort(); return claimed;}})); await expect(adjudicateOperatorCase("case-id", body, controller.signal)).rejects.toMatchObject({name: "AbortError"}); });
 });

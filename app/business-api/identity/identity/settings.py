@@ -12,4 +12,4 @@ class Settings(BaseSettings):
     jwt_issuer: str = Field(min_length=1)
     jwt_audience: str = Field(min_length=1)
     auth_internal_secret: SecretStr = Field(min_length=32)
-    access_token_minutes: int = Field(default=15, ge=1, le=60)
+    access_token_minutes: int = Field(default=60, ge=1, le=60)

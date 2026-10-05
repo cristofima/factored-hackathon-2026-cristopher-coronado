@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { claimOperatorCase, getOperatorCase, listOperatorCases, type OperatorCaseView, type OperatorSupportCase } from "@/api/operatorDisputeClient";
+import OperatorCaseActions from "@/components/OperatorCaseActions";
 import SupportCaseTimeline from "@/components/SupportCaseTimeline";
 import { formatDateTime } from "@/common/dateTime";
 import { ApiError, errorTranslationKey } from "@/api/errors";
@@ -39,7 +40,7 @@ export default function OperatorCases() {
       pending.current?.abort();
       pending.current = null;
     };
-  }, [caseId, view, sessionKey]);
+  }, [caseId, view, sessionKey, user?.id, user?.identityVersion]);
   const error = failure ?? (caseId ? detail.error : queue.error);
   useEffect(() => {
     if (error instanceof ApiError && error.code === "AUTH_REQUIRED") logout();
@@ -96,7 +97,7 @@ export default function OperatorCases() {
 
   return <section className="space-y-4">
     <h2 className="text-xl font-semibold">{t("Dispute review queue")}</h2>
-    <p className="text-sm text-muted-foreground">{t("Taking a case does not authorize a verdict or financial changes.")}</p>
+    <p className="text-sm text-muted-foreground">{t("Only the assigned operator can adjudicate. Financial effects and card protection are separately audited.")}</p>
     {caseId && <Link className="underline" to="/operator/support-cases">{t("Back to review queue")}</Link>}
     {!caseId && <nav aria-label={t("Case views")} className="flex gap-3">
       {(["available", "assigned"] as const).map((item) => <Button key={item} variant={view === item ? "default" : "outline"} aria-pressed={view === item} disabled={busy} onClick={() => { setOffset(0); setView(item); }}>{t(item === "available" ? "Available cases" : "Assigned cases")}</Button>)}
@@ -123,7 +124,7 @@ export default function OperatorCases() {
         </CardHeader>
         <CardContent className="space-y-6">
           <dl className="rounded-md border bg-muted/30 p-4">
-            <dt className="text-xs font-semibold text-muted-foreground">{t("Reason")}</dt>
+            <dt className="text-xs font-semibold text-muted-foreground">{t("Customer statement")}</dt>
             <dd className="mt-2 whitespace-pre-wrap break-words text-base leading-relaxed">{owned.reason}</dd>
           </dl>
           <dl className="grid grid-cols-1 gap-x-6 gap-y-1 border-t pt-4 text-sm sm:grid-cols-[minmax(0,11rem)_minmax(0,1fr)] sm:gap-y-3">
@@ -134,7 +135,11 @@ export default function OperatorCases() {
           </dl>
         </CardContent>
       </Card>
-      <SupportCaseTimeline events={owned.events} transactionId={owned.transactionId} perspective="operator" />
+      <section className="space-y-3">
+        <h3 className="font-semibold">{t("Consent and claim chronology")}</h3>
+        <SupportCaseTimeline events={owned.events} transactionId={owned.transactionId} perspective="operator" />
+      </section>
+      <OperatorCaseActions supportCase={owned} />
     </>}
   </section>;
 }

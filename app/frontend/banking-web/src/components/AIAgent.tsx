@@ -58,6 +58,13 @@ export default function AIAgent() {
       icon: "🛡️",
       content: t("Show my latest transactions"),
     },
+    {
+      id: "unauthorized-card-charge",
+      title: t("Report an unauthorized card charge"),
+      description: t("Get help with a card charge you do not recognize"),
+      icon: "🛡️",
+      content: t("I want to report a card charge I do not recognize"),
+    },
   ];
 
   // Configure which HTTP status codes should allow retry

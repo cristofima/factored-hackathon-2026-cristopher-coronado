@@ -32,45 +32,26 @@ export interface WidgetActionCallbacks {
  * sendWidgetAction(itemId, { type: "approval", payload: {...} });
  */
 export function useSendWidgetAction(callbacks?: WidgetActionCallbacks) {
-  const { sendWidgetAction, activeThreadId, isStreaming } = useChat();
-  const wasStreamingRef = useRef(false);
+  const { sendWidgetAction, activeThreadId } = useChat();
   const callbacksRef = useRef(callbacks);
-  const hasActionBeenSentRef = useRef(false);
-
-  // Keep callbacks ref up to date
+  const pendingRef = useRef(false);
+  const mountedRef = useRef(true);
   useEffect(() => {
     callbacksRef.current = callbacks;
   }, [callbacks]);
-
-  // Monitor streaming state changes - only if this widget has sent an action
   useEffect(() => {
-    // Only react to streaming changes if this widget initiated an action
-    if (!hasActionBeenSentRef.current) {
-      return;
-    }
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
-    // Thread started (not streaming -> streaming)
-    if (isStreaming && !wasStreamingRef.current) {
-      callbacksRef.current?.onThreadStarted?.();
-    }
-    // Thread ended (streaming -> not streaming)
-    else if (!isStreaming && wasStreamingRef.current) {
-      callbacksRef.current?.onThreadEnded?.();
-      // Reset the flag after thread ends
-      hasActionBeenSentRef.current = false;
-    }
-
-    wasStreamingRef.current = isStreaming;
-  }, [isStreaming]);
-
-  return useCallback((itemId: string, action: {
+  return useCallback(async (itemId: string, action: {
     type: string;
     payload?: Record<string, unknown>;
     handler?: "server" | "client";
     loadingBehavior?: "auto" | "manual";
   }) => {
+    if (pendingRef.current) return;
     if (!activeThreadId) {
-      console.error("No active thread - cannot send widget action");
       callbacksRef.current?.onError?.({
         message: "No active thread - cannot send widget action",
         code: "NO_ACTIVE_THREAD"
@@ -78,8 +59,8 @@ export function useSendWidgetAction(callbacks?: WidgetActionCallbacks) {
       return;
     }
 
-    // Mark that this widget has sent an action
-    hasActionBeenSentRef.current = true;
+    pendingRef.current = true;
+    callbacksRef.current?.onThreadStarted?.();
 
     // Format action with defaults
     const formattedAction = {
@@ -89,8 +70,16 @@ export function useSendWidgetAction(callbacks?: WidgetActionCallbacks) {
       loadingBehavior: action.loadingBehavior || "auto",
     };
 
-    // Translate the widget action into an MCP approval response.
-    sendWidgetAction(activeThreadId, itemId, formattedAction);
+    try {
+      const outcome = await sendWidgetAction(activeThreadId, itemId, formattedAction);
+      if (!mountedRef.current) return;
+      if (outcome === "success") callbacksRef.current?.onThreadEnded?.();
+      else callbacksRef.current?.onError?.({ message: "Approval response not completed" });
+    } catch {
+      if (mountedRef.current) callbacksRef.current?.onError?.({ message: "Approval response not completed" });
+    } finally {
+      pendingRef.current = false;
+    }
   }, [sendWidgetAction, activeThreadId]);
 }
 

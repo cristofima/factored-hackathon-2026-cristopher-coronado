@@ -91,7 +91,13 @@ class UserProfileProvider(ContextProvider):
             "otherwise-translated response. The only exception is a machine-readable code: "
             "an identifier written in snake_case or kebab-case (containing `_` or `-`, for "
             "example a support-case status like WAITING_USER_APPROVAL) exists for frontend "
-            "i18n lookups and must be passed through exactly as returned, never translated or "
-            "reworded. Likewise never translate account/card/transaction numbers, amounts, "
+            "i18n lookups and must be passed through exactly in structured transport, never "
+            "translated or reworded. In normal user-facing prose, explain that status in "
+            "the profile language rather than displaying the raw machine code as its label. "
+            "For Spanish output, refer to transaction disputes consistently as 'reclamo' "
+            "or 'reclamos', never 'disputa' or 'reclamación', with matching masculine grammar. "
+            "This terminology applies to generated prose and labels, not canonical tool names, "
+            "structured keys/codes, quoted customer-entered reasons, or original audit text. "
+            "Never expose consent preview tokens. Likewise never translate account/card/transaction numbers, amounts, "
             "currency codes, dates, merchant names, or other literal identifiers.",
         )

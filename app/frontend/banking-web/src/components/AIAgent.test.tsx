@@ -1,4 +1,9 @@
-import type { ReactNode } from "react";
+import { isValidElement, type ReactElement, type ReactNode } from "react";
+import { StreamViewport } from "./chat/StreamViewport";
+import type { StarterPrompt } from "./chat/types";
+import en from "@/locales/en.json";
+import es from "@/locales/es.json";
+import pt from "@/locales/pt.json";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import AIAgent from "./AIAgent";
@@ -6,6 +11,9 @@ import AIAgent from "./AIAgent";
 const harness = vi.hoisted(() => ({
   open: false, index: 0, logout: vi.fn(),
   onError: null as null | ((error: { code: string }) => void),
+  prompts: [] as StarterPrompt[],
+  catalog: {} as Record<string, string>,
+  sendMessage: vi.fn(),
 }));
 vi.mock("react", async (original) => ({
   ...await original<typeof import("react")>(),

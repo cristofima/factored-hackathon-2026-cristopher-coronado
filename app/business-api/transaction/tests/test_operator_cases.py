@@ -38,7 +38,7 @@ def factory() -> Callable[[], Session]:
             ("RESOLVED", True, None), ("IN_REVIEW", True, OTHER.sub),
         ]):
             case = SupportCase(case_id=f"case-{index}", customer_id="customer-sensitive",
-                               product_id="product", transaction_id="transaction", reason="Sensitive reason",
+                               product_id="product", transaction_id=f"transaction-{index}", reason="Sensitive reason",
                                status=status, legacy_assigned_agent_id="historical-catalog",
                                assigned_operator_sub=owner,
                                opened_at=datetime(2026, 1, index + 1, tzinfo=timezone.utc))
@@ -170,6 +170,42 @@ def test_claim_rolls_back_if_audit_fails(factory: Callable[[], Session]) -> None
         case = session.get(SupportCase, "case-0")
         assert case is not None and case.assigned_operator_sub is None
         assert case.claimed_at is None and case.claim_version == 0
+
+
+@pytest.mark.parametrize("failure_stage", ["after_flush_postexec", "before_commit"])
+def test_claim_rolls_back_written_audit_and_remains_claimable(
+    factory: Callable[[], Session], failure_stage: str,
+) -> None:
+    with factory() as session:
+        original = session.get(SupportCase, "case-0")
+        assert original is not None
+        original_updated_at = original.updated_at
+
+    def fail_write(session: Session, *args: object) -> None:
+        raise RuntimeError("Synthetic post-write failure")
+
+    def failing_factory() -> Session:
+        session = factory()
+        event.listen(session, failure_stage, fail_write)
+        return session
+
+    with pytest.raises(RuntimeError, match="Synthetic post-write failure"):
+        OperatorCaseService(failing_factory).claim_case("case-0", OPERATOR)
+    with factory() as session:
+        case = session.get(SupportCase, "case-0")
+        assert case is not None
+        assert case.assigned_operator_sub is None and case.claimed_at is None
+        assert case.claim_version == 0 and case.updated_at == original_updated_at
+        assert case.status == "IN_REVIEW" and case.resolved_at is None
+        assert session.exec(select(SupportCaseEvent).where(
+            SupportCaseEvent.case_id == "case-0",
+            SupportCaseEvent.event_type == "OPERATOR_CLAIMED",
+        )).all() == []
+    service = OperatorCaseService(factory)
+    assert service.list_cases(OPERATOR).total == 2
+    claimed = service.claim_case("case-0", OTHER)
+    assert claimed.assignedOperatorSub == OTHER.sub and claimed.claimVersion == 1
+    assert len([item for item in claimed.events if item.eventType == "OPERATOR_CLAIMED"]) == 1
 
 
 def test_rest_contract_and_conflict_codes(factory: Callable[[], Session], monkeypatch: pytest.MonkeyPatch) -> None:

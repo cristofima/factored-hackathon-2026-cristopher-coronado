@@ -20,7 +20,9 @@ from xml.etree import ElementTree
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from evals.dispute_replay import DATASET, expanded_fingerprint, fingerprint, load_cases, score_case
+from evals.dispute_replay import (
+    DATASET, display_value, expanded_fingerprint, fingerprint, load_cases, score_case,
+)
 from evals.mcp_replay import ReplayReply, ReplayServer
 from evals.evidence import (
     CURRENT_RESULT, available_output, controlled_error, customer_identity,
@@ -41,6 +43,7 @@ class DeterministicIntake:
         self.session = session
         self.selected: dict[str, Any] | None = None
         self.case: dict[str, Any] | None = None
+        self.preview: dict[str, Any] | None = None
         self.reason = ""
         self.stopped = False
 
@@ -55,8 +58,14 @@ class DeterministicIntake:
                             "O recurso ou serviço está indisponível. Nenhuma ação foi confirmada."),
             "confirm": ("Is this the transaction?", "¿Es esta la transacción?", "Essa é a transação?"),
             "approval": ("Approve or decline investigation of this dispute?",
-                         "¿Aprueba o rechaza la investigación de esta disputa?",
+                         "¿Aprueba o rechaza la investigación de este reclamo?",
                          "Aprova ou recusa a investigação desta disputa?"),
+            "proposal": (
+                "May I create this dispute case and send it for review? This does not refund, credit or block a card.",
+                "¿Autoriza crear este reclamo y enviarlo a revisión? Esto no reembolsa, acredita ni bloquea una tarjeta.",
+                "Autoriza criar esta disputa e enviá-la para análise? Isso não reembolsa, credita nem bloqueia um cartão.",
+            ),
+            "declined": ("No case was created.", "No se creó ningún reclamo.", "Nenhuma disputa foi criada."),
             "recorded": ("Service-reported outcome", "Resultado informado por el servicio",
                          "Resultado informado pelo serviço"),
             "recommendation": ("Optional transaction alerts", "Alertas de transacciones opcionales",
@@ -73,11 +82,20 @@ class DeterministicIntake:
 
     def outcome(self, record: dict[str, Any]) -> str:
         fields = [record.get(key) for key in ("caseId", "status", "triageOutcome", "resolutionOutcome")]
-        escalated = {"en": "escalated", "es": "derivado a revisión", "pt": "encaminhado para análise"}
-        fields = [escalated[self.locale] if value == "escalated" else value for value in fields]
+        translated = []
+        for value in fields:
+            if not value:
+                continue
+            text = display_value(value, self.locale)
+            if value != record.get("caseId") and ("_" in value or "-" in value):
+                text += f" ({value})"
+            translated.append(text)
+        fields = translated
         answer = self.text("recorded") + ": " + ", ".join(str(value) for value in fields if value)
         if record.get("recommendationType") and not record.get("recommendationOptedOut"):
-            answer += ". " + self.text("recommendation") + ": " + record["recommendationType"]
+            answer += ". " + self.text("recommendation") + ": " + display_value(
+                record["recommendationType"], self.locale,
+            )
         return answer
 
     async def run(self, message: str) -> str:
@@ -87,13 +105,33 @@ class DeterministicIntake:
         try:
             if self.case is not None:
                 return await self.respond(text)
+            if self.preview is not None:
+                approved = bool(re.search(r"\b(approve|apruebo|aprovo|authorize|autorizo)\b", text))
+                declined = bool(re.search(r"\b(no|cancel|decline|rechazo|recuso|nao)\b", text))
+                if approved == declined:
+                    return self.text("proposal")
+                if declined:
+                    self.preview = None
+                    self.selected = None
+                    self.stopped = True
+                    return self.text("declined")
+                self.case = await self.call("reportTransactionDispute", {
+                    "preview_token": self.preview["previewToken"],
+                })
+                return self.outcome(self.case)
             if self.selected is not None:
                 if not re.search(r"\b(yes|si|sim)\b", text) or not re.search(r"transa", text):
                     return self.text("confirm")
-                self.case = await self.call("reportTransactionDispute", {
+                self.preview = await self.call("previewTransactionDispute", {
                     "transaction_id": self.selected["id"], "reason": self.reason,
                 })
-                return self.outcome(self.case) + ". " + self.text("approval")
+                transaction = self.preview["transaction"]
+                context = " | ".join(str(transaction[key]) for key in (
+                    "recipientName", "amount", "currency", "timestamp",
+                ))
+                location = [transaction.get(key) for key in ("transactionCountry", "transactionCity")]
+                context += " | " + ", ".join(value for value in location if value) if any(location) else ""
+                return context + ". " + self.preview["reason"] + ". " + self.text("proposal")
             if any(phrase in text for phrase in ("credit limit", "admin mode", "all customers")):
                 return self.text("unsupported")
             case_match = re.search(r"\b(?:case|caso)\s+([A-Z0-9]+(?:-[A-Z0-9]+)+)\b", message, re.IGNORECASE)
@@ -101,7 +139,11 @@ class DeterministicIntake:
                 case_id = case_match.group(1).upper()
                 record = await self.call("getSupportCase", {"case_id": case_id})
                 events = await self.call("getSupportCaseTimeline", {"case_id": case_id})
-                return self.outcome(record) + "; " + ", ".join(event["eventType"] for event in events)
+                self.case = record
+                answer = self.outcome(record) + "; " + ", ".join(event["eventType"] for event in events)
+                if record["status"] == "WAITING_USER_APPROVAL":
+                    answer += ". " + self.text("approval")
+                return answer
             account = re.search(r"\b(?:account|cuenta|conta)\s+(\d+)\b", text)
             if not account:
                 return self.text("clarify")

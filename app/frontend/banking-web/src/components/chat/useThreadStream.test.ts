@@ -41,6 +41,50 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
+describe("Responses SSE parsing", () => {
+  it("flushes fragmented UTF-8 and a final event without a newline", async () => {
+    const event = { type: "response.output_text.delta", delta: "Revisión ✓" };
+    const bytes = new TextEncoder().encode(`data:${JSON.stringify(event)}`);
+    const split = bytes.indexOf(0xe2) + 1;
+    const read = vi.fn()
+      .mockResolvedValueOnce({ done: false, value: bytes.slice(0, split) })
+      .mockResolvedValueOnce({ done: false, value: bytes.slice(split) })
+      .mockResolvedValueOnce({ done: true });
+    harness.fetch.mockResolvedValue(success({ read }));
+    const stream = useStreamHarness();
+    await flush();
+    expect(stream.onEvent).toHaveBeenCalledExactlyOnceWith(event);
+    expect(stream.onComplete).toHaveBeenCalledOnce();
+  });
+  it("ignores SSE metadata and DONE markers while preserving consecutive data events", async () => {
+    const event = { type: "response.completed" };
+    const read = vi.fn()
+      .mockResolvedValueOnce({ done: false, value: new TextEncoder().encode(`: heartbeat\r\nevent: response\r\ndata:${JSON.stringify(event)}\r\ndata: [DONE]\r\n\r\n`) })
+      .mockResolvedValueOnce({ done: true });
+    harness.fetch.mockResolvedValue(success({ read }));
+    const stream = useStreamHarness();
+    await flush();
+    expect(stream.onEvent).toHaveBeenCalledExactlyOnceWith(event);
+    expect(stream.onComplete).toHaveBeenCalledOnce();
+  });
+  it.each(["{private malformed", "null", "[]", '{"type":7}'])("fails safely for malformed events: %s", async (data) => {
+    const read = vi.fn().mockResolvedValueOnce({ done: false, value: new TextEncoder().encode(`data:${data}\n`) });
+    harness.fetch.mockResolvedValue(success({ read }));
+    const stream = useStreamHarness();
+    await flush();
+    expect(stream.onEvent).not.toHaveBeenCalled();
+    expect(stream.onComplete).not.toHaveBeenCalled();
+    expect(stream.onError).toHaveBeenCalledExactlyOnceWith(new Error("The response could not be completed."));
+    expect((harness.fetch.mock.calls[0][1].signal as AbortSignal).aborted).toBe(true);
+  });
+  it("does not expose transport exception details", async () => {
+    harness.fetch.mockRejectedValue(new Error("private server detail"));
+    const stream = useStreamHarness();
+    await flush();
+    expect(stream.onError).toHaveBeenCalledExactlyOnceWith(new Error("The response could not be completed."));
+  });
+});
+
 describe("customer stream session isolation", () => {
   it("sends the application bearer through the BFF and forwards a controlled revocation error", async () => {
     harness.fetch.mockResolvedValue({ ok: false, status: 401, json: async () => ({ detail: { code: "AUTH_REQUIRED" } }) });
