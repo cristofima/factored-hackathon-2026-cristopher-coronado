@@ -1,3 +1,6 @@
+from typing import Any
+
+from starlette.concurrency import run_in_threadpool
 from fastmcp import FastMCP
 from fastmcp.server.dependencies import CurrentHeaders
 import logging
@@ -43,25 +46,60 @@ def get_last_transactions(
 
 
 @mcp.tool(
-    name="reportTransactionDispute",
+    name="previewTransactionDispute",
     description=(
-        "Open a transaction-dispute support case for a transaction the customer does not "
-        "recognize or disputes. Use this after confirming the specific transaction with the "
-        "customer. This only opens the case and requests the customer's approval; it never "
-        "decides whether the dispute is legitimate. The case is persisted; approval "
-        "does not block a card, issue credit or a refund, post a transaction, or change balances."
+        "Read eligible owned transaction context and prepare a ten-minute consent proposal. "
+        "This creates no case or audit event. Present the transaction and reason, then ask "
+        "explicit permission to create a case and send it for review. Never show previewToken."
     ),
 )
-def report_transaction_dispute(
+async def preview_transaction_dispute(
     transaction_id: str,
     reason: str,
     headers: dict[str, str] = CurrentHeaders(),
-):
-    return dispute_service.open_transaction_dispute(
-        transaction_id,
-        get_customer_id(headers),
-        reason,
+) -> dict[str, Any]:
+    preview = await run_in_threadpool(
+        dispute_service.preview_transaction_dispute,
+        transaction_id, get_customer_id(headers), reason,
     )
+    return preview.model_dump(mode="json")
+
+
+@mcp.tool(
+    name="reportTransactionDispute",
+    description=(
+        "Accept the exact previewToken only after explicit customer consent to create that "
+        "case and send it for review. Atomically persists the case and consent in IN_REVIEW. "
+        "Retry only the same token after an ambiguous result, within 24 hours. Never decide "
+        "legitimacy or claim approval itself refunds, credits, changes balances or blocks cards."
+    ),
+)
+async def report_transaction_dispute(
+    preview_token: str,
+    headers: dict[str, str] = CurrentHeaders(),
+) -> dict[str, Any]:
+    case = await run_in_threadpool(
+        dispute_service.accept_transaction_dispute, preview_token, get_customer_id(headers),
+    )
+    return case.model_dump(mode="json")
+
+
+@mcp.tool(
+    name="recoverTransactionDispute",
+    description=(
+        "Read the confirmed case for the same previewToken after an ambiguous acceptance. "
+        "Creates no case. Returns null if not accepted; recovery expires after 24 hours. "
+        "Never show the token or replace it with a fresh proposal to retry an uncertain result."
+    ),
+)
+async def recover_transaction_dispute(
+    preview_token: str,
+    headers: dict[str, str] = CurrentHeaders(),
+) -> dict[str, Any] | None:
+    case = await run_in_threadpool(
+        dispute_service.recover_transaction_dispute, preview_token, get_customer_id(headers),
+    )
+    return case.model_dump(mode="json") if case is not None else None
 
 
 @mcp.tool(

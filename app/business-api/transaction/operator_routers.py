@@ -1,10 +1,11 @@
-"""Operator-only queue, owned detail and exclusive claim. No verdict surface."""
+"""Operator-only queue, owned adjudication, restitution and local card protection."""
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from operator_identity import OperatorPrincipal, get_operator_principal
-from operator_models import OperatorCaseDetail, OperatorCasePage
+from adjudication import AdjudicationConflict
+from operator_models import AdjudicateRequest, CardProtectionRequest, RetryEffectsRequest, OperatorCaseDetail, OperatorCasePage
 from operator_service import (
     OperatorClaimConflict, OperatorPersistenceUnavailable, operator_case_service as service,
 )
@@ -36,3 +37,33 @@ def claim_operator_case(case_id: str, principal: Principal) -> OperatorCaseDetai
         raise HTTPException(409, detail={"code": "OPERATOR_CLAIM_CONFLICT"}) from None
     except OperatorPersistenceUnavailable:
         raise HTTPException(503, detail={"code": "SERVICE_UNAVAILABLE"}) from None
+
+
+@router.post("/{case_id}/adjudicate", response_model=OperatorCaseDetail)
+def adjudicate_case(case_id: str, principal: Principal, request: AdjudicateRequest) -> OperatorCaseDetail:
+    try:
+        return service.adjudicate(case_id, principal, request)
+    except LookupError:
+        raise HTTPException(404, detail={"code": "CASE_NOT_FOUND"}) from None
+    except AdjudicationConflict as error:
+        raise HTTPException(409, detail={"code": error.code}) from None
+
+
+@router.post("/{case_id}/effects/retry", response_model=OperatorCaseDetail)
+def retry_case_effects(case_id: str, principal: Principal, request: RetryEffectsRequest) -> OperatorCaseDetail:
+    try:
+        return service.retry_effects(case_id, principal, request.expected_case_version, request.destination_product_id)
+    except LookupError:
+        raise HTTPException(404, detail={"code": "CASE_NOT_FOUND"}) from None
+    except AdjudicationConflict as error:
+        raise HTTPException(409, detail={"code": error.code}) from None
+
+
+@router.post("/{case_id}/card-protection", response_model=OperatorCaseDetail)
+def protect_case_card(case_id: str, principal: Principal, request: CardProtectionRequest) -> OperatorCaseDetail:
+    try:
+        return service.protect_card(case_id, principal, request)
+    except LookupError:
+        raise HTTPException(404, detail={"code": "CASE_NOT_FOUND"}) from None
+    except AdjudicationConflict as error:
+        raise HTTPException(409, detail={"code": error.code}) from None
