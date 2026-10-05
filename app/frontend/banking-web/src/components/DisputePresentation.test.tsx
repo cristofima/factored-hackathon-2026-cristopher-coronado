@@ -31,6 +31,41 @@ describe.each(["en", "es", "pt"])("localized dispute context in %s", locale => {
     for (const key of ["customerId", "country", "city", "responseCode"]) expect(missing).toContain(i18n.t(`operator.evidence.${key}`, { keySeparator: "." }));
     expect(missing).not.toContain(i18n.t("operator.evidence.fraudScore", { keySeparator: "." }));
   });
+  it.each(["Ana Silva", null, undefined, "   "])("shows current name %j separately from immutable evidence", customerName => {
+    const html = render(<OperatorCaseActions supportCase={{ ...base, customerName }} />);
+    const label = i18n.t("operator.evidence.customerName", { keySeparator: "." });
+    expect(html).toContain(label);
+    expect(html).toContain(customerName?.trim() || i18n.t("Unavailable"));
+    expect(html.indexOf(label)).toBeLessThan(html.indexOf(i18n.t("Source evidence")));
+    const missing = html.slice(html.indexOf(i18n.t("Missing information")), html.indexOf(i18n.t("Verdict and recorded effects")));
+    expect(missing).not.toContain(label);
+  });
+  it.each([["Approved", "green"], ["Declined", "red"], ["Pending", "amber"], ["Reversed", "gray"]])("colors canonical %s without replacing its localized label", (status, color) => {
+    const html = render(<OperatorCaseActions supportCase={{ ...base, evidence: { ...base.evidence!, status } }} />);
+    expect(html).toContain(`bg-${color}-100`);
+    expect(html).toContain(i18n.t(`transactions.statuses.${status}`, { keySeparator: "." }));
+  });
+  it("uses a neutral unavailable badge for unknown status", () => {
+    const html = render(<OperatorCaseActions supportCase={{ ...base, evidence: { ...base.evidence!, status: "UNKNOWN" } }} />);
+    expect(html).not.toContain("bg-green-100");
+    expect(html).not.toContain("UNKNOWN");
+    expect(html).toContain(i18n.t("Unavailable"));
+  });
+  it.each(["0", "1.77", "32", "100"])("renders stored score %s on the accessible 0–100 scale", fraudScore => {
+    const html = render(<OperatorCaseActions supportCase={{ ...base, evidence: { ...base.evidence!, fraudScore } }} />);
+    expect(html).toContain('role="meter"');
+    expect(html).toContain('aria-valuemin="0"');
+    expect(html).toContain('aria-valuemax="100"');
+    expect(html).toContain(`aria-valuenow="${Number(fraudScore)}"`);
+    expect(html).toContain(`left:${fraudScore}%`);
+    expect(html).toContain(`${fraudScore === "1.77" && locale !== "en" ? "1,77" : fraudScore} / 100`);
+    expect(html).toContain("from-green-500 via-amber-400 to-red-500");
+  });
+  it.each([null, "", "invalid", "NaN", "Infinity", "-1", "100.01", "1e2", "1,77"])("does not fabricate a valid scale for score %j", fraudScore => {
+    const html = render(<OperatorCaseActions supportCase={{ ...base, evidence: { ...base.evidence!, fraudScore } }} />);
+    expect(html).not.toContain('role="meter"');
+    expect(html).toContain(i18n.t("Unavailable"));
+  });
   it("keeps customer recorded-effect references, precision and separate local protection", () => {
     const html = render(<SupportCaseFinancialDetails supportCase={base as unknown as SupportCase} />);
     for (const ref of ["movement-ref", "destination-ref", "tx-ref", "Original rationale untouched", "Original protection rationale"]) expect(html).toContain(ref);

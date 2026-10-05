@@ -2,6 +2,12 @@ import type { TFunction } from "i18next";
 import { productStatusKey } from "./products";
 import { formatProductAmount } from "./productAmount";
 
+export function storedScoreValue(value: unknown): number | null {
+  if (typeof value !== "string" || !/^\d+(\.\d{1,4})?$/.test(value)) return null;
+  const score = Number(value);
+  return Number.isFinite(score) && score >= 0 && score <= 100 ? score : null;
+}
+
 export function formatStoredScore(value: string, locale: string): string {
   if (!/^-?\d+(\.\d{1,4})?$/.test(value)) return value;
   const formatted = formatProductAmount(value, locale);
