@@ -9,6 +9,7 @@ import pytest
 from agent_framework import MCPStreamableHTTPTool
 
 from evals.dispute_replay import DATASET, ROOT, _validate_replies, expand_case, score_case
+from evals.evidence import sanitize
 from evals.mcp_replay import ReplayReply, ReplayServer, load_contracts
 from evals.run_dispute_replay import run_baseline
 
@@ -57,10 +58,11 @@ async def test_scorer_rejects_token_disclosure_and_wrong_preview_binding() -> No
     case = next(case for case in expanded_sources() if case.get("consent") is True)
     result = await run_baseline(case)
     result["turns"][1]["final_answer"] += " SYNTHETIC-PREVIEW-TOKEN"
-    assert "no_preview_token_1" in score_case(case, result)["failed_checks"]
+    assert "no_preview_token_1" in score_case(case, sanitize(result))["failed_checks"]
     result = await run_baseline(case)
     result["tool_calls"][-1]["arguments"]["preview_token"] = "OTHER-TOKEN"
     assert "consent" in score_case(case, result)["failed_checks"]
+    assert "consent" in score_case(case, sanitize(result))["failed_checks"]
 
 
 @pytest.mark.asyncio

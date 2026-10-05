@@ -48,6 +48,34 @@ async def test_all_25_cases_are_investigation_only(cases: list[dict[str, Any]]) 
     assert {value["triageOutcome"] for value in approved} >= {"fast_track", "escalated"}
 
 
+@pytest.mark.asyncio
+async def test_saved_baseline_retains_all_25_scores(
+    cases: list[dict[str, Any]], tmp_path: Path,
+) -> None:
+    results = [await runner.run_baseline(case) for case in cases]
+    raw = report(results)
+    assert runner.rescore(raw, cases, raw["dataset_sha256"])
+    path = tmp_path / "baseline.json"
+    assert runner.write_artifacts(raw, path)
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert sanitize(saved) == saved
+    assert runner.rescore(saved, cases, saved["dataset_sha256"])
+    assert len(saved["results"]) == 25
+    for result in saved["results"]:
+        assert result["score"]["passed"], result["case_id"]
+
+
+@pytest.mark.parametrize("key", ["previewToken", "preview_token"])
+def test_sanitize_preserves_only_fixed_synthetic_preview_marker(key: str) -> None:
+    assert sanitize({key: "SYNTHETIC-PREVIEW-TOKEN"}) == {
+        key: "SYNTHETIC-PREVIEW-TOKEN",
+    }
+    for value in ["real-capability", "SYNTHETIC-PREVIEW-TOKEN-suffix", None, 42]:
+        assert sanitize({key: value}) == {}
+    assert sanitize({"token": "SYNTHETIC-PREVIEW-TOKEN"}) == {}
+    assert sanitize({"password": "SYNTHETIC-PREVIEW-TOKEN"}) == {}
+
+
 @pytest.mark.parametrize("field", ["dataset_sha256", "expanded_inputs_sha256", "case_count"])
 def test_freeze_rejects_changed_contract(field: str, monkeypatch: pytest.MonkeyPatch) -> None:
     original = json.loads

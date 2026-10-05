@@ -129,7 +129,10 @@ to unused names, including JSON/Markdown/JUnit sibling collisions. Use the print
 saved path rather than assuming overwrite. Complete redacted answers, SDK responses,
 stream updates, ordered calls, pending turns, unused replies, timeout evidence, and
 nested controlled failures are retained. Credential-like keys and token/secret
-strings are removed; nonsecret text is not truncated. Inspect redaction before sharing.
+strings are removed; nonsecret text is not truncated. Only the fixed nonproduction
+`SYNTHETIC-PREVIEW-TOKEN` marker is retained in `previewToken`/`preview_token` fields
+so saved synthetic evidence preserves consent binding during rescoring. Arbitrary
+preview capabilities remain redacted. Inspect redaction before sharing.
 
 Saved proposed evidence supports offline --rescore and --compare-baseline. Pairing
 requires identical frozen expanded inputs, dataset hash, case IDs/locales, and
