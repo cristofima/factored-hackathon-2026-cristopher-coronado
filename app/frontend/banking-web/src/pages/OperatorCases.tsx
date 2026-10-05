@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { claimOperatorCase, getOperatorCase, listOperatorCases, type OperatorCaseView, type OperatorSupportCase } from "@/api/operatorDisputeClient";
 import OperatorCaseActions from "@/components/OperatorCaseActions";
 import SupportCaseTimeline from "@/components/SupportCaseTimeline";
+import SupportCaseConversation from "@/components/SupportCaseConversation";
 import { formatDateTime } from "@/common/dateTime";
 import { ApiError, errorTranslationKey } from "@/api/errors";
 import { useAuth } from "@/context/AuthContext";
@@ -139,6 +140,7 @@ export default function OperatorCases() {
         <h3 className="font-semibold">{t("Consent and claim chronology")}</h3>
         <SupportCaseTimeline events={owned.events} transactionId={owned.transactionId} perspective="operator" />
       </section>
+      <SupportCaseConversation caseId={owned.caseId} operator />
       <OperatorCaseActions supportCase={owned} />
     </>}
   </section>;

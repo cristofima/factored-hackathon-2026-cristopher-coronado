@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import { startDisputePolling } from "@/api/disputePolling";
 import { useAuth } from "@/context/AuthContext";
 import type { SupportCase, SupportCaseEvent } from "@/models/SupportCase";
 import SupportCaseTimeline from "@/components/SupportCaseTimeline";
+import SupportCaseConversation from "@/components/SupportCaseConversation";
 import SupportCaseFinancialDetails from "@/components/SupportCaseFinancialDetails";
 import SupportCaseIntakeReceipt from "@/components/SupportCaseIntakeReceipt";
 import { maskedCardNumber } from "@/common/products";
@@ -64,7 +65,12 @@ export default function SupportCaseDetail() {
         .catch((cause: unknown) => {
           if (!signal.aborted) {
             if (cause instanceof ApiError && cause.code === "AUTH_REQUIRED") logout();
-            setError(errorTranslationKey(cause, "Support case is unavailable"));
+            const unavailable = cause instanceof ApiError && ["CASE_NOT_FOUND", "ACCESS_DENIED", "DISPUTE_UNAVAILABLE"].includes(cause.code);
+            if (unavailable) {
+              setSupportCase(null);
+              setTimeline([]);
+            }
+            setError(unavailable ? "Case not available" : errorTranslationKey(cause, "Support case is unavailable"));
           }
         })
         .finally(() => {
@@ -127,6 +133,14 @@ export default function SupportCaseDetail() {
       }
     }
   };
+
+  if (error === "Case not available") return (
+    <div className="min-w-0 p-4 sm:p-6 max-w-4xl space-y-6">
+      <h1 className="text-2xl font-bold">{t("Transaction Disputes")}</h1>
+      <p role="alert">{t("Case not available")}</p>
+      <Button asChild variant="outline"><Link to="/support-cases">{t("Back to support cases")}</Link></Button>
+    </div>
+  );
 
   return (
     <div className="min-w-0 p-4 sm:p-6 max-w-4xl space-y-6">
@@ -253,6 +267,7 @@ export default function SupportCaseDetail() {
 
           <SupportCaseFinancialDetails supportCase={supportCase} />
           <SupportCaseTimeline events={timeline} transactionId={supportCase.transactionId} />
+          <SupportCaseConversation caseId={supportCase.caseId} />
         </>
       )}
     </div>
