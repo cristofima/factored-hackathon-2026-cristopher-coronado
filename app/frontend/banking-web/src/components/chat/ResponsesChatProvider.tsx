@@ -29,7 +29,10 @@ import { useTranslation } from "react-i18next";
 import { readToolCase, readToolPreview, toolOutputFailed, toolProgressKey, type ToolOutputItem } from "./responseItems";
 
 import { useAuth } from "@/context/AuthContext";
-import { clearChatSnapshot, markChatInterrupted, persistChatSnapshot, readChatSnapshot } from "./sessionHistory";
+import { clearChatSnapshot, markChatInterrupted, persistChatSnapshot, readChatSnapshot, recordedDecisionSchema } from "./sessionHistory";
+import { getSupportCase } from "@/api/disputeClient";
+import { ApiError } from "@/api/errors";
+import { disputePreviewSchema, supportCaseStatusSchema } from "@/api/supportCaseContracts";
 
 const ChatContext = createContext<ChatContextValue | undefined>(undefined);
 const generateId = (prefix: string) => `${prefix}_${crypto.randomUUID()}`;
@@ -126,7 +129,8 @@ export function ChatProvider({
   const closedThreadsRef = useRef(new Set<string>());
   const furtherHelpRef = useRef(new Set<string>());
   const recordedDecisionsRef = useRef(new Map<string, { caseId: string | null; declined: boolean }>());
-  const { user, loading, sessionKey } = useAuth();
+  const { user, loading, sessionKey, logout } = useAuth();
+  const recoveryRequestRef = useRef<AbortController | null>(null);
   const scope = user ? JSON.stringify([user.id, user.identityVersion, chatServerUrl]) : null;
   // The auth epoch resets live state, but must not identify persisted reload history.
   const restorationKey = !loading && scope ? JSON.stringify([scope, sessionKey]) : null;
@@ -217,7 +221,7 @@ export function ChatProvider({
     [onThreadItemAdded],
   );
 
-  const reportStreamError = useCallback((threadId: string, code = "SERVICE_UNAVAILABLE", allowRetry = true, httpStatus?: number) => {
+  const reportStreamError = useCallback((threadId: string, code = "SERVICE_UNAVAILABLE", allowRetry = false, httpStatus?: number) => {
     if (reportedErrorRef.current) return;
     reportedErrorRef.current = true;
     const message = t(code === "AUTH_REQUIRED" ? "Session expired"
@@ -400,7 +404,7 @@ export function ChatProvider({
         uncertainThreadsRef.current.add(threadId);
         const code = receivedCode === "AUTH_REQUIRED" || receivedCode === "ACCESS_DENIED"
           ? receivedCode : "SERVICE_UNAVAILABLE";
-        reportStreamError(threadId, code, Boolean(event.allow_retry),
+        reportStreamError(threadId, code, false,
           typeof event.http_status === "number" ? event.http_status : undefined);
       }
     },
@@ -459,7 +463,12 @@ export function ChatProvider({
     actionRef.current = null;
     const outcome = settle?.(streamOutcomeRef.current) ?? streamOutcomeRef.current;
     if (outcome === "success") recoveryBlockedRef.current.delete(threadId);
-    else recoveryBlockedRef.current.add(threadId);
+    else {
+      recoveryBlockedRef.current.add(threadId);
+      uncertainThreadsRef.current.add(threadId);
+      setThreads(previous => previous.map(thread => thread.id === threadId && thread.status.type !== "closed"
+        ? { ...thread, status: { type: "locked" }, metadata: { ...thread.metadata, interrupted: true } } : thread));
+    }
     onResponseEnd?.(threadId);
   }, [onResponseEnd, reportStreamError, t]);
 
@@ -567,13 +576,15 @@ export function ChatProvider({
       const previewDecision = widget?.type === "client_widget" && widget.name === "dispute_preview" && action.type === "dispute_preview_decision";
       const approval = widget?.type === "client_widget" && widget.name === "tool_approval_request" && action.type === "approval";
       if (!scope || (!previewDecision && !approval)) return Promise.resolve("error");
-      if (previewDecision && action.payload?.declined !== true && typeof action.payload?.caseId !== "string") return Promise.resolve("error");
-      const recorded = previewDecision ? recordedDecisionsRef.current.get(key) ?? widget.args.recordedDecision as { caseId: string | null; declined: boolean } | undefined : undefined;
+      const proposedDecision = recordedDecisionSchema.safeParse({ caseId: action.payload?.caseId ?? null, declined: action.payload?.declined === true, status: action.payload?.status });
+      if (previewDecision && !proposedDecision.success) return Promise.resolve("error");
+      const parsedDecision = recordedDecisionSchema.safeParse(widget?.type === "client_widget" ? widget.args.recordedDecision : undefined);
+      const recorded = previewDecision ? recordedDecisionsRef.current.get(key) ?? (parsedDecision.success ? parsedDecision.data : undefined) : undefined;
       if (recorded && (recorded.declined !== (action.payload?.declined === true) || recorded.caseId !== (action.payload?.caseId ?? null))) return Promise.resolve("error");
       if (previewDecision && !recorded) {
         recordedDecisionsRef.current.set(key, { caseId: action.payload?.caseId as string ?? null, declined: action.payload?.declined === true });
         setThreadItems(previous => ({ ...previous, [threadId]: (previous[threadId] ?? []).map(item => item.id === itemId && item.type === "client_widget"
-          ? { ...item, args: { ...item.args, recordedDecision: { caseId: action.payload?.caseId ?? null, declined: action.payload?.declined === true } } } : item) }));
+          ? { ...item, args: { ...item.args, recordedDecision: { caseId: action.payload?.caseId ?? null, declined: action.payload?.declined === true, status: supportCaseStatusSchema.safeParse(action.payload?.status).success ? action.payload?.status : undefined } } } : item) }));
       }
       if (closedThreadsRef.current.has(threadId) || uncertainThreadsRef.current.has(threadId) || activeThreadId !== threadId || streamingThreadRef.current) return Promise.resolve("error");
       if (completedApprovalsRef.current.has(key)) return Promise.resolve("success");
@@ -606,6 +617,7 @@ export function ChatProvider({
   const createThread = useCallback(
     (initialMessage?: string) => {
       if (!scope || streamingThreadRef.current) return;
+      recoveryRequestRef.current?.abort();
       setHistoryOpen(false);
       setHasReceivedStreamEvent(false);
       if (!initialMessage) {
@@ -632,6 +644,46 @@ export function ChatProvider({
     },
     [scope, addItem, createLocalThread, submitInput],
   );
+
+  const recoveryScope = useRef(restorationKey);
+  recoveryScope.current = restorationKey;
+  const recoverySelection = useRef(activeThreadId);
+  recoverySelection.current = activeThreadId;
+  useEffect(() => () => { recoveryRequestRef.current?.abort(); }, [restorationKey]);
+
+  const recoverCaseAcknowledgement = async (threadId: string, itemId: string): Promise<boolean> => {
+    if (!restorationKey || recoveryRequestRef.current || streamingThreadRef.current || activeThreadId !== threadId) return false;
+    const widget = (threadItems[threadId] ?? []).find(item => item.id === itemId && item.type === "client_widget" && item.name === "dispute_preview");
+    const parsed = recordedDecisionSchema.safeParse(widget?.type === "client_widget" ? widget.args.recordedDecision : undefined);
+    if (!parsed.success || !parsed.data.caseId || parsed.data.declined) return false;
+    const decision = parsed.data;
+    const controller = new AbortController();
+    recoveryRequestRef.current = controller;
+    const epoch = restorationKey;
+    try {
+      const supportCase = await getSupportCase(parsed.data.caseId!, controller.signal);
+      const preview = widget?.type === "client_widget" ? disputePreviewSchema.safeParse(widget.args.preview) : null;
+      if (controller.signal.aborted || recoveryScope.current !== epoch || recoverySelection.current !== threadId || streamingThreadRef.current || supportCase.caseId !== decision.caseId ||
+        (preview?.success && (supportCase.transactionId !== preview.data.transactionId || supportCase.reason !== preview.data.reason))) return false;
+      createThread(t("chat.recovery.acknowledgement", { caseId: supportCase.caseId }));
+      return true;
+    } catch (cause) {
+      if (!controller.signal.aborted && recoveryScope.current === epoch && cause instanceof ApiError && ["AUTH_REQUIRED", "AUTH_EXPIRED", "AUTH_INVALID"].includes(cause.code)) logout();
+      return false;
+    } finally {
+      if (recoveryRequestRef.current === controller) recoveryRequestRef.current = null;
+    }
+  };
+
+  const markPreviewAttempted = (threadId: string, itemId: string): void => {
+    const widget = (threadItems[threadId] ?? []).find(item => item.id === itemId);
+    if (!scope || restoredScope !== restorationKey || isThreadLocked(threadId) || activeThreadId !== threadId || widget?.type !== "client_widget" || widget.name !== "dispute_preview" || !disputePreviewSchema.safeParse(widget.args.preview).success || widget.args.recoveryOnly || widget.args.recordedDecision) throw new Error("Recovery evidence unavailable");
+    const updated = { ...threadItems, [threadId]: (threadItems[threadId] ?? []).map(item => item.id === itemId && item.type === "client_widget"
+      ? { ...item, args: { ...item.args, recoveryOnly: true } } : item) };
+    if (!persistChatSnapshot(scope, threads, updated, activeThreadId, completedApprovalsRef.current, new Set([...uncertainThreadsRef.current, threadId]), streamingThreadRef.current, { threadId, itemId, previewToken: (widget.args.preview as { previewToken: string }).previewToken })) throw new Error("Recovery evidence unavailable");
+    recoveryBlockedRef.current.add(threadId);
+    setThreadItems(updated);
+  };
 
   const value: ChatContextValue = {
     threads,
@@ -660,12 +712,15 @@ export function ChatProvider({
       if (lastMessageRef.current) sendMessage(lastMessageRef.current);
     },
     sendWidgetAction,
+    recoverCaseAcknowledgement,
+    markPreviewAttempted,
     isApprovalCompleted: (threadId, itemId) => completedApprovalsRef.current.has(`${threadId}:${itemId}`),
     isThreadLocked,
     closeThread,
     setFurtherHelp,
     createThread,
     selectThread: (threadId) => {
+      recoveryRequestRef.current?.abort();
       setActiveThreadId(threadId);
       setHistoryOpen(false);
     },

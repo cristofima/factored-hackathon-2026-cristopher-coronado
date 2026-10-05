@@ -372,6 +372,8 @@ export interface ChatContextValue {
   cancelStreaming: () => void;
   retryLastMessage: () => void;
   sendWidgetAction: (threadId: string, itemId: string, action: ActionConfig) => Promise<"success" | "error" | "cancelled">;
+  recoverCaseAcknowledgement: (threadId: string, itemId: string) => Promise<boolean>;
+  markPreviewAttempted: (threadId: string, itemId: string) => void;
   isApprovalCompleted: (threadId: string, itemId: string) => boolean;
   isThreadLocked: (threadId: string) => boolean;
   closeThread: (threadId: string) => void;

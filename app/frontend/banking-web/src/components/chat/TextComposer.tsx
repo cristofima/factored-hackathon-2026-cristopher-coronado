@@ -21,7 +21,7 @@ const BUTTON_DIMENSIONS = {
 
 export function Composer({ placeholder, buttonSize = "lg" }: ComposerProps) {
   const { t } = useTranslation();
-  const { sendMessage, cancelStreaming, isStreaming, activeThreadId, activeThread, isThreadLocked, closeThread, setFurtherHelp } = useChat();
+  const { sendMessage, cancelStreaming, isStreaming, activeThreadId, activeThread, isThreadLocked, closeThread, setFurtherHelp, createThread } = useChat();
   const locked = Boolean(activeThreadId && isThreadLocked(activeThreadId));
   const furtherHelp = activeThread?.metadata?.furtherHelp === true;
   const [value, setValue] = useState("");
@@ -36,7 +36,10 @@ export function Composer({ placeholder, buttonSize = "lg" }: ComposerProps) {
 
   return (
     <div className="px-4 py-3">
-      {locked && <p role="status">{t(activeThread?.status.type === "closed" ? "Conversation closed" : "Recovered conversation is read-only. Start a new conversation to continue.")}</p>}
+      {locked && <div className="mb-3 space-y-2">
+        <p role="status">{t(activeThread?.status.type === "closed" ? "Conversation closed" : activeThread?.metadata?.interrupted ? "chat.recovery.interrupted" : "Recovered conversation is read-only. Start a new conversation to continue.")}</p>
+        <Button disabled={isStreaming} onClick={() => { setValue(""); createThread(); }}>{t("chat.recovery.new")}</Button>
+      </div>}
       {furtherHelp && !isStreaming && !locked && activeThreadId && <div className="mb-4 space-y-3" role="group" aria-label={t("Can I help with anything else?")}>
         <p>{t("Can I help with anything else?")}</p>
         <div className="flex flex-col gap-4 sm:flex-row sm:gap-6">

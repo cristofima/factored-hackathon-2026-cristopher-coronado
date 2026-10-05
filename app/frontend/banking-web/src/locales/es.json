@@ -522,5 +522,12 @@
   "Create dispute and request human review": "Crear reclamo y solicitar revisión humana",
   "Decline dispute proposal": "Rechazar propuesta",
   "Dispute chat continuation unavailable": "No se pudo continuar la decisión en el chat. El comprobante confirmado sigue siendo válido.",
-  "Retry chat continuation": "Reintentar continuación del chat"
+  "Retry chat continuation": "Reintentar continuación del chat",
+  "chat.recovery.interrupted": "La conversación se interrumpió y su resultado es incierto. No repitas la solicitud. Inicia una conversación nueva o recupera el reclamo registrado.",
+  "chat.recovery.new": "Nueva conversación",
+  "chat.recovery.creating": "Registrando el reclamo…",
+  "chat.recovery.storageUnavailable": "La solicitud no se envió porque no se pudo guardar la evidencia de recuperación. Inicia una nueva conversación.",
+  "chat.recovery.continue": "Continuar con el reclamo registrado",
+  "chat.recovery.loading": "Consultando el reclamo registrado…",
+  "chat.recovery.acknowledgement": "El reclamo {{caseId}} ya está registrado. Lee y confirma este reclamo existente solo con getSupportCase. No repitas la solicitud inicial, crees otro reclamo, solicites consentimiento de creación ni afirmes efectos financieros no registrados."
 }
