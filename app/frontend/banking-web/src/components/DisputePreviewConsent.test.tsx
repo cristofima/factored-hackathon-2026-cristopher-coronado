@@ -40,6 +40,36 @@ describe("pre-case consent", () => {
     expect(tree.some(e => e.props.children === uiI18n.t("Unavailable"))).toBe(true);
     expect(tree.some(e => e.props.children === uiI18n.t("Not available"))).toBe(true);
   });
+  it("does not dispatch when recovery evidence cannot be saved", async () => {
+    const onAttempt = vi.fn(() => { throw new Error("storage"); });
+    h.cursor = 0;
+    const tree = DisputePreviewConsent({ preview, onAttempt });
+    (elements(tree).find(e => e.props.children === "Create dispute and request human review")!.props.onClick as () => void)();
+    await settle();
+    expect(onAttempt).toHaveBeenCalledOnce();
+    expect(h.create).not.toHaveBeenCalled();
+    expect(h.recover).not.toHaveBeenCalled();
+    expect(elements(render()).some(e => e.props.children === uiI18n.t("chat.recovery.storageUnavailable"))).toBe(true);
+  });
+  it("distinguishes creation progress from read-only recovery", async () => {
+    let finish!: (value: typeof record) => void;
+    h.create.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    render(); click();
+    expect(elements(render()).some(e => e.props.children === uiI18n.t("chat.recovery.creating"))).toBe(true);
+    expect(elements(render()).some(e => e.props.children === uiI18n.t("Recovering dispute request"))).toBe(false);
+    finish(record); await settle();
+  });
+  it("offers only read-only recovery for a restored attempted proposal", async () => {
+    h.cursor = 0;
+    const tree = DisputePreviewConsent({ preview, disabled: true, recoveryDisabled: false, recoveryOnly: true, onAccepted: h.accepted });
+    expect(elements(tree).some(e => e.props.children === uiI18n.t("Dispute creation consent explanation"))).toBe(false);
+    const action = elements(tree).find(e => e.props.children === uiI18n.t("Recover dispute request"))!;
+    expect(action.props.disabled).toBe(false);
+    (action.props.onClick as () => void)(); await settle();
+    expect(h.recover).toHaveBeenCalledWith("signed", expect.any(AbortSignal));
+    expect(h.create).not.toHaveBeenCalled();
+    expect(h.accepted).not.toHaveBeenCalled();
+  });
   it("submits visible history only with explicit consent", async () => {
     const conversationHistory = [{ role: "assistant" as const, text: "Earlier matching purchase" }];
     h.cursor = 0;

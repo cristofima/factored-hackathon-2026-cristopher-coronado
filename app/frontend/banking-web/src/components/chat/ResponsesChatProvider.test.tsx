@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ChatProvider } from "./ResponsesChatProvider";
 import type { ChatContextValue, ThreadItem } from "./types";
 import type { StreamEvent } from "./useThreadStream";
+import { ApiError } from "@/api/errors";
+import { getSupportCase } from "@/api/disputeClient";
+import { CHAT_HISTORY_KEY } from "./sessionHistory";
+import type { SupportCase } from "@/models/SupportCase";
 import en from "@/locales/en.json";
 import es from "@/locales/es.json";
 import pt from "@/locales/pt.json";
@@ -13,7 +17,7 @@ const h = vi.hoisted(() => ({
   stream: null as unknown as Parameters<typeof import("./useThreadStream").useThreadStream>[0],
   catalog: {} as Record<string, unknown>,
   user: { id: "test-user", identityVersion: 1 } as { id: string; identityVersion: number } | null,
-  sessionKey: 1, loading: false, chatServerUrl: "/api",
+  sessionKey: 1, loading: false, chatServerUrl: "/api", logout: vi.fn(),
 }));
 vi.mock("react", async original => ({
   ...await original<typeof import("react")>(),
@@ -39,13 +43,14 @@ vi.mock("react", async original => ({
     }
   },
 }));
-vi.mock("@/context/AuthContext", () => ({ useAuth: () => ({ user: h.user, sessionKey: h.sessionKey, loading: h.loading }) }));
+vi.mock("@/context/AuthContext", () => ({ useAuth: () => ({ user: h.user, sessionKey: h.sessionKey, loading: h.loading, logout: h.logout }) }));
+vi.mock("@/api/disputeClient", () => ({ getSupportCase: vi.fn() }));
 vi.mock("./useThreadStream", () => ({ useThreadStream: (options: typeof h.stream) => {
   h.stream = options;
   return { cancel: h.cancel };
 } }));
 vi.mock("@/components/chat/widgets", () => ({ widgetRegistry: { register: vi.fn() } }));
-vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => h.catalog[key] ?? key }) }));
+vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string, values?: Record<string, string>) => Object.entries(values ?? {}).reduce((text, [name, value]) => text.replaceAll(`{{${name}}}`, value), String(h.catalog[key] ?? key)) }) }));
 
 const ended = vi.fn();
 const errors = vi.fn();
@@ -70,7 +75,7 @@ function act(value = render(), approved = true) {
 }
 
 beforeEach(() => {
-  vi.clearAllMocks(); h.slots = []; h.effects = []; h.queued = []; h.catalog = {};
+  vi.clearAllMocks(); vi.mocked(getSupportCase).mockReset(); h.slots = []; h.effects = []; h.queued = []; h.catalog = {};
   h.user = { id: "test-user", identityVersion: 1 }; h.sessionKey = 1; h.loading = false; h.chatServerUrl = "/api";
   const storage = new Map<string, string>();
   vi.stubGlobal("sessionStorage", { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value), removeItem: (key: string) => storage.delete(key) });
@@ -124,7 +129,7 @@ describe("Responses provider tool progress", () => {
     expect(tasks()).toEqual([]);
     event({ type: "response.output_item.added", item: { type: "mcp_call", id: "reused", name: "get_balance" } });
     finish();
-    render().sendMessage("Try again"); render();
+    render().createThread("Separate question"); render();
     event({ type: "response.output_item.added", item: { type: "mcp_call", id: "reused", name: "get_balance" } });
     expect(tasks()).toHaveLength(1);
     expect(tasks()[0].task.status_indicator).toBe("loading");
@@ -162,7 +167,8 @@ describe("Responses provider visible output", () => {
     event({ type: "response.completed" });
     finish(); finish();
     expect(errorItems()).toHaveLength(1);
-    expect(errorItems()[0]).toMatchObject({ message, code: "SERVICE_UNAVAILABLE", allow_retry: true });
+    expect(errorItems()[0]).toMatchObject({ message, code: "SERVICE_UNAVAILABLE", allow_retry: false });
+    expect(render().isThreadLocked(render().activeThreadId!)).toBe(true);
     expect(errors).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ message }));
     expect(ended).toHaveBeenCalledOnce();
     expect(render().isStreaming).toBe(false);
@@ -184,7 +190,7 @@ describe("Responses provider visible output", () => {
     }
     finish(); finish();
     expect(errorItems()).toHaveLength(1);
-    expect(errorItems()[0]).toMatchObject({ message: failureText, allow_retry: mode !== "incomplete" });
+    expect(errorItems()[0]).toMatchObject({ message: failureText, allow_retry: false });
     expect(messages().every(item => !item.streaming)).toBe(true);
     expect(ended).toHaveBeenCalledOnce();
   });
@@ -253,17 +259,17 @@ describe("Responses provider visible output", () => {
     expect(messages().map(item => item.content[0].text)).toEqual(["First answer", "Second", "Third answer", "Fallback answer", "Distinct", "New answer"]);
   });
 
-  it("keeps an outputless completed approval continuation retryable", async () => {
+  it("locks an outputless completed approval continuation without redispatch", async () => {
     const value = approval();
     const result = act(value); render();
     event({ type: "response.completed" }); finish();
     await expect(result).resolves.toBe("error");
     expect(errorItems()).toHaveLength(1);
     expect(render().isApprovalCompleted(value.activeThreadId!, "approval-1")).toBe(false);
-    const retry = act(); render();
-    event({ type: "response.output_text.delta", delta: "Processed" });
-    event({ type: "response.completed" }); finish();
-    await expect(retry).resolves.toBe("success");
+    expect(render().isThreadLocked(value.activeThreadId!)).toBe(true);
+    await expect(act()).resolves.toBe("error");
+    render();
+    expect(h.stream.request).toBeNull();
   });
 });
 
@@ -281,7 +287,7 @@ describe("Responses dispute preview lifecycle", () => {
     start();
     event({ type: "response.output_item.done", item: { type: "function_call_output", call_id: "unknown", output: preview } });
     expect(render().items.filter(item => item.type === "client_widget")).toHaveLength(0);
-    finish();
+    render().createThread(); render();
     const widget = proposal();
     expect(widget).toMatchObject({ args: { preview } });
     expect(render().items.filter(item => item.type === "client_widget")).toHaveLength(1);
@@ -341,13 +347,9 @@ describe("Responses dispute preview lifecycle", () => {
     finish();
     await expect(result).resolves.toBe(mode === "cancelled" ? "cancelled" : "error");
     expect(render().activeThread?.metadata?.furtherHelp).not.toBe(true);
-    if (mode === "tool-only") {
-      const retry = render().sendWidgetAction(value.activeThreadId!, widget.id, action); render();
-      event({ type: "response.output_text.delta", delta: "Case recorded" });
-      event({ type: "response.completed" }); finish();
-      await expect(retry).resolves.toBe("success");
-      expect(render().activeThread?.metadata?.furtherHelp).toBe(true);
-    }
+    expect(render().isThreadLocked(value.activeThreadId!)).toBe(true);
+    await expect(render().sendWidgetAction(value.activeThreadId!, widget.id, action)).resolves.toBe("error");
+    expect(h.stream.request).toBeNull();
   });
   it("restores tool-only accepted continuation as read-only without losing the recorded case", async () => {
     const widget = proposal(); const value = render();
@@ -388,6 +390,148 @@ function reloadProvider() {
   render();
   return render();
 }
+
+describe("Responses preview recovery safeguards", () => {
+  const preview = { previewToken: "recovery-token", transactionId: "tx", reason: "Original reason", expiresAt: "2026-10-04T10:10:00Z", transaction: { id: "tx" } };
+  const supportCase: SupportCase = {
+    caseId: "owned-case", transactionId: "tx", reason: "Original reason", productNumber: null,
+    status: "IN_REVIEW", triageOutcome: null, resolutionOutcome: null, resolutionNotes: null,
+    recommendationType: null, recommendationRationale: null, recommendationOptedOut: false,
+    openedAt: "2026-10-04", updatedAt: "2026-10-04", resolvedAt: null,
+  };
+  function proposal() {
+    start();
+    event({ type: "response.output_item.added", item: { type: "function_call", call_id: "recover-preview", name: "previewTransactionDispute" } });
+    event({ type: "response.output_item.done", item: { type: "function_call_output", call_id: "recover-preview", output: preview } });
+    event({ type: "response.completed" }); finish();
+    const value = render();
+    return { value, widget: value.items.find(item => item.type === "client_widget" && item.name === "dispute_preview")! };
+  }
+  async function receipt() {
+    const { value, widget } = proposal();
+    value.closeThread(value.activeThreadId!);
+    await expect(value.sendWidgetAction(value.activeThreadId!, widget.id, { type: "dispute_preview_decision", payload: { caseId: "owned-case", declined: false } })).resolves.toBe("error");
+    return { value: render(), widget };
+  }
+  function deferred() {
+    let resolve!: (value: SupportCase) => void;
+    let reject!: (cause: unknown) => void;
+    const promise = new Promise<SupportCase>((res, rej) => { resolve = res; reject = rej; });
+    vi.mocked(getSupportCase).mockReturnValueOnce(promise);
+    return { resolve, reject };
+  }
+  it("persists attempted preview evidence synchronously before a render and restores it read-only", () => {
+    const { value, widget } = proposal();
+    expect(sessionStorage.getItem(CHAT_HISTORY_KEY)).not.toContain(preview.previewToken);
+    value.markPreviewAttempted(value.activeThreadId!, widget.id);
+    const saved = JSON.parse(sessionStorage.getItem(CHAT_HISTORY_KEY)!);
+    expect(saved.items[value.activeThreadId!]).toContainEqual(expect.objectContaining({ id: widget.id, args: { recoveryOnly: true, preview } }));
+    expect(h.stream.request).toBeNull();
+    const recovered = reloadProvider();
+    expect(recovered.isThreadLocked(value.activeThreadId!)).toBe(true);
+    expect(recovered.items.find(item => item.id === widget.id)).toMatchObject({ args: { recoveryOnly: true, preview } });
+    recovered.sendMessage("Never repeat intake"); render();
+    expect(h.stream.request).toBeNull();
+    expect(() => recovered.markPreviewAttempted(value.activeThreadId!, widget.id)).toThrow();
+  });
+  it.each(["missing", "unselected", "closed"])("refuses %s preview attempt evidence", kind => {
+    const { value, widget } = proposal();
+    if (kind === "unselected") { value.createThread(); render(); }
+    if (kind === "closed") value.closeThread(value.activeThreadId!);
+    expect(() => render().markPreviewAttempted(value.activeThreadId!, kind === "missing" ? "missing" : widget.id)).toThrow();
+    expect(sessionStorage.getItem(CHAT_HISTORY_KEY)).not.toContain(preview.previewToken);
+    expect(h.stream.request).toBeNull();
+  });
+  it.each(["write", "cleanup"])("does not report durability when storage %s fails", kind => {
+    const { value, widget } = proposal();
+    if (kind === "write") vi.spyOn(sessionStorage, "setItem").mockImplementation(() => { throw new Error("Storage unavailable"); });
+    else vi.spyOn(sessionStorage, "removeItem").mockImplementation(() => { throw new Error("Storage unavailable"); });
+    expect(() => value.markPreviewAttempted(value.activeThreadId!, widget.id)).toThrow();
+    expect(h.stream.request).toBeNull();
+  });
+  it("recovers an owned receipt through GET into a fresh thread without borrowing its checkpoint", async () => {
+    h.catalog = en;
+    const { value, widget } = await receipt();
+    vi.mocked(getSupportCase).mockResolvedValueOnce(supportCase);
+    await expect(value.recoverCaseAcknowledgement(value.activeThreadId!, widget.id)).resolves.toBe(true);
+    const recovered = render();
+    expect(getSupportCase).toHaveBeenCalledExactlyOnceWith("owned-case", expect.any(AbortSignal));
+    expect(recovered.activeThreadId).not.toBe(value.activeThreadId);
+    expect(h.stream.request?.payload).not.toHaveProperty("conversation");
+    expect(JSON.stringify(h.stream.request?.payload)).toContain("owned-case");
+    expect(JSON.stringify(h.stream.request?.payload)).not.toContain("recovery-token");
+    expect(recovered.threads.find(thread => thread.id === value.activeThreadId)?.status.type).toBe("closed");
+  });
+  it.each(["null", "error", "case", "transaction", "reason"])("keeps the source locked after %s lookup evidence", async kind => {
+    const { value, widget } = await receipt();
+    if (kind === "error") vi.mocked(getSupportCase).mockRejectedValueOnce(new ApiError("SERVICE_UNAVAILABLE"));
+    else vi.mocked(getSupportCase).mockResolvedValueOnce(kind === "null" ? null as unknown as SupportCase : { ...supportCase,
+      ...(kind === "case" ? { caseId: "foreign-case" } : kind === "transaction" ? { transactionId: "foreign-tx" } : kind === "reason" ? { reason: "Different reason" } : {}),
+    });
+    await expect(value.recoverCaseAcknowledgement(value.activeThreadId!, widget.id)).resolves.toBe(false);
+    expect(render().activeThreadId).toBe(value.activeThreadId);
+    expect(render().isThreadLocked(value.activeThreadId!)).toBe(true);
+    expect(h.stream.request).toBeNull();
+    expect(h.logout).not.toHaveBeenCalled();
+  });
+  it("does not fetch missing or unaccepted receipts", async () => {
+    const { value, widget } = proposal();
+    await expect(value.recoverCaseAcknowledgement(value.activeThreadId!, "missing")).resolves.toBe(false);
+    await expect(value.recoverCaseAcknowledgement(value.activeThreadId!, widget.id)).resolves.toBe(false);
+    value.closeThread(value.activeThreadId!);
+    await value.sendWidgetAction(value.activeThreadId!, widget.id, { type: "dispute_preview_decision", payload: { declined: true, caseId: null } });
+    await expect(render().recoverCaseAcknowledgement(value.activeThreadId!, widget.id)).resolves.toBe(false);
+    expect(getSupportCase).not.toHaveBeenCalled();
+  });
+  it("allows only one owned lookup in flight and releases the guard after failure", async () => {
+    const { value, widget } = await receipt(); const pending = deferred();
+    const first = value.recoverCaseAcknowledgement(value.activeThreadId!, widget.id);
+    await expect(value.recoverCaseAcknowledgement(value.activeThreadId!, widget.id)).resolves.toBe(false);
+    expect(getSupportCase).toHaveBeenCalledOnce();
+    pending.reject(new ApiError("SERVICE_UNAVAILABLE"));
+    await expect(first).resolves.toBe(false);
+    vi.mocked(getSupportCase).mockResolvedValueOnce(supportCase);
+    await expect(render().recoverCaseAcknowledgement(value.activeThreadId!, widget.id)).resolves.toBe(true);
+    expect(getSupportCase).toHaveBeenCalledTimes(2);
+  });
+  it.each(["createThread", "selectThread"])("aborts recovery on %s and discards late success", async operation => {
+    const { value, widget } = await receipt();
+    value.createThread(); const other = render().activeThreadId!;
+    render().selectThread(value.activeThreadId!); const source = render();
+    const pending = deferred(); const result = source.recoverCaseAcknowledgement(value.activeThreadId!, widget.id);
+    const signal = vi.mocked(getSupportCase).mock.calls[0][1]!;
+    if (operation === "createThread") source.createThread(); else source.selectThread(other);
+    const selected = render().activeThreadId;
+    expect(signal.aborted).toBe(true);
+    pending.resolve(supportCase); await expect(result).resolves.toBe(false);
+    expect(render().activeThreadId).toBe(selected);
+    expect(h.stream.request).toBeNull();
+  });
+  it.each(["logout", "identity", "version", "session", "server"])("discards late owned recovery after %s changes", async change => {
+    const { value, widget } = await receipt(); const pending = deferred();
+    const result = value.recoverCaseAcknowledgement(value.activeThreadId!, widget.id);
+    const signal = vi.mocked(getSupportCase).mock.calls[0][1]!;
+    if (change === "logout") h.user = null;
+    else if (change === "identity") h.user = { id: "other", identityVersion: 1 };
+    else if (change === "version") h.user = { id: "test-user", identityVersion: 2 };
+    else if (change === "session") h.sessionKey++;
+    else h.chatServerUrl = "/other-api";
+    render(); render();
+    expect(signal.aborted).toBe(true);
+    pending.resolve(supportCase); await expect(result).resolves.toBe(false);
+    expect(render().threads).toEqual([]);
+    expect(h.stream.request).toBeNull();
+  });
+  it.each([false, true])("logs out on a current auth failure only (aborted: %s)", async aborted => {
+    const { value, widget } = await receipt(); const pending = deferred();
+    const result = value.recoverCaseAcknowledgement(value.activeThreadId!, widget.id);
+    if (aborted) { value.createThread(); render(); }
+    pending.reject(new ApiError("AUTH_REQUIRED"));
+    await expect(result).resolves.toBe(false);
+    expect(h.logout).toHaveBeenCalledTimes(aborted ? 0 : 1);
+    expect(h.stream.request).toBeNull();
+  });
+});
 
 describe("Responses provider session recovery", () => {
   it("recovers completed visible history and signed checkpoint without auto-submitting", () => {
@@ -559,7 +703,7 @@ describe("Responses provider approval lifecycle", () => {
     expect(render().isStreaming).toBe(false);
     expect(h.stream.request).toBeNull();
   });
-  it.each(["error", "failed", "incomplete", "eof", "tool-error", "outputless-tool-error", "cancel"])("settles %s once and retries only recoverable tool outcomes", async mode => {
+  it.each(["error", "failed", "incomplete", "eof", "tool-error", "outputless-tool-error", "cancel"])("settles %s once and blocks all uncertain approval redispatch", async mode => {
     const value = approval(); ended.mockClear();
     const settled = vi.fn(); const result = act(value).then(settled); render();
     if (mode === "error") h.stream.onError?.(new Error("private"));
@@ -577,15 +721,9 @@ describe("Responses provider approval lifecycle", () => {
     expect(ended).toHaveBeenCalledOnce();
     expect(render().isApprovalCompleted(value.activeThreadId!, "approval-1")).toBe(false);
     const retry = act(render(), false); render();
-    if (["error", "cancel", "failed", "incomplete"].includes(mode)) {
-      expect(h.stream.request).toBeNull();
-      await expect(retry).resolves.toBe("error");
-      return;
-    }
-    expect(h.stream.request?.payload).toMatchObject({ input: [{ type: "mcp_approval_response", approval_request_id: "approval-1", approve: false }] });
-    event({ type: "response.output_text.delta", delta: "Request declined" });
-    event({ type: "response.completed" }); finish();
-    await expect(retry).resolves.toBe("success");
+    expect(h.stream.request).toBeNull();
+    expect(render().isThreadLocked(value.activeThreadId!)).toBe(true);
+    await expect(retry).resolves.toBe("error");
   });
   it("rejects synchronous duplicate submissions without replacing the first promise", async () => {
     const value = approval();
