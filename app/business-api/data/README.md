@@ -31,7 +31,7 @@ this project outside `src`.
 ## Export fraud-marked transaction CSV records
 
 [export_fraud_transactions.py](scripts/export_fraud_transactions.py) scans every CSV
-under `month=*/day=*` in `C:\Factored\data\transactions\year=2026` and exports
+under `month=*/day=*` in `C:\Factored\data\transactions` and exports
 complete rows whose `is_fraud` value is `true` (case-insensitive) or `1`. It streams
 records without loading the year into memory and never modifies source files or
 connects to PostgreSQL.
@@ -40,9 +40,24 @@ connects to PostgreSQL.
 rtk proxy uv run --directory app\business-api\data python scripts\export_fraud_transactions.py --output C:\Factored\fraud_2026.csv
 ```
 
-Use `--source` to select another year directory. Omit `--output` to emit CSV on
-stdout; the count and errors go to stderr. Output files must be new and outside
-the source directory. All partitions must share the same columns, including
+Select a year or an inclusive date range (including ranges across years):
+
+```powershell
+rtk proxy uv run --directory app\business-api\data python scripts\export_fraud_transactions.py --year 2025 --output C:\Factored\fraud_2025.csv
+rtk proxy uv run --directory app\business-api\data python scripts\export_fraud_transactions.py --start-date 2025-12-01 --end-date 2026-02-28 --output C:\Factored\fraud_range.csv
+```
+
+With `--year` or date bounds, the default source is `C:\Factored\data\transactions`.
+Without either, the original 2026 default is preserved. `--source` accepts a
+transactions root (`year=*/month=*/day=*`) or a single-year directory
+(`month=*/day=*`). Selection uses partition dates, not the CSV's transaction or
+process date fields; complete matching rows remain unchanged. Either date bound
+can be omitted for an open-ended scan. Do not combine `--year` with date bounds.
+Reversed ranges, invalid dates and periods without CSV files fail.
+
+Omit `--output` to emit CSV on stdout; the count and errors go to stderr.
+Output files must be new and outside the source directory. All selected
+partitions must share the same columns, including
 `transaction_id` and `is_fraud`. Invalid records fail with exit code 1; discard any
 partial output from a failed run. A successful scan without matches emits only the
 CSV header. Treat exported records as sensitive local data; do not commit them.
