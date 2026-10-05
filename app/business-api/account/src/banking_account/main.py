@@ -1,13 +1,13 @@
 
 import os
 import logging
-from logging_config import configure_logging
-from mcp_tools import mcp
+from banking_account.observability.logging_config import configure_logging
+from banking_account.mcp_tools import mcp
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from banking_shared.tracing import create_tracer_provider
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-from routers import router as account_routers
+from banking_account.routers.products import router as account_routers
 import uvicorn
 
 logger = logging.getLogger(__name__)
@@ -16,8 +16,8 @@ def create_app() -> FastAPI:
     # Initialize logging for the app
     configure_logging()
     logger = logging.getLogger(__name__)
-    
-  
+
+
    #Add mcp server to the FastAPI app
     mcp_app = mcp.http_app(path='/')
     app = FastAPI(title="Account API and MCP server", lifespan=mcp_app.lifespan)
@@ -30,7 +30,7 @@ def create_app() -> FastAPI:
     )
 
     # Include the transaction router
-    app.include_router(account_routers, prefix="/api", tags=["accounts"]) 
+    app.include_router(account_routers, prefix="/api", tags=["accounts"])
 
     allowed_origins = [
         origin.strip()
@@ -51,11 +51,14 @@ def create_app() -> FastAPI:
 app = create_app()
 
 if __name__ == "__main__":
- 
+
     profile = os.environ.get("PROFILE", "prod")
     port = 8070 if profile == "dev" else 8080
     logger.info(f"Starting account service server with profile: {profile}, port: {port}")
     # App Service terminates TLS at its own front end and forwards plain HTTP to
     # the container, so Uvicorn must trust X-Forwarded-Proto to avoid generating
     # http:// redirects (e.g. the mounted MCP app's trailing-slash redirect).
-    uvicorn.run("main:app", host="0.0.0.0", port=port, proxy_headers=True, forwarded_allow_ips="*")
+    uvicorn.run(
+        "banking_account.main:app", host="0.0.0.0", port=port,
+        proxy_headers=True, forwarded_allow_ips="*",
+    )

@@ -4,9 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 import logging
 
-from jwt_identity import get_jwt_customer_id
-from models import AccountSummary, Card, CardSummary
-from services import account_service_singleton, card_service_singleton
+from banking_account.services.errors import AccountOperationError
+from banking_account.auth.jwt_identity import get_jwt_customer_id
+from banking_account.models.products import AccountSummary, Card, CardSummary
+from banking_account.services.products import account_service_singleton, card_service_singleton
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -17,12 +18,8 @@ class CardAmountRequest(BaseModel):
 
 
 def _to_runtime_http_error(err: RuntimeError) -> HTTPException:
-    message = str(err)
-    if "not found" in message.lower():
-        code = status.HTTP_404_NOT_FOUND
-    else:
-        code = status.HTTP_400_BAD_REQUEST
-    return HTTPException(status_code=code, detail=message)
+    code = err.status_code if isinstance(err, AccountOperationError) else status.HTTP_400_BAD_REQUEST
+    return HTTPException(status_code=code, detail=str(err))
 
 
 @router.get("/accounts", response_model=List[AccountSummary])
@@ -42,7 +39,7 @@ def list_credit_cards(
     product_number: str,
     customer_id: Annotated[str, Depends(get_jwt_customer_id)],
 ):
-    """Return all credit cards for a given account."""
+    """Return all customer cards after authorizing the account; no account-card linkage exists."""
     try:
         return card_service_singleton.get_credit_cards(product_number, customer_id)
     except PermissionError as error:
@@ -79,9 +76,7 @@ def recharge_card(
     request: CardAmountRequest,
     customer_id: Annotated[str, Depends(get_jwt_customer_id)],
 ):
-    """Recharge the selected card.
-
-    The request amount must be positive."""
+    """Compatibility endpoint: validates ownership and amount, then reports recharge unavailable."""
     logger.info("Recharge card card_id=%s amount=%.2f", card_id, request.amount)
     try:
         return card_service_singleton.recharge_card(card_id, request.amount, customer_id)
@@ -104,7 +99,7 @@ def pay_with_card(
     request: CardAmountRequest,
     customer_id: Annotated[str, Depends(get_jwt_customer_id)],
 ):
-    """Record a payment and debit the available balance."""
+    """Compatibility endpoint: validates ownership and amount, then reports payment unavailable."""
     logger.info("Pay with card card_id=%s amount=%.2f", card_id, request.amount)
     try:
         return card_service_singleton.pay_with_card(card_id, request.amount, customer_id)

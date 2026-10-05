@@ -89,4 +89,3 @@ class CardDiscoveryResult(BaseModel):
     ]
     candidates: list[CardDiscoveryCandidate]
     truncated: bool = False
-

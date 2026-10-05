@@ -1,12 +1,12 @@
 from asyncio import to_thread
 
-from models import CardDiscoveryResult
+from banking_account.models.products import CardDiscoveryResult
 from fastmcp import FastMCP
 from fastmcp.server.dependencies import CurrentHeaders
 import logging
 from typing import Annotated
-from internal_identity import get_customer_id
-from services import AccountService, UserService, card_service_singleton
+from banking_account.auth.internal_identity import get_customer_id
+from banking_account.services.products import AccountService, UserService, card_service_singleton
 
 logger = logging.getLogger(__name__)
 user_service = UserService()

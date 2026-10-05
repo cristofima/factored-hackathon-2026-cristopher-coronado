@@ -1,6 +1,6 @@
 import pytest
 
-from services import _masked_card_number
+from banking_account.services.products import _masked_card_number
 
 
 @pytest.mark.parametrize(
