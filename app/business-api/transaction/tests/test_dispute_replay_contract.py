@@ -6,7 +6,7 @@ import ast
 from pathlib import Path
 import runpy
 from typing import Annotated, Any
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 from fastmcp import Client, FastMCP
 from fastmcp.server.dependencies import CurrentHeaders
@@ -47,6 +47,38 @@ async def test_replay_schemas_match_independent_fastmcp_discovery() -> None:
             assert contract.inputSchema == actual.inputSchema
     assert "resolveCase" not in contracts
     assert "dismissRecommendation" not in contracts
+
+
+@pytest.mark.asyncio
+async def test_recognition_tool_delegates_verified_customer_in_threadpool() -> None:
+    source = ROOT / "app/business-api/transaction/src/banking_transaction/mcp_tools.py"
+    tree = ast.parse(source.read_text(encoding="utf-8"))
+    tree.body = [node for node in tree.body if isinstance(node, ast.AsyncFunctionDef)
+                 and node.name == "get_transaction_recognition_context"]
+    tree.body[0].decorator_list = []
+    headers = {"synthetic-identity": "not-a-token"}
+    identity = MagicMock(return_value="verified-customer")
+    service = MagicMock()
+    expected = {"matches": [], "persistedInSupportCase": False}
+    threadpool = AsyncMock(return_value=expected)
+    namespace = {
+        "CurrentHeaders": CurrentHeaders, "Any": Any, "service": service,
+        "get_customer_id": identity, "run_in_threadpool": threadpool,
+    }
+    exec(compile(tree, str(source), "exec"), namespace)
+
+    result = await namespace["get_transaction_recognition_context"]("selected", headers)
+
+    assert result == expected
+    identity.assert_called_once_with(headers)
+    threadpool.assert_awaited_once_with(
+        service.get_transaction_recognition_context, "selected", "verified-customer",
+    )
+    identity.side_effect = PermissionError("unavailable")
+    threadpool.reset_mock()
+    with pytest.raises(PermissionError, match="unavailable"):
+        await namespace["get_transaction_recognition_context"]("selected", headers)
+    threadpool.assert_not_awaited()
 
 
 def test_dispute_response_models_reject_incomplete_fixture_outputs() -> None:

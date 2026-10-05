@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from datetime import date, datetime, time
+from typing import Any
 
 from banking_shared.database import create_session
 from banking_shared.models import Product, TransactionRecord
@@ -13,6 +14,7 @@ from sqlmodel import Session, select
 from sqlmodel.sql.expression import SelectOfScalar
 
 from banking_transaction.projections.transactions import to_transaction
+from banking_transaction.services.recognition import get_recognition_context
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +24,13 @@ SessionFactory = Callable[[], Session]
 class TransactionService:
     def __init__(self, session_factory: SessionFactory = create_session) -> None:
         self._session_factory = session_factory
+
+    def get_transaction_recognition_context(
+        self, transaction_id: str, customer_id: str,
+    ) -> dict[str, Any]:
+        _require_identifier(transaction_id, "TransactionId")
+        with self._session_factory() as session:
+            return get_recognition_context(session, transaction_id, customer_id)
 
     def get_transactions_by_recipient_name(
         self,
