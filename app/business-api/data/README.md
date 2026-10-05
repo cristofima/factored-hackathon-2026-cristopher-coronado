@@ -1,445 +1,306 @@
 # Data Module
 
-This module profiles the LATAM banking CSV dataset, approves a bounded transaction
-window, loads it into PostgreSQL, and verifies the resulting rows and source checksums.
-Run every command from the repository root.
+This module profiles the LATAM banking CSV dataset, selects a bounded ingestion
+window, loads customer-owned data into PostgreSQL, and verifies the load manifest.
+Run the commands below from the repository root. Use Python 3.11+ and `uv`.
 
-## Scope
+## Schema and ownership
 
-The loader upserts tables in dependency order:
+The authoritative SQLModel definitions live in
+[banking models](../shared/banking_shared/models.py) and
+[Identity models](../shared/banking_shared/identity_models.py). This module's
+[models](models.py) and [database helpers](database.py) are compatibility reexports;
+Alembic owns schema evolution, not ingestion or service startup.
 
-1. `branches`
-2. `customers`
-3. `products`
-4. `transactions`
+| Owner / purpose                       | Tables                                                                           | Population path                                    |
+| ------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------- |
+| CSV ingestion                         | `branches`, `customers`, `products`, `transactions`                              | Dependency-ordered pipeline                        |
+| Identity                              | `users`, `roles`, `user_roles`, `customer_users`, `operators`, `identity_audits` | Identity operations, migrations and explicit seeds |
+| Historical archives                   | `legacy_service_agents`, `legacy_operator_service_agents`                        | Catalog-retirement migration; never new CSV loads  |
+| Estimated projections                 | `product_monthly_snapshots`                                                      | Explicit snapshot builder                          |
+| Dispute workflow and recorded effects | `support_cases`, `support_case_events`, `runtime_postings`, `card_protections`   | Authorized application service operations          |
 
-Revision `20261004_0010` retires the simulated reviewer catalog into
-`legacy_service_agents` and archives former operator mappings in
-`legacy_operator_service_agents`. Historical case IDs become
-`legacy_assigned_agent_id`; original audit text is unchanged. These snapshots have
-no operational ownership authority and are never reloaded from CSV. New loads do
-not require `service_agents.csv`; older manifests verify its recorded count against
-the archive, while still checking their original source checksums.
+The [migration chain](alembic/versions) ends at
+[revision 20261004_0011](alembic/versions/20261004_0011_operator_effects.py).
+This is the source head, not proof of the revision applied to any database.
+Revision 0010 archives simulated reviewers and former operator mappings, preserving
+historical case references and audit text without inventing real ownership.
+New loads do not require `service_agents.csv`. Older manifests can check its count
+against the archive and still verify their original source checksums.
 
-Real case ownership references `operators.user_id`, a stable Identity user key.
-Migration preflight rejects orphan real ownership rather than inventing identities.
-The migration is forward-only and does not backfill real owners from simulated IDs.
+See [Identity contracts and provisioning](../identity/README.md),
+[ADR 0006: Dedicated auth users and staff identities](../../../docs/adr/0006-dedicated-auth-users-and-staff-identities.md),
+[ADR 0008: Operator ownership without a service-agent catalog](../../../docs/adr/0008-operator-ownership-without-service-agent-catalog.md),
+and [Transaction adjudication and recorded effects](../transaction/README.md#adjudication-and-recorded-financial-effects)
+for service-owned behavior. Migrating these tables does not populate them or prove
+REST/MCP, browser, concurrency or deployed acceptance.
 
-Authorized local PostgreSQL execution on 2026-10-04 upgraded `20261003_0008` through
-0009/0010 to `20261004_0010 (head)`. The custom-format backup passed catalog-readability
-and SHA256 checks; restore rehearsal was not run. Read-only verification preserved
-original business rows, five cases, 24 events, catalog/mapping archives, initial claim
-metadata, the Operator foreign key with `RESTRICT`, and the queue index. Identity
-audits increased from 62 to 63 during a concurrent login; comparison against the
-backup proved all original audits unchanged. No restore, corrective database write,
-downgrade or migration rerun was performed. This local evidence does not establish
-PostgreSQL claim concurrency, browser acceptance or remote rollout.
+## Migration prerequisites
 
-The pipeline does not populate the `users` table. Create selected demo identities
-separately with `seed_demo_users.py` after their customer rows have been loaded.
-
-## Customer and identity schema
-
-Customer email is limited to 120 characters, first/last names to 50 each, and
-country to 100. Ingestion trims and case-normalizes customer status to `Active`,
-`Inactive`, `Suspended`, or `Closed`; blank/absent legacy values remain null.
-Unknown statuses and overlength fields reject loading rather than truncate data.
-Customer business status does not change the independent User login policy.
-
-Revisions `20261003_0006` and `20261003_0007` incorporate the integer-role
-identity schema directly, without an intermediate string-role migration.
-The subsequent `20261003_0008` revision and operator migrations 0009/0010 are
-separate changes; the current local head is `20261004_0010`.
-0006 preflights legacy identities, bounded fields, and canonical Customer statuses
-before any DDL, then creates integer role keys/memberships, bounded User/Customer
-fields, and nullable Operator components without invented backfill. Populated
-legacy users require explicit `-x legacy-user-status=active|inactive`; credentials,
-subjects, locales, and creation timestamps are preserved.
-0007 validates the final role catalog and exact customer associations before any
-DDL, records migration audits, and removes the legacy User customer foreign key.
-Both revisions use frozen/reflected schemas, not mutable application models.
-Downgrades reject loss of staff, lifecycle state, or audit history; an empty schema
-can downgrade safely. Retain a verified backup for populated rollback and obtain
-separate approval for PostgreSQL rehearsal; offline SQLite tests are not live acceptance.
-
-After the specific target, backup, write operation, and legacy activation policy have
-been approved, supply their environment explicitly. From repository root:
+Confirm the database target, backup, authorized write operation and legacy identity
+policy before upgrading a populated database. Identity revisions preflight bounded
+fields, role memberships and customer associations; later revisions add operator
+ownership and recorded-effect contracts. Do not reset a populated database to
+bypass a preflight failure or infer staff ownership from archived reviewer IDs.
 
 ```powershell
 rtk proxy uv run --project app\business-api\data --env-file <approved-env-file> alembic -c app\business-api\data\alembic.ini -x legacy-user-status=<approved-active-or-inactive> upgrade head
 ```
 
-Replace the policy placeholder with exactly `active` or `inactive`; do not silently
-activate legacy users. This generic command is not evidence for any other target.
-
-On 2026-10-03, the authorized loopback PostgreSQL 13.0 database was backed up with
-`pg_dump --format=custom` and its archive checked with `pg_restore --list`. Alembic
-applied both revisions from `20261001_0005` to `20261003_0007`, with explicit
-`legacy-user-status=inactive`: the 10 legacy users had no established lifecycle
-column, so the authorized fail-closed policy avoided silently activating accounts.
-All nine existing tables retained their counts and content digests; the comparison
-reconstructed the removed customer column from CustomerUser. Subjects, credentials,
-locales, creation timestamps and customer mappings were preserved. Live reflection
-matched runtime CHECK names, bounded/nullability fields, PK/UNIQUE/FK contracts and
-indexes, including all 13 additional indexes. All 10 customer memberships and
-migration audits were verified; admin and operator counts were both zero.
-Activation, staff provisioning, interrupted recovery, concurrency, query-planner
-behavior, service/browser acceptance and remote migration remain separate gates.
-Do not reset/downgrade a populated database to resolve preflight conflicts: correct
-approved source records or mappings, then retry with preserved identity history.
-
-Use the existing `scripts/run_pipeline.py` orchestrator for any separately approved
-data load (EDA → scope → load → verification), followed by explicit customer seeding
-and explicit [administrator bootstrap](../identity/README.md#explicit-administrator-bootstrap).
-Neither ingestion nor service startup automatically migrates or provisions identities.
-
-## Identity/Customer index coverage
-
-CHECK constraints do not create indexes. Revision 0006 creates the additional
-User, Customer, Operator and membership indexes; 0007 creates audit indexes.
-Runtime SQLModel metadata declares the same names and column order. Safe downgrade
-removes only the added indexes and preserves legacy email indexes.
-
-| Index or existing key                                                                                       | Fields                     | Evidence / purpose                                                                                                               |
-| ----------------------------------------------------------------------------------------------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| Existing `ix_users_email` (unique)                                                                          | email                      | Identity login, email conflict checks, operator-list email ordering; covers both email CHECKs                                    |
-| Existing User PK                                                                                            | id                         | Token authentication and lifecycle point lookups                                                                                 |
-| Existing Role name UNIQUE / id PK                                                                           | name / id                  | Role resolution and catalog CHECK coverage                                                                                       |
-| `ix_user_roles_role_user`                                                                                   | role_id, user_id           | `bootstrap.py` role filter; `service.py` operator-list role join followed by user lookup; email ordering remains a separate sort |
-| Existing CustomerUser PK / customer_id UNIQUE                                                               | user_id / customer_id      | Profile lookup and unique customer association                                                                                   |
-| Existing Operator PK                                                                                        | user_id                    | Profile lookup and real support-case ownership; revision 0010 removes the optional simulated reviewer association                |
-| Existing Customer PK / `ix_customers_email`                                                                 | customer_id / email        | Account customer/email lookups, seeding and verification cohort filters                                                          |
-| `ix_users_status`, `ix_users_identity_version`, `ix_users_locale`, `ix_users_name`                          | Corresponding single field | Explicit CHECK-field coverage only; current authentication reads by PK/email then checks state in Python                         |
-| `ix_operators_first_name`, `ix_operators_last_name`                                                         | Corresponding single field | Explicit length-CHECK coverage only; no name search currently                                                                    |
-| `ix_customers_first_name`, `ix_customers_last_name`, `ix_customers_country`, `ix_customers_customer_status` | Corresponding single field | Explicit CHECK-field coverage only; current service queries do not filter these fields                                           |
-| Existing `ix_identity_audits_target_id`                                                                     | target_id                  | Target audit selection in Identity regression checks; no production audit-list endpoint                                          |
-| `ix_identity_audits_action`, `ix_identity_audits_result`                                                    | Corresponding single field | Action selection in boundary tests; both catalog CHECKs covered, result coverage-only                                            |
-
-Each CHECK field has a usable leading index/key column; no duplicate PK, UNIQUE,
-or existing composite-prefix index is added. The role/user composite does not
-replace the user_id PK: its reverse leading column supports role-to-user traversal.
-Low-cardinality status, locale, version and audit catalog indexes may be ignored
-by PostgreSQL and incur storage/write overhead; their inclusion satisfies the
-explicit CHECK-coverage requirement, not a measured performance improvement.
-Name length indexes cover the field, not the `length(...)` validation expression.
-
-No scoped production query filters or sorts User creation/update timestamps,
-Customer registration dates, or audit occurrence time. Date and actor indexes
-are therefore deferred rather than inventing chronological/admin query patterns.
-Existing Product/Transaction date composites remain unchanged and outside scope.
-Offline metadata, historical replay, safe downgrade and rejected-transaction
-rollback tests verify index contracts; PostgreSQL EXPLAIN/selectivity, transactional
-mid-DDL recovery and migration on other targets remain unverified and require separate
-authorization. No login, profile, JWT, ownership or lifecycle policy changes accompany indexes.
-
-Offline validation after the index refactor (repository root):
-
-| Exact command                                                                                        | Result               |
-| ---------------------------------------------------------------------------------------------------- | -------------------- |
-| `rtk proxy uv run --directory app\business-api\data --offline pytest -q --tb=short`                  | 88 passed            |
-| `rtk proxy uv run --directory app\business-api\identity --offline pytest -q --tb=short`              | 62 passed            |
-| `rtk proxy uv run --directory app\business-api\account --offline python -m pytest -q --tb=short`     | 75 passed, 1 skipped |
-| `rtk proxy uv run --directory app\business-api\transaction --offline python -m pytest -q --tb=short` | 86 passed, 1 skipped |
-
-Identity, Account and Transaction emit an existing Starlette/httpx deprecation
-warning. Skipped tests are not runtime-verification evidence.
-
-## Product Types
-
-Ingestion normalizes `products.product_type` using the shared
-[product catalog](../shared/banking_shared/product_types.py). Canonical labels are
-Savings Account, Checking Account, Investment, Mortgage Loan, Personal Loan,
-Insurance, Credit Card and Debit Card. Known Spanish source labels, including
-both personal-loan spellings, are accepted with surrounding whitespace, case and
-accent normalization. Unknown scoped types reject the dimension transaction before
-commit; products outside a selected customer filter do not affect that load.
-
-Account, Transaction and BFF category queries use only canonical English labels.
-Spanish compatibility belongs to ingestion normalization, not database query filters.
-BFF product types and Account
-card names are canonical English; Account card `type` remains `credit`/`debit`.
-This does not migrate existing database rows. The user reports manually converting
-historical labels; that conversion was not independently verified in this follow-up.
-Rerun live scoped parity verification before closing the data gate.
-The existing manifest count/orphan checks do not independently verify label semantics.
-
-## Pipeline
-
-Use `run_pipeline.py` for normal operation. It executes the individual scripts in this
-order and stops if a command fails or EDA does not approve the requested window.
-
-```mermaid
-flowchart LR
-	A[EDA profile] --> B[Scope selection]
-	B --> C[Scoped load]
-	C --> D[Load verification]
-```
-
-The user supplies `--start-date` and `--end-date`. For a one-day migration, use the same
-date for both arguments. The optional `--customer-ids` argument accepts one comma-separated
-string and limits customer-owned data to those IDs.
+Replace the policy value with exactly `active` or `inactive` when migrating legacy
+users. Never silently activate them. Backups require independent restore validation;
+offline migration tests do not establish live rollback or PostgreSQL concurrency.
 
 ## Environment
 
-The local `app/business-api/data/.env` file must define:
+Copy [.env.example](.env.example) to the ignored local `.env`, configure the approved
+target and pass the file explicitly to `uv`. Never print connection credentials or
+place passwords in command arguments, reports or source control.
 
-```dotenv
-DATABASE_URL=postgresql+psycopg://...
-DATA_SOURCE_DIR=C:/Factored/data
-DATA_ARTIFACTS_DIR=C:/Factored/factored-hackathon-2026-cristopher-coronado/app/business-api/data/artifacts
-DATA_MANIFEST_DIR=C:/Factored/factored-hackathon-2026-cristopher-coronado/app/business-api/data/artifacts
-DEMO_USER_PASSWORD=
-```
+| Variable                   | Purpose                                                                             |
+| -------------------------- | ----------------------------------------------------------------------------------- |
+| `DATABASE_URL`             | PostgreSQL SQLAlchemy connection URL for database scripts                           |
+| `DATA_SOURCE_DIR`          | Required pipeline root containing dimension CSVs and transaction partitions         |
+| `DATA_ARTIFACTS_DIR`       | EDA and scope output directory; defaults to this module's `artifacts`               |
+| `DATA_MANIFEST_DIR`        | Load-manifest directory, not a JSON filename; also defaults to `artifacts`          |
+| `DEMO_USER_PASSWORD`       | Explicit customer identity seeding only; no default                                 |
+| `ADMIN_BOOTSTRAP_EMAIL`    | First-administrator email for Identity's explicit `--credentials-from-env` mode     |
+| `ADMIN_BOOTSTRAP_PASSWORD` | First-administrator password for that mode; must differ from the demo-user password |
 
-| Variable             | Purpose                                                                           |
-| -------------------- | --------------------------------------------------------------------------------- |
-| `DATABASE_URL`       | PostgreSQL SQLAlchemy connection URL.                                             |
-| `DATA_SOURCE_DIR`    | Directory containing dimension CSVs and the partitioned `transactions` directory. |
-| `DATA_ARTIFACTS_DIR` | Directory for EDA profiles and scope manifests.                                   |
-| `DATA_MANIFEST_DIR`  | Directory for load manifests. This is a directory, not a JSON filename.           |
-| `DEMO_USER_PASSWORD` | Shared password hashed for users created by `seed_demo_users.py`.                 |
+Neither customer-seeding nor administrator credentials are ingestion prerequisites.
+The pipeline does not run Alembic, provision identities, build snapshots or evaluate
+fraud thresholds. Administrator settings are consumed by the separate
+[Identity bootstrap CLI](../identity/README.md#explicit-administrator-bootstrap),
+not by data ingestion.
 
-The orchestrator derives a new manifest filename from the requested window. A fixed
-`DATA_MANIFEST_PATH` is intentionally not used because it would overwrite the evidence
-from a previous run.
+## Canonical ingestion pipeline
 
-Always pass the environment file explicitly to `uv`; it is ignored by Git and is not
-loaded automatically.
+Use [run_pipeline.py](scripts/run_pipeline.py) for normal operation:
 
-Copy `app/business-api/data/.env.example` to the ignored
-`app/business-api/data/.env`, replace its example values, and keep the real password out
-of source control.
-
-## Recommended Command
-
-### Migrate one day
-
-This command runs all four pipeline stages for March 1, 2026:
-
-```powershell
-uv run --project app/business-api/data --env-file app/business-api/data/.env python app/business-api/data/scripts/run_pipeline.py --start-date 2026-03-01 --end-date 2026-03-01
-```
-
-### Migrate a date range
-
-This command runs all four stages for every daily partition from March 1 through May 31:
-
-```powershell
-uv run --project app/business-api/data --env-file app/business-api/data/.env python app/business-api/data/scripts/run_pipeline.py --start-date 2026-03-01 --end-date 2026-05-31
-```
-
-`--batch-size` is optional and defaults to `50`.
-
-### Migrate selected customers
-
-For a demo-sized load, pass at most three customer IDs as one comma-separated string:
-
-```powershell
-uv run --project app/business-api/data --env-file app/business-api/data/.env python app/business-api/data/scripts/run_pipeline.py --start-date 2026-03-01 --end-date 2026-03-01 --customer-ids CUSTOMER_A,CUSTOMER_B,CUSTOMER_C
-```
-
-The parser trims whitespace and removes duplicate IDs. A supplied value that contains no
-IDs is rejected. The loader also fails before committing dimensions when a requested ID is
-not present in `customers.csv`.
-
-The filter affects these tables:
-
-| Table          | Filter behavior                                                     |
-| -------------- | ------------------------------------------------------------------- |
-| `branches`     | Loads the complete shared catalog.                                  |
-| `customers`    | Loads only requested customer IDs.                                  |
-| `products`     | Loads products owned by requested customers.                        |
-| `transactions` | Loads transactions owned by requested customers in the date window. |
-
-Filtering reduces PostgreSQL writes, but the pipeline still scans the source CSV files to
-find matching rows. EDA profiles customer-owned tables using the same filter.
-
-## Artifact Names
-
-Every pipeline run produces three JSON artifacts. One day uses one date in each name;
-a range uses both inclusive endpoints.
-
-| Run     | EDA profile                              | Scope manifest                              | Load manifest                              |
-| ------- | ---------------------------------------- | ------------------------------------------- | ------------------------------------------ |
-| One day | `eda_profile_2026-03-01.json`            | `scope_manifest_2026-03-01.json`            | `load_manifest_2026-03-01.json`            |
-| Range   | `eda_profile_2026-03-01_2026-05-31.json` | `scope_manifest_2026-03-01_2026-05-31.json` | `load_manifest_2026-03-01_2026-05-31.json` |
-
-Filtered runs append `customers-<count>-<hash>` to all three names. The stable hash is
-derived from the normalized customer IDs, so rerunning the same customer set uses the same
-artifacts while a different set does not overwrite them.
-
-The load manifest is the audit record for one execution. It contains source checksums,
-processed row counts, data adjustments, per-day outcomes, and failed-day details.
-It also records `customer_filter.mode` and the normalized `customer_filter.customer_ids`
-array. Verification always receives the exact manifest generated by the load stage and
-scopes customer-owned count and orphan checks to those IDs.
-
-## Transaction Behavior
-
-Dimensions are committed before transaction partitions. Transactions are then processed
-one day at a time:
-
-- A successful day commits independently.
-- A failed day rolls back only that day.
-- Remaining days continue loading.
-- The manifest status is `completed_with_errors` when any day fails.
-
-Progress output includes:
-
-```text
-OK day=YYYY-MM-DD rows=N progress=X/Y
-FAIL day=YYYY-MM-DD progress=X/Y error=...
-Summary days_total=N days_loaded=N days_failed=N rows_loaded_total=N
-```
-
-## Idempotency
-
-EDA and scope selection only read source files and overwrite artifacts with the same
-date-derived name. Loading uses PostgreSQL upsert by primary key, so repeating a window
-does not create duplicate rows. Existing rows with matching primary keys are updated.
-
-## Seed Demo Users
-
-After loading the selected customers, create their persisted login identities with one
-shared password from `DEMO_USER_PASSWORD` (no default; outer whitespace is trimmed).
-When `ADMIN_BOOTSTRAP_PASSWORD` is configured, customer seeding rejects the same
-password before database access. Keep administrator and customer credentials in
-separately named environment variables; do not place passwords in CLI arguments
-or manifests. Administrator environment opt-in does not opt ingestion into seeding:
-
-```powershell
-uv run --project app/business-api/data --env-file app/business-api/data/.env python app/business-api/data/scripts/seed_demo_users.py --customer-ids CUSTOMER_A,CUSTOMER_B,CUSTOMER_C
-```
-
-The command uses each customer's stored email and copies `first_name`/`last_name`
-into the login identity's `name` on both creation and refresh. Each component is trimmed;
-nonempty components are joined with one space. Partial names are retained, and missing
-or blank components produce a null name when neither component is available. This code
-mapping does not backfill existing identities; do not run refresh as a name-only repair,
-since it also changes credentials, status, and token version.
-
-Locale is inferred from `customers.country`:
-`Brazil` or `Brasil` maps to `pt`, and every other country maps to `es`. Pass
-`--locale es` or `--locale pt` only when every selected user needs the same explicit
-override.
-
-Apply the identity migrations before explicitly authorized seeding. Customer identities
-use `CustomerUser` and the controlled customer role, not `User.customer_id`. New customer
-identities are active; refresh explicitly activates only the selected customer identities,
-preserves their subject and creation time, updates `updated_at`, and increments
-`identity_version` to revoke existing tokens. Unselected users remain unchanged; normal
-CSV ingestion does not activate or seed identities. The non-secret manifest includes
-login `status`. Each
-write records a secret-free `customer_migrate` audit event. Email collisions or invalid
-associations roll back the entire seed without reassigning or promoting staff.
-
-Users outside the selected list are unchanged. Unknown customer IDs are reported and
-skipped. A non-secret manifest is written under `DATA_ARTIFACTS_DIR`.
-
-[Identity](../identity/README.md) authenticates these persisted rows. The
-[Responses BFF](../../responses-bff/README.md) forwards identity operations and has no
-`DATABASE_URL`, ORM access, or copied password hashes.
-
-## Monthly Product Snapshots
-
-`product_monthly_snapshots` is an estimated operational projection built from the existing
-PostgreSQL `products` and `transactions` rows. It does not rerun CSV ingestion. Each row
-stores a product's reconstructed closing balance for one complete calendar month, that
-month's approved transaction movement, and the current-balance anchor used by the
-calculation.
-
-The source stores every transaction amount as a positive value and does not provide a
-debit/credit direction column. Profile the selected data before building snapshots:
-
-```powershell
-uv run --project app/business-api/data --env-file app/business-api/data/.env python app/business-api/data/scripts/profile_transaction_semantics.py --customer-ids CUSTOMER_A,CUSTOMER_B
-```
-
-The profile reports aggregate statuses, types, signs, date coverage, and product ownership
-or currency mismatches. The dataset has no external accounting source, signed amount,
-transfer destination, or reversal reference. Digital events were also tested as a possible
-cross-check, but they do not link to transactions by identifier, amount, or time.
-
-The snapshot scripts therefore use this explicit default estimation policy:
-
-| Source value                                    | Snapshot treatment                                   |
-| ----------------------------------------------- | ---------------------------------------------------- |
-| `Approved`                                      | Included; every other status has zero balance effect |
-| `Deposit`                                       | Credit                                               |
-| `Payment`, `Purchase`, `Transfer`, `Withdrawal` | Debit                                                |
-| `Adjustment`                                    | Excluded because its direction is unknown            |
-
-`Transfer` is treated as an outbound movement from the row's `product_id`. The policy is
-stored on every snapshot. `excluded_approved_transaction_amount` reports the unsigned
-adjustments in that month, while `balance_uncertainty_amount` accumulates excluded amounts
-between the snapshot close and the current-balance anchor. The estimated balance range is
-`closing_balance ± balance_uncertainty_amount`.
-
-Apply the schema migration after the classification, specific database target and
-write operation are approved. `upgrade head` also includes the identity revisions:
-use the [explicit legacy-status migration command](#customer-and-identity-schema)
-above rather than silently activating existing users.
-
-Run a non-persisting calculation first. The default policy above requires no classification
-arguments:
-
-```powershell
-uv run --project app/business-api/data --env-file app/business-api/data/.env python app/business-api/data/scripts/build_monthly_snapshots.py --customer-ids CUSTOMER_A,CUSTOMER_B --dry-run
+```mermaid
+flowchart LR
+    A[EDA profile] --> B[Scope checks]
+    B --> C[Scoped load]
+    C --> D[Manifest verification]
 ```
 
 ```powershell
-uv run --project app/business-api/data --env-file app/business-api/data/.env python app/business-api/data/scripts/build_monthly_snapshots.py --customer-ids CUSTOMER_A,CUSTOMER_B
+rtk proxy uv run --project app\business-api\data --env-file app\business-api\data\.env python app\business-api\data\scripts\run_pipeline.py --start-date 2026-03-01 --end-date 2026-05-31 --customer-ids CUSTOMER_A,CUSTOMER_B
 ```
 
-The default window begins in the first loaded transaction month and ends in the month
-before the latest loaded transaction date. This excludes a partial current month. Use
-first-of-month ISO dates with `--start-month` and `--end-month` to narrow the window.
-Rebuilding is idempotent by `(product_id, snapshot_month)`.
+Dates are required, inclusive and ordered. For one day, supply the same date twice.
+`--batch-size` must be positive and defaults to `50`. Customer filtering is optional;
+for demo loads, prefer at most three explicitly selected customers.
 
-Verify with the identical customer scope and optional month boundaries:
+The pipeline stops on a nonzero stage exit or a scope manifest without
+`"approved": true`. Scope approval is an automatic quality-threshold check, not
+human authorization for a database write. Default checks permit a maximum null rate
+of `0.3` and duplicate rate of `0.05`, and reject missing daily partitions.
+
+### Customer filtering and normalization
+
+`--customer-ids` accepts one comma-separated string, trims whitespace and removes
+duplicates. A supplied empty selection is rejected. Every requested customer must
+exist; selected transactions must reference products within the same cohort.
+
+| Table          | Filter behavior                                          |
+| -------------- | -------------------------------------------------------- |
+| `branches`     | Complete shared catalog                                  |
+| `customers`    | Selected customer IDs                                    |
+| `products`     | Products owned by selected customers                     |
+| `transactions` | Selected customers within the requested partition window |
+
+Filtering reduces writes, not the need to scan source CSVs. EDA uses the same
+customer filter for customer-owned tables. Optional invalid branch references are
+normalized to null and counted as adjustments.
+
+Customer statuses normalize to `Active`, `Inactive`, `Suspended` or `Closed`;
+blank legacy values remain null. Unknown statuses and overlength Customer fields
+reject loading rather than truncate data. Business status is independent of User
+login status.
+
+Product types normalize through the
+[canonical product catalog](../shared/banking_shared/product_types.py): Savings
+Account, Checking Account, Investment, Mortgage Loan, Personal Loan, Insurance,
+Credit Card and Debit Card. Known Spanish labels accept whitespace, case and accent
+normalization. Unknown scoped types reject the dimension transaction. Account and
+Transaction queries use canonical English values; the BFF is DB-free, not a
+financial-query layer. Normalization code does not prove existing-row parity.
+
+Transaction mapping includes `amount_usd`, `transaction_country`,
+`transaction_city`, `response_code`, `is_fraud` and `fraud_score`. Missing fraud
+scores remain missing; ingestion does not compute or invent them.
+
+### Commits and partial failures
+
+Branches, customers and products share one dimension transaction, committed before
+transaction loading. Each transaction day commits or rolls back independently;
+a failed day does not undo successful days or prevent later days from running.
+The manifest records `completed_with_errors` if any day fails.
+
+**A successful pipeline exit is not proof that every requested day loaded.** The
+loader can exit successfully after partial failures, and verification accepts
+`completed_with_errors` when its checks pass and rejected rows are zero. Inspect
+per-day outcomes and failed-day details before claiming complete-window success.
+
+### Artifacts and verification
+
+The pipeline generates `eda_profile_<window>.json`, `scope_manifest_<window>.json`
+and `load_manifest_<window>.json`. A one-day window uses one ISO date; a range uses
+both endpoints. Filtered names append `customers-<count>-<hash>`, using normalized,
+sorted IDs and the first eight SHA256 characters. The same cohort/window reuses
+filenames: preserve copies separately when immutable execution history is needed.
+
+The load manifest records checksums, processed counts, adjustments, customer-filter
+metadata and per-day outcomes. Verification consumes that exact manifest:
+
+- Branch counts are global; Customer/Product counts and orphan checks use the cohort.
+- Transaction counts use source rows and successfully loaded dates.
+- Source checksums detect changed input files.
+
+The loader currently hardcodes `migration_revision` to `20260928_0001`; this field
+is not a reliable database-head assertion. Check Alembic separately. Count/orphan
+verification does not establish field-level semantics, complete-window success,
+runtime-effect reconciliation or customer-facing service parity.
+
+### Repeatability and runtime effects
+
+Primary-key upserts avoid duplicate source rows when a window is repeated. Existing
+source rows can change. Runtime transaction IDs are protected from ingestion
+updates by both a precheck and the PostgreSQL conflict condition.
+
+Product upserts still replace source `current_balance` and `product_status`.
+Consequently, reloading products is **not** a guarantee that recorded runtime balance
+or protection effects survive. Review this separately before reloading a database
+with operational effects; do not treat ingestion idempotency as financial reconciliation.
+
+## Script inventory
+
+Use individual stages only for diagnosis or an explicitly scoped rerun. Keep dates,
+customer IDs and artifact paths aligned; prefer the orchestrator for ordinary loads.
+Each script exposes its argument contract through `--help`.
+
+| Script                                                                       | Inputs / purpose                                                          | Boundary                                                                                            |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| [run_pipeline.py](scripts/run_pipeline.py)                                   | Environment, explicit dates and optional cohort                           | Runs the four ingestion stages only                                                                 |
+| [inspect_sources.py](scripts/inspect_sources.py)                             | `--source`, `--output`, optional dates; columns, row counts and checksums | Metadata inventory, not semantic verification                                                       |
+| [eda_profile.py](scripts/eda_profile.py)                                     | Source CSV profiling, nulls and capped distinct samples                   | `top_values` can be sampled; not exact full frequencies                                             |
+| [eda_select_scope.py](scripts/eda_select_scope.py)                           | Profile, dates and output scope manifest                                  | Automatic thresholds; not human consent                                                             |
+| [load_scoped_data.py](scripts/load_scoped_data.py)                           | Source, dates and load manifest                                           | Direct invocation does not consume or enforce scope approval                                        |
+| [verify_load.py](scripts/verify_load.py)                                     | Source and exact load manifest                                            | Checks checksums, scoped counts and orphans                                                         |
+| [seed_demo_users.py](scripts/seed_demo_users.py)                             | Selected customers and externally supplied password                       | Explicit identity provisioning/refresh                                                              |
+| [profile_transaction_semantics.py](scripts/profile_transaction_semantics.py) | PostgreSQL aggregates and optional cohort                                 | Coverage/distributions include all source kinds; ownership/currency mismatch checks use source rows |
+| [evaluate_fraud_threshold.py](scripts/evaluate_fraud_threshold.py)           | `--source`, `--output`, optional dates/thresholds and `--describe`        | Offline CSV analysis against synthetic labels; no customer filter or online detection               |
+| [build_monthly_snapshots.py](scripts/build_monthly_snapshots.py)             | PostgreSQL products/transactions, cohort and optional months              | Estimated projection; supports non-persisting `--dry-run`                                           |
+| [verify_monthly_snapshots.py](scripts/verify_monthly_snapshots.py)           | Same cohort/months as builder                                             | Shared-calculation consistency, not independent accounting reconciliation                           |
+
+The fraud-threshold analysis reports TP/FP/TN/FN, precision, recall and F1. Missing
+labels are skipped and missing scores counted. Percentiles in describe mode use a
+sample (`--sample-every 50` by default). Results do not change service triage policy.
+
+## Explicit demo identity seeding
+
+After migrations and an approved customer load, supply `DEMO_USER_PASSWORD` outside
+source control and explicitly run:
 
 ```powershell
-uv run --project app/business-api/data --env-file app/business-api/data/.env python app/business-api/data/scripts/verify_monthly_snapshots.py --customer-ids CUSTOMER_A,CUSTOMER_B
+rtk proxy uv run --project app\business-api\data --env-file app\business-api\data\.env python app\business-api\data\scripts\seed_demo_users.py --customer-ids CUSTOMER_A,CUSTOMER_B
 ```
 
-Use `--credit-types`, `--debit-types`, and `--excluded-types` together to override the
-default. The three sets must be disjoint and classify every observed approved type.
+Outer password whitespace is trimmed. When `ADMIN_BOOTSTRAP_PASSWORD` is configured,
+seeding rejects the same password before database access. Passwords/hashes are never
+written to the output manifest.
 
-Omitting `--customer-ids` requires the explicit `--allow-all-customers` switch because an
-unscoped build may create snapshots for every product.
+The seed uses stored Customer email, controlled customer-role membership and
+`CustomerUser` associations. Names join trimmed nonempty first/last components,
+or remain null if both are absent. Country `Brazil`/`Brasil` defaults to `pt`;
+other countries default to `es`. `--locale` explicitly overrides the selected cohort.
 
-## Individual Commands
+New identities are active. **Refresh rotates credentials, activates the selected
+identity and increments `identity_version`, invalidating existing tokens.** It
+preserves subject and creation time; never use it implicitly as a name-only repair.
+Unknown customers are reported and skipped, while email collisions or invalid
+associations roll back the seed. Successful writes record secret-free
+`customer_migrate` audits and a non-secret manifest. Unselected users remain unchanged.
 
-These commands are intended for diagnosis or rerunning one stage. Execute them in the
-listed order and keep all dates and artifact paths aligned.
+Normal ingestion does not seed or activate users. The
+[Responses BFF](../../responses-bff/README.md) forwards Identity operations;
+it never reads PostgreSQL or verifies passwords.
 
-### 1. Create the EDA profile
+### First-administrator bootstrap
+
+Administrator provisioning belongs to Identity's `banking-bootstrap-admin` CLI,
+implemented in [bootstrap.py](../identity/identity/bootstrap.py), not to
+[seed_demo_users.py](scripts/seed_demo_users.py). It requires migrated roles, a
+separately approved database/write operation, `--locale` and `--confirm-bootstrap`.
+It refuses an existing administrator or email identity; it is not a reset or
+promotion command and never runs at application startup.
+
+The default mode prompts for a hidden password and confirmation. Only explicit
+`--credentials-from-env` mode consumes `ADMIN_BOOTSTRAP_EMAIL` and
+`ADMIN_BOOTSTRAP_PASSWORD`. Keep `DEMO_USER_PASSWORD` and
+`ADMIN_BOOTSTRAP_PASSWORD` configured during either provisioning path to enforce
+the distinct-password check before database access.
+
+See the [Identity administrator-bootstrap guide](../identity/README.md#explicit-administrator-bootstrap)
+for commands, input constraints and the Windows example that loads Identity settings
+alongside this module's ignored `.env`. Both environment files must target the same
+approved database; setting variables alone does not authorize or execute provisioning.
+
+## Estimated monthly snapshots
+
+Snapshots reconstruct product closing balances from persisted data; they are
+estimates, not an external accounting ledger or a CSV reload. Profile semantics
+before calculating them:
 
 ```powershell
-uv run --project app/business-api/data --env-file app/business-api/data/.env python app/business-api/data/scripts/eda_profile.py --source C:\Factored\data --output app/business-api/data/artifacts/eda_profile_2026-03-01.json --start-date 2026-03-01 --end-date 2026-03-01
+rtk proxy uv run --project app\business-api\data --env-file app\business-api\data\.env python app\business-api\data\scripts\profile_transaction_semantics.py --customer-ids CUSTOMER_A,CUSTOMER_B
+rtk proxy uv run --project app\business-api\data --env-file app\business-api\data\.env python app\business-api\data\scripts\build_monthly_snapshots.py --customer-ids CUSTOMER_A,CUSTOMER_B --dry-run
 ```
 
-### 2. Select and approve the scope
+| Canonical source value                          | Default estimation treatment                                         |
+| ----------------------------------------------- | -------------------------------------------------------------------- |
+| `Approved`                                      | Source transactions included; other statuses have no movement effect |
+| `Deposit`                                       | Credit                                                               |
+| `Payment`, `Purchase`, `Transfer`, `Withdrawal` | Debit; Transfer is outbound from the row's product                   |
+| `Adjustment`                                    | Excluded because direction is unknown                                |
+
+Rows store the policy and current-balance anchor. Excluded approved amounts are
+reported for each month; accumulated excluded amounts between closing and the
+anchor define the uncertainty amount. The estimated range is closing balance plus
+or minus that amount, not a guaranteed error bound against an external ledger.
+
+Default months run from the first transaction month through the month before the
+latest transaction. Explicit `--start-month`/`--end-month` require first-of-month
+ISO dates. Omitted customer IDs require `--allow-all-customers`. Override
+`--credit-types`, `--debit-types` and `--excluded-types` together; disjoint sets must
+classify every observed approved type.
+
+After authorizing persistence, remove `--dry-run`; rows upsert by
+`(product_id, snapshot_month)`. Verify with the identical customer scope and months:
 
 ```powershell
-uv run --project app/business-api/data --env-file app/business-api/data/.env python app/business-api/data/scripts/eda_select_scope.py --profile app/business-api/data/artifacts/eda_profile_2026-03-01.json --output app/business-api/data/artifacts/scope_manifest_2026-03-01.json --start-date 2026-03-01 --end-date 2026-03-01
+rtk proxy uv run --project app\business-api\data --env-file app\business-api\data\.env python app\business-api\data\scripts\verify_monthly_snapshots.py --customer-ids CUSTOMER_A,CUSTOMER_B
 ```
 
-Confirm that the scope JSON contains `"approved": true` before loading manually.
+Coverage includes all transaction source kinds, but reconstructed movements include
+only approved source rows. The current Product balance may already contain runtime
+compensation. These inputs are not a reconciled source/runtime accounting model.
+The verifier reuses builder logic: passing confirms calculation consistency, not
+independent financial accuracy or actual frontend use.
 
-### 3. Load the approved window
+## Focused checks and related guides
+
+[Data tests](tests) cover pipeline orchestration, normalization, seeding, manifests,
+snapshots, schema/migrations and runtime transaction collision protection. That
+collision coverage does not prove Product balance/status preservation.
 
 ```powershell
-uv run --project app/business-api/data --env-file app/business-api/data/.env python app/business-api/data/scripts/load_scoped_data.py --source C:\Factored\data --manifest app/business-api/data/artifacts/load_manifest_2026-03-01.json --start-date 2026-03-01 --end-date 2026-03-01 --batch-size 50
+rtk proxy uv run --directory app\business-api\data --offline pytest tests\test_run_pipeline.py tests\test_legacy_manifest_verification.py tests\test_runtime_ingestion.py -q
 ```
 
-### 4. Verify the same load manifest
-
-Run verification only after the loader has created the manifest:
-
-```powershell
-uv run --project app/business-api/data --env-file app/business-api/data/.env python app/business-api/data/scripts/verify_load.py --source C:\Factored\data --manifest app/business-api/data/artifacts/load_manifest_2026-03-01.json
-```
-
-If verification reports `FileNotFoundError`, the manifest path does not match the load
-command or verification ran before loading completed.
+This is a check command, not a recorded result. See the
+[business API guide](../README.md), [Identity guide](../identity/README.md),
+[Transaction guide](../transaction/README.md) and
+[deployment guide](../../../docs/deployment-guide.md) for service contracts and rollout.
+Keep offline, local PostgreSQL, customer-facing and deployed evidence separate.
