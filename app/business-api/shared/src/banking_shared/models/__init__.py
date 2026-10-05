@@ -20,3 +20,4 @@ from banking_shared.models.products import Product, ProductMonthlySnapshot
 from banking_shared.models.transactions import TransactionRecord
 from banking_shared.models.effects import RuntimePosting, CardProtection
 from banking_shared.models.cases import SUPPORT_CASE_STATUSES, SupportCase, SupportCaseEvent
+from banking_shared.models.conversations import CaseConversationSnapshot
