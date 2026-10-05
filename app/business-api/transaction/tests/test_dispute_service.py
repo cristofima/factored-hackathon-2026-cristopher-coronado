@@ -20,6 +20,7 @@ from sqlmodel import Session, create_engine, select
 
 import dispute_routers
 from dispute_service import CardOnlyDisputeError, SupportCaseService
+from models import DisputeCase
 from jwt_identity import get_jwt_customer_id
 
 NOW = datetime.now(timezone.utc)
@@ -160,7 +161,7 @@ def test_account_dispute_rejected_without_writes_and_legacy_cases_readable(
     app.include_router(dispute_routers.router, prefix="/api/support-cases")
     app.dependency_overrides[get_jwt_customer_id] = lambda: "customer-owned"
     with TestClient(app) as client:
-        response = client.post("/api/support-cases", json={
+        response = client.post("/api/support-cases/preview", json={
             "transactionId": "tx-low-risk", "reason": "Unrecognized",
         })
     assert response.status_code == 400
@@ -203,7 +204,7 @@ def test_new_disputes_accept_both_card_types(
 def test_duplicate_route_returns_controlled_conflict(
     session_factory: Callable[[], Session], monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    service = SupportCaseService(session_factory)
+    service = SupportCaseService(session_factory, preview_secret="test-preview-signing-key-only")
     monkeypatch.setattr(dispute_routers, "service", service)
     app = FastAPI()
     app.include_router(dispute_routers.router, prefix="/api/support-cases")
@@ -211,9 +212,16 @@ def test_duplicate_route_returns_controlled_conflict(
     payload = {"transactionId": "tx-low-risk", "reason": "Unrecognized charge"}
 
     with TestClient(app) as client:
-        created = client.post("/api/support-cases", json=payload)
+        preview = client.post("/api/support-cases/preview", json=payload)
+        assert preview.status_code == 200
+        token_payload = {"previewToken": preview.json()["previewToken"]}
+        assert client.post("/api/support-cases/recovery", json=token_payload).json() is None
+        created = client.post("/api/support-cases", json=token_payload)
         assert created.status_code == 201
-        duplicate = client.post("/api/support-cases", json=payload)
+        assert created.json()["status"] == "IN_REVIEW"
+        assert client.post("/api/support-cases", json=token_payload).json() == created.json()
+        assert client.post("/api/support-cases/recovery", json=token_payload).json() == created.json()
+        duplicate = client.post("/api/support-cases/preview", json=payload)
         assert duplicate.status_code == 409
         assert duplicate.json() == {"detail": {"code": "DISPUTE_ALREADY_ACTIVE"}}
         assert len(service.list_cases("customer-owned")) == 1
@@ -231,7 +239,7 @@ def test_open_route_preserves_resource_denial(
 
     with TestClient(app) as client:
         response = client.post(
-            "/api/support-cases",
+            "/api/support-cases/preview",
             json={"transactionId": transaction_id, "reason": "Unrecognized charge"},
         )
         assert response.status_code == 403
@@ -253,8 +261,8 @@ def test_low_fraud_score_case_stays_in_review_until_explicit_resolution(
     assert resolved.resolvedAt is None
     assert resolved.recommendationType is None
     assert service.get_case(opened.caseId, "customer-owned") == resolved
-    assert resolved.financialEffectsStatus == "NOT_IMPLEMENTED"
-    assert resolved.cardProtectionStatus == "NOT_IMPLEMENTED"
+    assert resolved.financialEffectsStatus == "NOT_EXECUTED"
+    assert resolved.cardProtectionStatus == "NOT_BLOCKED"
     assert "workflowMode" not in resolved.model_dump()
     timeline = service.get_case_timeline(opened.caseId, "customer-owned")
     assert all("simulat" not in event.displayMessage.lower() for event in timeline)
@@ -266,13 +274,11 @@ def test_low_fraud_score_case_stays_in_review_until_explicit_resolution(
         assert session.get(Product, "card-owned").product_status == "Active"
         assert session.get(TransactionRecord, "tx-low-risk").amount == Decimal("120.0000")
 
-    explicitly_resolved = service.resolve_case(
-        opened.caseId, "customer-owned", "no_fraud_found", "Explicit review decision",
-    )
-    assert explicitly_resolved.status == "RESOLVED"
-    assert explicitly_resolved.resolutionOutcome == "no_fraud_found"
-    assert explicitly_resolved.resolvedAt is not None
-    assert service.get_case(opened.caseId, "customer-owned") == explicitly_resolved
+    with pytest.raises(PermissionError, match="Assigned operator"):
+        service.resolve_case(
+            opened.caseId, "customer-owned", "no_fraud_found", "Explicit review decision",
+        )
+    assert service.get_case(opened.caseId, "customer-owned").status == "IN_REVIEW"
 
 
 @pytest.mark.parametrize(
@@ -383,12 +389,11 @@ def test_escalated_case_can_be_manually_resolved(session_factory: Callable[[], S
     opened = service.open_transaction_dispute("tx-high-risk", "customer-owned", "Cargo sospechoso")
     service.respond_to_approval(opened.caseId, "customer-owned", approved=True)
 
-    resolved = service.resolve_case(
-        opened.caseId, "customer-owned", "fraud_confirmed_refund_issued", "Reviewed by agent-1"
-    )
-
-    assert resolved.status == "RESOLVED"
-    assert resolved.resolutionOutcome == "fraud_confirmed_refund_issued"
+    with pytest.raises(PermissionError, match="Assigned operator"):
+        service.resolve_case(
+            opened.caseId, "customer-owned", "fraud_confirmed_refund_issued", "Reviewed by agent-1"
+        )
+    assert service.get_case(opened.caseId, "customer-owned").status == "IN_REVIEW"
 
 
 def test_declined_transactions_cannot_be_disputed(session_factory: Callable[[], Session]) -> None:
@@ -483,7 +488,7 @@ def test_low_risk_case_gets_a_recommendation_only_after_explicit_resolution(
 
     reviewing = service.respond_to_approval(opened.caseId, "customer-owned", approved=True)
     assert reviewing.recommendationType is None
-    resolved = service.resolve_case(opened.caseId, "customer-owned", "fraud_confirmed_refund_issued")
+    resolved = seed_legacy_resolution(session_factory, service, opened.caseId)
 
     assert resolved.recommendationType == "transaction_alerts"
     assert resolved.recommendationRationale
@@ -503,7 +508,7 @@ def test_customer_can_dismiss_the_recommendation(session_factory: Callable[[], S
     service = SupportCaseService(session_factory)
     opened = service.open_transaction_dispute("tx-low-risk", "customer-owned", "Reclamo")
     service.respond_to_approval(opened.caseId, "customer-owned", approved=True)
-    resolved = service.resolve_case(opened.caseId, "customer-owned", "fraud_confirmed_refund_issued")
+    resolved = seed_legacy_resolution(session_factory, service, opened.caseId)
 
     dismissed = service.dismiss_recommendation(resolved.caseId, "customer-owned")
 
@@ -527,7 +532,7 @@ def test_foreign_customer_cannot_dismiss_another_customers_recommendation(
     service = SupportCaseService(session_factory)
     opened = service.open_transaction_dispute("tx-low-risk", "customer-owned", "Reclamo")
     service.respond_to_approval(opened.caseId, "customer-owned", approved=True)
-    resolved = service.resolve_case(opened.caseId, "customer-owned", "fraud_confirmed_refund_issued")
+    resolved = seed_legacy_resolution(session_factory, service, opened.caseId)
 
     with pytest.raises(PermissionError, match="authenticated customer"):
         service.dismiss_recommendation(resolved.caseId, "customer-foreign")
@@ -588,9 +593,251 @@ def test_resolution_and_optout_timeline_matches_service_transitions(
     service = SupportCaseService(session_factory)
     opened = service.open_transaction_dispute("tx-high-risk", "customer-owned", "Unrecognized charge")
     service.respond_to_approval(opened.caseId, "customer-owned", approved=True)
-    service.resolve_case(opened.caseId, "customer-owned", "fraud_confirmed_refund_issued")
+    seed_legacy_resolution(session_factory, service, opened.caseId)
     service.dismiss_recommendation(opened.caseId, "customer-owned")
     assert [event.eventType for event in service.get_case_timeline(opened.caseId, "customer-owned")] == [
         "CASE_OPENED", "APPROVAL_REQUESTED", "APPROVAL_GRANTED", "ESCALATED_TO_REVIEW",
         "RESOLVED", "RECOMMENDATION_DISMISSED",
     ]
+
+
+def seed_legacy_resolution(
+    session_factory: Callable[[], Session], service: SupportCaseService, case_id: str,
+) -> DisputeCase:
+    """Existing legacy resolutions remain readable without retroactive posting."""
+    with session_factory() as session:
+        case = session.get(SupportCase, case_id)
+        assert case is not None
+        case.status = "RESOLVED"
+        case.resolution_outcome = "fraud_confirmed_refund_issued"
+        case.recommendation_type = "transaction_alerts"
+        case.recommendation_rationale = "Legacy recommendation"
+        session.add(case)
+        session.add(SupportCaseEvent(case_id=case_id, event_type="RESOLVED", actor="agent"))
+        session.commit()
+    return service.get_case(case_id, "customer-owned")
+
+
+@pytest.fixture
+def preview_service(session_factory: Callable[[], Session]) -> SupportCaseService:
+    return SupportCaseService(session_factory, preview_secret="test-preview-signing-key-only")
+
+
+def test_preview_and_recovery_are_read_only_with_safe_location(
+    session_factory: Callable[[], Session], preview_service: SupportCaseService,
+) -> None:
+    with session_factory() as session:
+        transaction = session.get(TransactionRecord, "tx-low-risk")
+        assert transaction is not None
+        transaction.transaction_country = "Colombia"
+        transaction.transaction_city = "Bogota"
+        session.add(transaction)
+        session.commit()
+    preview = preview_service.preview_transaction_dispute(
+        "tx-low-risk", "customer-owned", "  Unrecognized  ",
+    )
+    assert preview.reason == "Unrecognized"
+    assert preview.transaction.country == "Colombia"
+    assert preview.transaction.city == "Bogota"
+    assert "fraud_score" not in preview.model_dump_json()
+    assert "4111111111111111" not in preview.model_dump_json()
+    assert preview_service.recover_transaction_dispute(preview.previewToken, "customer-owned") is None
+    with session_factory() as session:
+        assert session.exec(select(SupportCase)).all() == []
+        assert session.exec(select(SupportCaseEvent)).all() == []
+
+
+@pytest.mark.parametrize("transaction_id,outcome", [
+    ("tx-low-risk", "fast_track"), ("tx-high-risk", "escalated"),
+    ("tx-no-score", "insufficient_signal"),
+])
+def test_consent_acceptance_is_atomic_and_same_token_is_idempotent(
+    preview_service: SupportCaseService, transaction_id: str, outcome: str,
+) -> None:
+    preview = preview_service.preview_transaction_dispute(transaction_id, "customer-owned", "Unrecognized")
+    accepted = preview_service.accept_transaction_dispute(preview.previewToken, "customer-owned")
+    assert accepted.status == "IN_REVIEW"
+    assert accepted.triageOutcome == outcome
+    assert accepted.resolutionOutcome is None
+    timeline = preview_service.get_case_timeline(accepted.caseId, "customer-owned")
+    assert [event.eventType for event in timeline][:2] == ["CASE_OPENED", "APPROVAL_GRANTED"]
+    assert len(timeline) == 3
+    assert preview_service.accept_transaction_dispute(preview.previewToken, "customer-owned") == accepted
+    assert preview_service.recover_transaction_dispute(preview.previewToken, "customer-owned") == accepted
+    assert preview_service.get_case_timeline(accepted.caseId, "customer-owned") == timeline
+
+
+@pytest.mark.parametrize("token", ["", "not-a-token", "a.b.c"])
+def test_invalid_preview_rejected(preview_service: SupportCaseService, token: str) -> None:
+    from dispute_preview import DisputePreviewError
+
+    with pytest.raises(DisputePreviewError):
+        preview_service.accept_transaction_dispute(token, "customer-owned")
+
+
+def test_preview_is_customer_bound_and_tamper_resistant(preview_service: SupportCaseService) -> None:
+    from dispute_preview import DisputePreviewError
+
+    preview = preview_service.preview_transaction_dispute("tx-low-risk", "customer-owned", "Unrecognized")
+    with pytest.raises(PermissionError):
+        preview_service.accept_transaction_dispute(preview.previewToken, "customer-foreign")
+    with pytest.raises(DisputePreviewError):
+        preview_service.accept_transaction_dispute(preview.previewToken + "tampered", "customer-owned")
+
+
+@pytest.mark.parametrize("field,value", [("amount", Decimal("121")), ("fraud_score", Decimal("90"))])
+def test_changed_evidence_rejects_acceptance_without_writes(
+    session_factory: Callable[[], Session], preview_service: SupportCaseService, field: str, value: Decimal,
+) -> None:
+    from dispute_preview import DisputePreviewError
+
+    preview = preview_service.preview_transaction_dispute("tx-low-risk", "customer-owned", "Unrecognized")
+    with session_factory() as session:
+        transaction = session.get(TransactionRecord, "tx-low-risk")
+        assert transaction is not None
+        setattr(transaction, field, value)
+        session.add(transaction)
+        session.commit()
+    with pytest.raises(DisputePreviewError, match="DISPUTE_PREVIEW_STALE"):
+        preview_service.accept_transaction_dispute(preview.previewToken, "customer-owned")
+    with session_factory() as session:
+        assert session.exec(select(SupportCase)).all() == []
+        assert session.exec(select(SupportCaseEvent)).all() == []
+
+
+def test_acceptance_failure_rolls_back_case_and_events(
+    session_factory: Callable[[], Session], preview_service: SupportCaseService,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import dispute_service
+
+    preview = preview_service.preview_transaction_dispute("tx-low-risk", "customer-owned", "Unrecognized")
+
+    def fail_approval(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("synthetic consent failure")
+
+    monkeypatch.setattr(dispute_service, "_grant_approval", fail_approval)
+    with pytest.raises(RuntimeError, match="synthetic consent failure"):
+        preview_service.accept_transaction_dispute(preview.previewToken, "customer-owned")
+    with session_factory() as session:
+        assert session.exec(select(SupportCase)).all() == []
+        assert session.exec(select(SupportCaseEvent)).all() == []
+
+
+def test_distinct_proposals_cannot_create_duplicate_active_cases(preview_service: SupportCaseService) -> None:
+    from dispute_service import ActiveDisputeError
+
+    first = preview_service.preview_transaction_dispute("tx-low-risk", "customer-owned", "First reason")
+    second = preview_service.preview_transaction_dispute("tx-low-risk", "customer-owned", "Second reason")
+    preview_service.accept_transaction_dispute(first.previewToken, "customer-owned")
+    with pytest.raises(ActiveDisputeError):
+        preview_service.accept_transaction_dispute(second.previewToken, "customer-owned")
+    assert preview_service.recover_transaction_dispute(second.previewToken, "customer-owned") is None
+
+
+@pytest.mark.parametrize("phase", ["acceptance", "recovery"])
+def test_preview_deadlines_reject_without_writes(
+    preview_service: SupportCaseService, session_factory: Callable[[], Session], phase: str,
+) -> None:
+    import jwt
+    from dispute_preview import DisputePreviewError
+
+    preview = preview_service.preview_transaction_dispute("tx-low-risk", "customer-owned", "Reason")
+    claims = jwt.decode(preview.previewToken, options={"verify_signature": False})
+    now = int(datetime.now(timezone.utc).timestamp())
+    claims.update(iat=now - 90000, acceptUntil=now - 10)
+    if phase == "recovery":
+        claims["exp"] = now - 1
+    token = jwt.encode(claims, "test-preview-signing-key-only", algorithm="HS256")
+    operation = (preview_service.accept_transaction_dispute if phase == "acceptance"
+                 else preview_service.recover_transaction_dispute)
+    with pytest.raises(DisputePreviewError):
+        operation(token, "customer-owned")
+    with session_factory() as session:
+        assert session.exec(select(SupportCase)).all() == []
+        assert session.exec(select(SupportCaseEvent)).all() == []
+
+
+@pytest.mark.parametrize("field,value", [
+    ("jti", "../invalid"), ("reason", " "), ("transactionId", 123),
+    ("acceptUntil", True), ("iat", False), ("evidence", None),
+])
+def test_malformed_signed_preview_claims_are_rejected(
+    preview_service: SupportCaseService, field: str, value: object,
+) -> None:
+    import jwt
+    from dispute_preview import DisputePreviewError
+
+    preview = preview_service.preview_transaction_dispute("tx-low-risk", "customer-owned", "Reason")
+    claims = jwt.decode(preview.previewToken, options={"verify_signature": False})
+    claims[field] = value
+    token = jwt.encode(claims, "test-preview-signing-key-only", algorithm="HS256")
+    with pytest.raises(DisputePreviewError):
+        preview_service.accept_transaction_dispute(token, "customer-owned")
+
+
+@pytest.mark.parametrize("field,value", [
+    ("customer_id", "customer-foreign"), ("product_status", "Blocked"),
+    ("product_type", "Savings Account"), ("product_number", "4333333333333333"),
+])
+def test_product_changes_after_preview_reject_acceptance(
+    preview_service: SupportCaseService, session_factory: Callable[[], Session],
+    field: str, value: str,
+) -> None:
+    preview = preview_service.preview_transaction_dispute("tx-low-risk", "customer-owned", "Reason")
+    with session_factory() as session:
+        product = session.get(Product, "card-owned")
+        assert product is not None
+        setattr(product, field, value)
+        session.add(product)
+        session.commit()
+    with pytest.raises((PermissionError, ValueError)):
+        preview_service.accept_transaction_dispute(preview.previewToken, "customer-owned")
+    with session_factory() as session:
+        assert session.exec(select(SupportCase)).all() == []
+
+
+def test_accepted_preview_recovers_terminal_case_without_reopening(
+    preview_service: SupportCaseService, session_factory: Callable[[], Session],
+) -> None:
+    preview = preview_service.preview_transaction_dispute("tx-low-risk", "customer-owned", "Reason")
+    accepted = preview_service.accept_transaction_dispute(preview.previewToken, "customer-owned")
+    with session_factory() as session:
+        case = session.get(SupportCase, accepted.caseId)
+        assert case is not None
+        case.status = "RESOLVED"
+        session.add(case)
+        session.commit()
+    recovered = preview_service.accept_transaction_dispute(preview.previewToken, "customer-owned")
+    assert recovered.caseId == accepted.caseId
+    assert recovered.status == "RESOLVED"
+    assert len(preview_service.get_case_timeline(accepted.caseId, "customer-owned")) == 3
+
+
+def test_mcp_sdk_preview_acceptance_and_recovery(
+    preview_service: SupportCaseService, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio
+    from fastmcp import Client
+    import mcp_tools
+
+    monkeypatch.setattr(mcp_tools, "dispute_service", preview_service)
+    monkeypatch.setattr(mcp_tools, "get_customer_id", lambda headers: "customer-owned")
+
+    async def run_flow() -> None:
+        async with Client(mcp_tools.mcp) as client:
+            tools = {tool.name: tool for tool in await client.list_tools()}
+            assert set(tools["reportTransactionDispute"].inputSchema["properties"]) == {"preview_token"}
+            preview = await client.call_tool("previewTransactionDispute", {
+                "transaction_id": "tx-low-risk", "reason": "Unrecognized",
+            })
+            token = preview.data["previewToken"]
+            assert "caseId" not in preview.data
+            empty = await client.call_tool("recoverTransactionDispute", {"preview_token": token})
+            assert empty.data is None
+            accepted = await client.call_tool("reportTransactionDispute", {"preview_token": token})
+            assert accepted.data["status"] == "IN_REVIEW"
+            recovered = await client.call_tool("recoverTransactionDispute", {"preview_token": token})
+            assert recovered.data["caseId"] == accepted.data["caseId"]
+
+    asyncio.run(run_flow())
