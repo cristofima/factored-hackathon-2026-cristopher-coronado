@@ -3,6 +3,15 @@ import { createUiI18n, english, resolveUiLocale, translations } from "./i18n";
 import { supportCaseEventMessageKey } from "./models/SupportCase";
 
 describe("profile UI locale", () => {
+    it.each(["en", "es", "pt"])("owns case history and conversation controls in %s", locale => {
+        const catalog = locale === "en" ? english : translations[locale as "es" | "pt"];
+        const instance = createUiI18n(locale);
+        for (const key of ["Customer", "Continue chatting", "Close conversation", "Conversation status active", "Conversation status locked", "Conversation status closed", "Case not available", "Back to support cases"]) {
+            expect(Object.hasOwn(catalog, key), key).toBe(true);
+            expect(instance.t(key)).toBe(catalog[key as keyof typeof catalog]);
+        }
+        expect(instance.t("support-cases.status.IN_REVIEW", { keySeparator: "." })).not.toBe("support-cases.status.IN_REVIEW");
+    });
     it.each([
         ["en", "Card"],
         ["es", "Tarjeta"],
