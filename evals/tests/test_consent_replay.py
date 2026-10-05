@@ -1,13 +1,13 @@
 """Constructed consent protocol regressions, independent of freeze approval."""
 
-import importlib.util
 import json
 from copy import deepcopy
 from typing import Any
 
 import pytest
 
-from banking_evals.dispute_replay import DATASET, ROOT, _validate_replies, expand_case, score_case
+from banking_evals.disputes import dataset as replay
+from banking_evals.dispute_replay import DATASET, _validate_replies, expand_case, score_case
 from banking_evals.evidence import sanitize
 from banking_evals.mcp_replay import ReplayReply, ReplayServer, load_contracts
 from banking_evals.run_dispute_replay import run_baseline
@@ -115,13 +115,7 @@ async def test_async_consent_tools_are_discovered_and_invoked_through_sdk() -> N
 
 
 def test_preview_and_null_recovery_validate_against_production_models() -> None:
-    spec = importlib.util.spec_from_file_location(
-        "consent_replay_response_models",
-        ROOT / "app" / "business-api" / "transaction" / "src" / "banking_transaction" / "models" / "transactions.py",
-    )
-    assert spec is not None and spec.loader is not None
-    models = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(models)
+    models = replay._load_transaction_models()
     for case in expanded_sources():
         _validate_replies(case["transaction"], models)
     _validate_replies([{"tool": "recoverTransactionDispute", "result": None}], models)

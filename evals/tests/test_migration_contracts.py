@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
+from banking_evals.disputes import dataset as replay
 from banking_evals.disputes.dataset import DATASET, load_cases
 from banking_evals.disputes.reports import case_latency
 from banking_evals.historical.diagnostic import _classify_response
@@ -60,3 +61,9 @@ def test_freeze_rejects_omitted_transitive_dependency() -> None:
     with patch.object(Path, "read_text", read_text):
         with pytest.raises(ValueError, match="coverage is incomplete"):
             load_cases()
+
+
+def test_transaction_models_loader_is_package_aware() -> None:
+    models = replay._load_transaction_models()
+    assert models.__name__ == "banking_transaction.models.transactions"
+    assert models.CaseConversation.__module__ == "banking_transaction.models.conversation"
