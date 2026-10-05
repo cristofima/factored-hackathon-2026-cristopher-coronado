@@ -59,7 +59,7 @@ describe("Responses SSE parsing", () => {
   it("ignores SSE metadata and DONE markers while preserving consecutive data events", async () => {
     const event = { type: "response.completed" };
     const read = vi.fn()
-      .mockResolvedValueOnce({ done: false, value: new TextEncoder().encode(`: heartbeat\r\nevent: response\r\ndata:${JSON.stringify(event)}\r\ndata: [DONE]\r\n\r\n`) })
+      .mockResolvedValueOnce({ done: false, value: new TextEncoder().encode(`: heartbeat\r\nevent: response\r\ndata:${JSON.stringify(event)}\r\n\r\ndata: [DONE]\r\n\r\n`) })
       .mockResolvedValueOnce({ done: true });
     harness.fetch.mockResolvedValue(success({ read }));
     const stream = useStreamHarness();
@@ -82,6 +82,40 @@ describe("Responses SSE parsing", () => {
     const stream = useStreamHarness();
     await flush();
     expect(stream.onError).toHaveBeenCalledExactlyOnceWith(new Error("The response could not be completed."));
+  });
+});
+
+describe("signed response continuation", () => {
+  it("intercepts multiline control at EOF without rendering it", async () => {
+    const read = vi.fn()
+      .mockResolvedValueOnce({ done: false, value: new TextEncoder().encode('data: {"type":"bff.continuation",\r\ndata: "token":"signed-first"}') })
+      .mockResolvedValueOnce({ done: true });
+    harness.fetch.mockResolvedValue({ ...success({ read }), headers: new Headers() });
+    const stream = useStreamHarness();
+    await flush();
+    expect(stream.onConversation).toHaveBeenCalledExactlyOnceWith("local-thread", "signed-first");
+    expect(stream.onEvent).not.toHaveBeenCalled();
+    expect(stream.onComplete).toHaveBeenCalledOnce();
+  });
+  it("refuses continuation after output without a completed checkpoint", async () => {
+    const read = vi.fn()
+      .mockResolvedValueOnce({ done: false, value: new TextEncoder().encode('data: {"type":"response.output_text.delta","delta":"Answer"}\n\n') })
+      .mockResolvedValueOnce({ done: true });
+    harness.fetch.mockResolvedValue({ ...success({ read }), headers: new Headers() });
+    const stream = useStreamHarness();
+    await flush();
+    expect(stream.onConversation).not.toHaveBeenCalled();
+    expect(stream.onEvent).toHaveBeenLastCalledWith({ type: "error", code: "CONTINUATION_UNAVAILABLE", allow_retry: false });
+    expect(stream.onComplete).toHaveBeenCalledOnce();
+  });
+  it.each(["", "x".repeat(2049), null])("rejects malformed control token", async token => {
+    const read = vi.fn().mockResolvedValueOnce({ done: false, value: new TextEncoder().encode(`data: ${JSON.stringify({ type: "bff.continuation", token })}\n\n`) });
+    harness.fetch.mockResolvedValue({ ...success({ read }), headers: new Headers() });
+    const stream = useStreamHarness();
+    await flush();
+    expect(stream.onConversation).not.toHaveBeenCalled();
+    expect(stream.onEvent).not.toHaveBeenCalled();
+    expect(stream.onError).toHaveBeenCalledOnce();
   });
 });
 
@@ -156,7 +190,7 @@ describe("customer stream session isolation", () => {
   });
   it("forwards current conversation, text, approval and completion", async () => {
     const events = [{ type: "response.output_text.delta", delta: "current answer" }, { type: "response.output_item.added", item: { type: "mcp_approval_request", id: "current-approval" } }];
-    const read = vi.fn().mockResolvedValueOnce({ done: false, value: new TextEncoder().encode(events.map((event) => `data: ${JSON.stringify(event)}\n`).join("")) }).mockResolvedValueOnce({ done: true });
+    const read = vi.fn().mockResolvedValueOnce({ done: false, value: new TextEncoder().encode(events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("")) }).mockResolvedValueOnce({ done: true });
     harness.fetch.mockResolvedValue(success({ read }));
     const stream = useStreamHarness();
     await flush();

@@ -9,7 +9,7 @@ const supportCase = {
   openedAt: "2026-10-04", updatedAt: "2026-10-04", resolvedAt: null,
 };
 
-const preview = { previewToken: "signed", transactionId: "transaction", reason: "Original reason", expiresAt: "2026-10-04T10:10:00Z", transaction: { id: "transaction", country: "CO", city: null } };
+const preview = { previewToken: "signed", transactionId: "transaction", reason: "Original reason", expiresAt: "2026-10-04T10:10:00Z", transaction: { id: "transaction", country: "CO", city: null, description: null, recipientName: "Óptica Visión", status: "Approved" } };
 describe("Responses dispute previews", () => {
   it.each([preview, JSON.stringify(preview), { content: [{ type: "text", text: JSON.stringify(preview) }] }])("parses structured signed previews without a case receipt", output => {
     expect(readToolPreview(output)).toEqual(preview);

@@ -21,21 +21,32 @@ const BUTTON_DIMENSIONS = {
 
 export function Composer({ placeholder, buttonSize = "lg" }: ComposerProps) {
   const { t } = useTranslation();
-  const { sendMessage, cancelStreaming, isStreaming } = useChat();
+  const { sendMessage, cancelStreaming, isStreaming, activeThreadId, activeThread, isThreadLocked, closeThread, setFurtherHelp } = useChat();
+  const locked = Boolean(activeThreadId && isThreadLocked(activeThreadId));
+  const furtherHelp = activeThread?.metadata?.furtherHelp === true;
   const [value, setValue] = useState("");
   const dimensions = BUTTON_DIMENSIONS[buttonSize];
   const canSubmit = useMemo(() => Boolean(value.trim()), [value]);
 
   const handleSend = () => {
-    if (!canSubmit || isStreaming) return;
+    if (!canSubmit || isStreaming || locked || furtherHelp) return;
     sendMessage(value);
     setValue("");
   };
 
   return (
     <div className="px-4 py-3">
+      {locked && <p role="status">{t(activeThread?.status.type === "closed" ? "Conversation closed" : "Recovered conversation is read-only. Start a new conversation to continue.")}</p>}
+      {furtherHelp && !isStreaming && !locked && activeThreadId && <div className="mb-4 space-y-3" role="group" aria-label={t("Can I help with anything else?")}>
+        <p>{t("Can I help with anything else?")}</p>
+        <div className="flex flex-col gap-4 sm:flex-row sm:gap-6">
+          <Button variant="default" onClick={() => setFurtherHelp(activeThreadId, false)}>{t("Continue chatting")}</Button>
+          <Button variant="destructive" onClick={() => closeThread(activeThreadId)}>{t("Close conversation")}</Button>
+        </div>
+      </div>}
       <div className="flex items-end gap-3 rounded-2xl border border-border/50 bg-muted/20 px-3 py-2 shadow-inner">
         <Textarea
+          disabled={locked || furtherHelp}
           value={value}
           onChange={(event) => setValue(event.target.value)}
           onKeyDown={(event) => {
@@ -63,7 +74,7 @@ export function Composer({ placeholder, buttonSize = "lg" }: ComposerProps) {
           size="icon"
           onClick={handleSend}
           className={`${dimensions.button} rounded-full border border-primary/20 bg-primary/10 text-primary shadow-sm disabled:border-transparent disabled:bg-muted-foreground/50 disabled:text-white`}
-          disabled={isStreaming || !canSubmit}
+          disabled={isStreaming || !canSubmit || locked || furtherHelp}
         >
           {isStreaming ? (
             <Loader2 className={`${dimensions.icon} animate-spin`} />
