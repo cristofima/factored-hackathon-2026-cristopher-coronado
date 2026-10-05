@@ -21,16 +21,32 @@ def _required_setting(value: str | None, name: str) -> str:
 def create_server() -> ResponsesHostServer:
     """Create the Responses host without connecting to external services."""
     credential = get_azure_credential()
-    chat_client = FoundryChatClient(
-        project_endpoint=_required_setting(
-            settings.FOUNDRY_PROJECT_ENDPOINT,
-            "FOUNDRY_PROJECT_ENDPOINT",
-        ),
-        model=_required_setting(
-            settings.MODEL_DEPLOYMENT_NAME,
-            "MODEL_DEPLOYMENT_NAME",
-        ),
-        credential=credential,
+    project_endpoint = _required_setting(
+        settings.FOUNDRY_PROJECT_ENDPOINT, "FOUNDRY_PROJECT_ENDPOINT",
+    )
+    clients: dict[str, FoundryChatClient] = {}
+
+    def client_for(deployment: str | None, setting_name: str) -> FoundryChatClient:
+        model = _required_setting(
+            deployment or settings.MODEL_DEPLOYMENT_NAME,
+            f"{setting_name} or MODEL_DEPLOYMENT_NAME",
+        )
+        if model not in clients:
+            clients[model] = FoundryChatClient(
+                project_endpoint=project_endpoint,
+                model=model,
+                credential=credential,
+            )
+        return clients[model]
+
+    chat_client = client_for(
+        settings.TRIAGE_MODEL_DEPLOYMENT_NAME, "TRIAGE_MODEL_DEPLOYMENT_NAME",
+    )
+    account_chat_client = client_for(
+        settings.ACCOUNT_MODEL_DEPLOYMENT_NAME, "ACCOUNT_MODEL_DEPLOYMENT_NAME",
+    )
+    transaction_chat_client = client_for(
+        settings.TRANSACTION_MODEL_DEPLOYMENT_NAME, "TRANSACTION_MODEL_DEPLOYMENT_NAME",
     )
     account_url = _required_setting(settings.ACCOUNT_MCP_URL, "ACCOUNT_MCP_URL")
     transaction_url = _required_setting(settings.TRANSACTION_MCP_URL, "TRANSACTION_MCP_URL")
@@ -39,6 +55,8 @@ def create_server() -> ResponsesHostServer:
     def create_agent() -> WorkflowAgent:
         return build_hosted_workflow(
             chat_client, account_url, transaction_url, identity_secret,
+            account_chat_client=account_chat_client,
+            transaction_chat_client=transaction_chat_client,
         ).as_agent(
             name="home_banking_agent",
             description="Answers authenticated account and transaction questions.",

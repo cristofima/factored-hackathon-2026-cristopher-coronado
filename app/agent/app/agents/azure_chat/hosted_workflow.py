@@ -3,11 +3,11 @@
 from collections.abc import Sequence
 
 from agent_framework import Agent, BaseChatClient, Message, Workflow
-from agent_framework.orchestrations import HandoffBuilder
 from mcp import ClientSession
 
 from app.agents.azure_chat.account_agent import AccountAgent
 from app.agents.azure_chat.transaction_agent import TransactionHistoryAgent
+from app.helpers.checkpointed_handoff import CheckpointedHandoffBuilder as HandoffBuilder
 from app.helpers.handoff_middleware import HandoffNarrationMiddleware
 from app.helpers.no_history_provider import NoHistoryProvider
 from app.helpers.user_profile_provider import UserProfileProvider
@@ -51,10 +51,12 @@ def build_hosted_workflow(
     transaction_mcp_server_url: str,
     internal_identity_secret: str,
     *,
+    account_chat_client: BaseChatClient | None = None,
+    transaction_chat_client: BaseChatClient | None = None,
     account_mcp_session: ClientSession | None = None,
     transaction_mcp_session: ClientSession | None = None,
 ) -> Workflow:
-    """Build the checkpoint-free workflow managed by the Responses hosting runtime."""
+    """Build the workflow with checkpoints owned by the Responses hosting runtime."""
     triage_agent = Agent(
         client=chat_client,
         instructions=TRIAGE_INSTRUCTIONS.strip(),
@@ -65,13 +67,13 @@ def build_hosted_workflow(
         middleware=[HandoffNarrationMiddleware()],
     )
     account_agent = AccountAgent(
-        chat_client,
+        account_chat_client if account_chat_client is not None else chat_client,
         account_mcp_server_url,
         internal_identity_secret,
         account_mcp_session=account_mcp_session,
     ).build_af_agent()
     transaction_agent = TransactionHistoryAgent(
-        chat_client,
+        transaction_chat_client if transaction_chat_client is not None else chat_client,
         account_mcp_server_url,
         transaction_mcp_server_url,
         internal_identity_secret,
