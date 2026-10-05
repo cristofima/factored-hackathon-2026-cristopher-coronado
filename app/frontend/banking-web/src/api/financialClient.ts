@@ -12,7 +12,12 @@ export interface FinancialTransaction {
     category: string | null;
     channel: string | null;
     merchant: string | null;
+    country?: string | null;
+    city?: string | null;
     status: string | null;
+    originalTransactionId?: string | null;
+    supportCaseId?: string | null;
+    sourceKind?: string;
 }
 
 interface TransactionRecord {
@@ -24,7 +29,12 @@ interface TransactionRecord {
     category: string | null;
     paymentType: string | null;
     recipientName: string | null;
+    country?: string | null;
+    city?: string | null;
     status: string | null;
+    originalTransactionId?: string | null;
+    supportCaseId?: string | null;
+    sourceKind?: string;
 }
 
 interface TransactionPage {
@@ -44,7 +54,12 @@ const mapRecord = (record: TransactionRecord, accountId: string): FinancialTrans
     category: record.category,
     channel: record.paymentType,
     merchant: record.recipientName,
+    country: record.country,
+    city: record.city,
     status: record.status,
+    originalTransactionId: record.originalTransactionId,
+    supportCaseId: record.supportCaseId,
+    sourceKind: record.sourceKind,
 });
 
 export async function getTransactions(

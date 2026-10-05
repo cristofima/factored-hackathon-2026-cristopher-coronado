@@ -22,6 +22,9 @@ describe("financial movement policy", () => {
         expect(canReportDispute(transaction({ date: "invalid" }), now)).toBe(false);
     });
 
+    it("never offers a dispute on a runtime financial effect", () => {
+        expect(canReportDispute(transaction({ sourceKind: "dispute_effect" }), Date.parse("2026-06-02"))).toBe(false);
+    });
     it.each(["0.0000", "-0.0001", "9999999999999999.9999"])("preserves exact decimal %s", (value) => {
         expect(decimalString(decimalUnits(value))).toBe(value);
     });

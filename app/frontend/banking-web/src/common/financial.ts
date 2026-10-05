@@ -23,7 +23,8 @@ export function canReportDispute(record: FinancialTransaction, now = Date.now())
     const normalized = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$/.test(timestamp)
         ? `${timestamp}Z` : timestamp;
     const transactionTime = Date.parse(normalized);
-    return record.status === "Approved" && Number.isFinite(transactionTime)
+    return (!record.sourceKind || record.sourceKind === "source")
+        && record.status === "Approved" && Number.isFinite(transactionTime)
         && transactionTime >= now - 365 * 24 * 60 * 60 * 1000;
 }
 

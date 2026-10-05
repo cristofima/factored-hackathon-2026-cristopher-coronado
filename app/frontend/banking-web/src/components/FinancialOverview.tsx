@@ -246,6 +246,17 @@ export default function FinancialOverview({ productId: requestedProductId }: Rea
                           </td>
                           <td className="p-3">
                             {record.merchant ?? t("Not available")}
+                            <div className="text-sm text-muted-foreground">
+                              {t("Country")}: {record.country ?? t("Not available")} · {t("City")}: {record.city ?? t("Not available")}
+                            </div>
+                            {record.supportCaseId && <div className="text-sm">
+                              <Link to={`/support-cases/${encodeURIComponent(record.supportCaseId)}`} className="text-primary hover:underline">
+                                {t("Support case")} {record.supportCaseId}
+                              </Link>
+                            </div>}
+                            {record.originalTransactionId && <div className="text-sm text-muted-foreground">
+                              {t("Original transaction")} {record.originalTransactionId}
+                            </div>}
                           </td>
                           <td className="p-3">
                             {record.type === null

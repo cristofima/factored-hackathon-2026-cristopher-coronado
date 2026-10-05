@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { getAccounts, getCards, type AccountSummary, type CardSummary } from "@/api/authClient";
-import { errorTranslationKey } from "@/api/errors";
+import { ApiError, errorTranslationKey } from "@/api/errors";
 import { useAuth } from "@/context/AuthContext";
 
-export function useProductCatalog() {
-  const { user, sessionKey } = useAuth();
-  const scope = JSON.stringify([user?.id, sessionKey]);
+export function useProductCatalog(refreshKey?: string) {
+  const { user, sessionKey, logout } = useAuth();
+  const scope = JSON.stringify([user?.id, sessionKey, user?.identityVersion, refreshKey]);
   const [accounts, setAccounts] = useState<AccountSummary[]>([]);
   const [cards, setCards] = useState<CardSummary[]>([]);
   const [catalogScope, setCatalogScope] = useState("");
@@ -30,6 +30,7 @@ export function useProductCatalog() {
       })
       .catch((cause: unknown) => {
         if (!controller.signal.aborted) {
+          if (cause instanceof ApiError && cause.code === "AUTH_REQUIRED") logout();
           setCatalogScope(scope);
           setError(errorTranslationKey(cause, "Products are unavailable"));
         }
@@ -38,7 +39,7 @@ export function useProductCatalog() {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [scope, attempt]);
+  }, [scope, attempt, refreshKey, logout]);
 
   const current = catalogScope === scope;
   return {
