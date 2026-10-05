@@ -29,6 +29,8 @@ jobs:
   build-and-test:
     name: Build & Test (transaction)
     runs-on: ubuntu-latest
+    env:
+      PYTEST_ADDOPTS: "--ignore=tests/test_consent_postgres.py"
     permissions:
       contents: read
     steps:

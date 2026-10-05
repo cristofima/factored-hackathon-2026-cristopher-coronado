@@ -332,6 +332,40 @@ rtk proxy uv run --directory app\business-api\transaction python -m pytest tests
 Without explicit configuration these tests skip. SQLite regressions do not prove
 PostgreSQL concurrency or deployed end-to-end identity transport. A subsequent
 
+### Accepted-consent PostgreSQL checks
+
+[`test_consent_postgres.py`](tests/test_consent_postgres.py) requires both
+`CONSENT_TEST_ALLOW_WRITES=1` and an externally supplied
+`CONSENT_TEST_DATABASE_URL`. Obtain explicit local write authorization first.
+The fixture rejects non-PostgreSQL and non-loopback targets before connecting;
+it never loads credential files itself. Each test creates and drops only its
+uniquely named synthetic schema, with bounded connection, lock and statement waits.
+
+With those variables supplied in the terminal, run from the repository root:
+
+```powershell
+rtk proxy uv run --directory app\business-api\transaction python -m pytest tests\test_consent_postgres.py -q --tb=short
+```
+
+The ten cases cover coordinated independent connections through service, REST and
+MCP acceptance, same/distinct proposals, ownership-protected recovery, lost responses
+after commit, two precommit rollback points and resolved-transaction reclaim.
+Durable assertions check one case/consent/review transition and no posting, protection
+or balance change. Without both variables, these tests skip.
+
+Authorized local execution passed **10 tests** on PostgreSQL **13.0** at
+**READ COMMITTED**; a repeated run passed again and verified no newly created test
+schemas remained. The target reported Alembic revision `20261005_0012`, but fixture
+tables are created from SQLModel metadata: this is not migration-execution evidence.
+REST/MCP tests substitute synthetic identity extraction, not business persistence.
+These results do not prove live Identity/BFF authentication, browser/model behavior,
+hosted transport, financial settlement or approved customer-data parity. Existing
+focused offline dispute/consent regressions passed **82 tests**, with these ten
+PostgreSQL cases skipped when authorization variables were absent.
+
+Transaction CI explicitly excludes this local-only module through `PYTEST_ADDOPTS`,
+even if database authorization variables are present in the job environment.
+
 The operator-effects implementation was validated with the following suites:
 
 ```powershell
