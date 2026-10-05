@@ -189,6 +189,12 @@ async def test_profile_locale_uses_signed_allowlist_and_keeps_mcp_claims(
                   if args[1].startswith("Respond to the user")]
     assert len(directives) == 1
     assert directives[0].startswith(f"Respond to the user in {language},")
+    assert "passed through exactly in structured transport" in directives[0]
+    assert "rather than displaying the raw machine code" in directives[0]
+    assert "Never expose consent preview tokens" in directives[0]
+    assert "For Spanish output, refer to transaction disputes consistently as 'reclamo'" in directives[0]
+    assert "or 'reclamos', never 'disputa' or 'reclamación'" in directives[0]
+    assert "quoted customer-entered reasons, or original audit text" in directives[0]
     assert set(claims) == {"sub", "customer_id", "exp"}
 
 

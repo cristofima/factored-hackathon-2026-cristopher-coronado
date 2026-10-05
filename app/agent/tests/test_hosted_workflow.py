@@ -37,6 +37,66 @@ def test_transaction_instructions_scope_new_disputes_to_cards() -> None:
     assert "Existing support cases remain available" in instructions
 
 
+@pytest.mark.parametrize("requirement", [
+    "getLastTransactions returns only the latest five movements",
+    "it has no date or pagination arguments",
+    "Never require a memorized transaction ID",
+    "never masked digits or product IDs",
+    "Ask only the missing discriminating question",
+    "Show at most five tool-backed candidates",
+    "Resolve multiple matches explicitly",
+    "never select the first or newest match by assumption",
+    "mention limited coverage",
+    "Confirm the selected readable charge",
+    "preserve an expected amount in the reason",
+    "Identification confirmation is not consent",
+    "Unclear consent requires clarification, not a tool call",
+    "a decline is not an invalid verdict",
+    "never a runtime compensation movement",
+    "DISPUTE_ALREADY_ACTIVE",
+    "if no unique match exists ask for selection",
+    "Do not expose raw exception details",
+])
+def test_dispute_discovery_instruction_contract(requirement: str) -> None:
+    instructions = " ".join(TransactionHistoryAgent.instructions.split())
+    assert requirement in instructions
+
+
+@pytest.mark.parametrize("requirement", [
+    "Only after a successful tool response/readback present an intake receipt",
+    "does not block a card, refund, post a movement or change a balance",
+    "Stored fraud scores are synthetic routing signals only",
+    "Assigned operators can record reasoned verdicts",
+    "RESOLVED_INVALID records an invalid verdict without compensation",
+    "PENDING_EFFECTS means a valid verdict is recorded",
+    "only with recorded financialEffectsStatus and effects movement evidence",
+    "Credit-card adjustments reduce debt",
+    "never external processor enforcement or an automatic block",
+    "Do not reveal staff-only evidence",
+    "Manual-created cases are available through the same persisted tools",
+    "consent is not evidence that an operator investigated",
+])
+def test_dispute_receipt_instruction_contract(requirement: str) -> None:
+    instructions = " ".join(TransactionHistoryAgent.instructions.split())
+    assert requirement in instructions
+    assert "Operator adjudication is not yet implemented" not in instructions
+    assert "balance change is implemented" not in instructions
+    assert "investigation was authorized" not in instructions
+
+
+@pytest.mark.parametrize("requirement", [
+    "previewTransactionDispute",
+    "Never display previewToken",
+    "Only after explicit consent call reportTransactionDispute",
+    "recoverTransactionDispute",
+    "never call reportTransactionDispute again or ask for second consent",
+    "An application decline creates no case and must not trigger a mutation",
+])
+def test_pre_intake_consent_instruction_contract(requirement: str) -> None:
+    instructions = " ".join(TransactionHistoryAgent.instructions.split())
+    assert requirement in instructions
+
+
 def test_dispute_consultation_instruction_contract() -> None:
     triage = " ".join(TRIAGE_INSTRUCTIONS.split())
     instructions = " ".join(TransactionHistoryAgent.instructions.split())
@@ -154,6 +214,98 @@ async def test_foundry_function_loop_handoff_queries_account_and_finishes(
     assert response.text == (
         "The requested account is unavailable." if denied else "Your balance is USD 12.00."
     )
+
+
+@pytest.mark.parametrize("decision", ["accept", "decline", "unclear", "rest-accepted"])
+async def test_dispute_sdk_continuation_preserves_proposal_and_receipt(decision: str) -> None:
+    calls: list[tuple[str, str]] = []
+
+    @tool(name="previewTransactionDispute")
+    def preview(transaction_id: str, reason: str) -> str:
+        calls.append(("preview", transaction_id))
+        return '{"previewToken":"synthetic-preview","transactionId":"tx-1"}'
+
+    @tool(name="reportTransactionDispute")
+    def accept(preview_token: str) -> str:
+        calls.append(("accept", preview_token))
+        return '{"caseId":"CASE-1","status":"IN_REVIEW"}'
+
+    @tool(name="getSupportCase")
+    def read_case(case_id: str) -> str:
+        calls.append(("read", case_id))
+        return '{"caseId":"CASE-1","status":"IN_REVIEW"}'
+
+    client = FoundryChatClient(
+        project_endpoint="https://example.services.ai.azure.com/api/projects/test",
+        model="test-model", credential=MagicMock(),
+    )
+    phase = "preview"
+    model_calls = 0
+    results: list[str] = []
+
+    def model_response(*args: object, **kwargs: object) -> ResponseStream:
+        nonlocal model_calls
+        model_calls += 1
+
+        async def updates() -> AsyncIterator[ChatResponseUpdate]:
+            for message in kwargs["messages"]:
+                for content in message.contents:
+                    if content.type == "function_result":
+                        results.append(str(content.result))
+            if phase == "preview" and model_calls == 1:
+                contents = [Content.from_function_call(
+                    "preview-1", "previewTransactionDispute",
+                    arguments='{"transaction_id":"tx-1","reason":"Unrecognized purchase"}',
+                )]
+            elif phase == "decision" and model_calls == 1 and decision in ("accept", "rest-accepted"):
+                contents = [Content.from_function_call(
+                    "decision-1", "reportTransactionDispute" if decision == "accept" else "getSupportCase",
+                    arguments='{"preview_token":"synthetic-preview"}' if decision == "accept"
+                    else '{"case_id":"CASE-1"}',
+                )]
+            else:
+                text = "May I create this dispute and send it for review?"
+                if phase == "decision":
+                    text = (
+                        "Case CASE-1 is in review." if decision in ("accept", "rest-accepted")
+                        else "No case was created." if decision == "decline"
+                        else "Please clarify whether you consent to creation."
+                    )
+                contents = [Content(type="text", text=text)]
+            yield ChatResponseUpdate(role="assistant", contents=contents)
+
+        return ResponseStream(updates(), finalizer=ChatResponse.from_updates)
+
+    specialist = Agent(
+        client=client, name="TransactionAgent", instructions=TransactionHistoryAgent.instructions,
+        tools=[preview, accept, read_case],
+    )
+    session = AgentSession()
+    with patch.object(client, "_inner_get_response", model_response):
+        proposal = await specialist.run(
+            "Report this charge", session=session, stream=True,
+        ).get_final_response()
+        assert calls == [("preview", "tx-1")]
+        assert "CASE-" not in proposal.text
+        assert "synthetic-preview" not in proposal.text
+        assert any("synthetic-preview" in result for result in results)
+        phase = "decision"
+        model_calls = 0
+        receipt = await specialist.run({
+            "accept": "I consent to creating the proposed dispute.",
+            "decline": "Do not create it.",
+            "unclear": "Yes, that is the charge.",
+            "rest-accepted": "The application recorded CASE-1; acknowledge the receipt.",
+        }[decision], session=session, stream=True).get_final_response()
+
+    expected = [("preview", "tx-1")]
+    if decision == "accept":
+        expected.append(("accept", "synthetic-preview"))
+    elif decision == "rest-accepted":
+        expected.append(("read", "CASE-1"))
+    assert calls == expected
+    assert ("CASE-1" in receipt.text) == (decision in ("accept", "rest-accepted"))
+    assert "synthetic-preview" not in receipt.text
 
 
 async def test_host_isolates_concurrent_workflow_requests() -> None:
