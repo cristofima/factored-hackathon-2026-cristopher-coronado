@@ -23,11 +23,11 @@ from app.agents.azure_chat.hosted_workflow import (
 )
 from app.agents.azure_chat.account_agent import AccountAgent
 from app.agents.azure_chat.transaction_agent import TransactionHistoryAgent
-from app.helpers.no_history_provider import NoHistoryProvider
-from app.helpers.handoff_middleware import HandoffNarrationMiddleware
-from app.helpers.tool_error_middleware import OwnershipErrorMiddleware
-from app.helpers.isolated_responses_host import IsolatedResponsesHostServer
-from app.helpers.user_profile_provider import UserProfileProvider
+from app.adapters.no_history_provider import NoHistoryProvider
+from app.adapters.handoff_middleware import HandoffNarrationMiddleware
+from app.adapters.tool_error_middleware import OwnershipErrorMiddleware
+from app.adapters.isolated_responses_host import IsolatedResponsesHostServer
+from app.context.user_profile_provider import UserProfileProvider
 
 
 def test_supplied_number_inquiries_use_direct_owned_resource_tools() -> None:

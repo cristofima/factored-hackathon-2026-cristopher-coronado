@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from evals.replay_summary import main, render_summary
+from banking_evals.replay_summary import main, render_summary
 
 
 @pytest.fixture
@@ -75,7 +75,7 @@ async def test_empty_dataset_fails_before_credentials(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from argparse import Namespace
-    from evals.run_mcp_replay import main_async
+    from banking_evals.mcp.runner import main_async
 
     dataset = tmp_path / "cases.json"
     dataset.write_text("[]")
@@ -83,6 +83,6 @@ async def test_empty_dataset_fails_before_credentials(
     def unexpected_credentials() -> None:
         pytest.fail("An empty dataset must not create Azure credentials")
 
-    monkeypatch.setattr("evals.run_mcp_replay.AzureCliCredential", unexpected_credentials)
+    monkeypatch.setattr("banking_evals.mcp.runner.AzureCliCredential", unexpected_credentials)
     with pytest.raises(ValueError, match="nonempty"):
         await main_async(Namespace(dataset=dataset, case=None))

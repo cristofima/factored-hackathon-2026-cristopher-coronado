@@ -8,7 +8,7 @@ from agent_framework_foundry_hosting import ResponsesHostServer
 from app.agents.azure_chat.hosted_workflow import build_hosted_workflow
 from app.config.azure_credential import get_azure_credential
 from app.config.settings import settings
-from app.helpers.isolated_responses_host import IsolatedResponsesHostServer
+from app.adapters.isolated_responses_host import IsolatedResponsesHostServer
 from agent_framework import WorkflowAgent
 
 

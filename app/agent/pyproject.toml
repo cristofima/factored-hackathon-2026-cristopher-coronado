@@ -26,10 +26,10 @@ prerelease = "allow"
 environments = ["sys_platform != 'emscripten'"]
 
 [dependency-groups]
-dev = ["pytest==9.1.1", "pytest-asyncio==1.4.0"]
+dev = ["banking-evals[offline]", "pytest==9.1.1", "pytest-asyncio==1.4.0"]
 
 [tool.setuptools.packages.find]
-where = ["."]
+where = ["src"]
 include = ["app*"]
 
 [tool.pytest.ini_options]
@@ -39,3 +39,9 @@ asyncio_default_test_loop_scope = "session"
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[tool.uv.sources]
+banking-evals = { path = "../../evals", editable = true }
+
+[tool.setuptools.package-data]
+app = ["logging-*.yaml"]

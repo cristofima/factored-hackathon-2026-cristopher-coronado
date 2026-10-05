@@ -4,8 +4,8 @@ from agent_framework import Agent, BaseChatClient, MCPStreamableHTTPTool
 from mcp import ClientSession
 
 from app.common.internal_identity import mcp_header_provider
-from app.helpers.tool_error_middleware import OwnershipErrorMiddleware
-from app.helpers.user_profile_provider import UserProfileProvider
+from app.adapters.tool_error_middleware import OwnershipErrorMiddleware
+from app.context.user_profile_provider import UserProfileProvider
 
 
 logger = logging.getLogger(__name__)
@@ -20,7 +20,7 @@ class TransactionHistoryAgent :
     returns the selected card's persisted movements; it has no date or pagination arguments.
     Do not invent search parameters, promise coverage outside persisted data, or combine
     products' histories.
-    
+
     Use markdown list or table to display the transaction information.
     Use the authenticated customer context for all movement inquiries.
     For a latest-movements inquiry with a full bank account number, call getLastTransactions
@@ -165,15 +165,15 @@ class TransactionHistoryAgent :
         self.internal_identity_secret = internal_identity_secret
         self.account_mcp_session = account_mcp_session
         self.transaction_mcp_session = transaction_mcp_session
-      
+
 
 
     def build_af_agent(self) -> Agent:
-    
+
       logger.info("Building request scoped transaction agent run ")
-      
+
       logger.info("Initializing Account MCP, Transaction MCP server tools for TransactionHistoryAgent ")
-      
+
       account_mcp_server = MCPStreamableHTTPTool(
           name="Account MCP server client",
           url=self.account_mcp_server_url,
@@ -181,15 +181,15 @@ class TransactionHistoryAgent :
           header_provider=(mcp_header_provider(self.internal_identity_secret)
                            if self.account_mcp_session is None else None),
        )
-      
+
       transaction_mcp_server = MCPStreamableHTTPTool(
           name="Transaction MCP server client",
           url=self.transaction_mcp_server_url,
           session=self.transaction_mcp_session,
           header_provider=(mcp_header_provider(self.internal_identity_secret)
                            if self.transaction_mcp_session is None else None),
-     )  
-      
+     )
+
       return Agent(
           client=self.azure_chat_client,
           instructions=TransactionHistoryAgent.instructions.strip(),

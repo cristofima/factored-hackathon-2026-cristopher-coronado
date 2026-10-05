@@ -7,10 +7,10 @@ from mcp import ClientSession
 
 from app.agents.azure_chat.account_agent import AccountAgent
 from app.agents.azure_chat.transaction_agent import TransactionHistoryAgent
-from app.helpers.checkpointed_handoff import CheckpointedHandoffBuilder as HandoffBuilder
-from app.helpers.handoff_middleware import HandoffNarrationMiddleware
-from app.helpers.no_history_provider import NoHistoryProvider
-from app.helpers.user_profile_provider import UserProfileProvider
+from app.adapters.checkpointed_handoff import CheckpointedHandoffBuilder as HandoffBuilder
+from app.adapters.handoff_middleware import HandoffNarrationMiddleware
+from app.adapters.no_history_provider import NoHistoryProvider
+from app.context.user_profile_provider import UserProfileProvider
 
 
 TRIAGE_INSTRUCTIONS = """

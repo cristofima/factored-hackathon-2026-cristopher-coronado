@@ -14,18 +14,18 @@ def get_env_files() -> List[str]:
     else:
         print("No environment specified, environment variables only configuration will be used.")
         return []
-    
+
     env = env.lower()
     # List of env files to try (in order of priority - later files override earlier ones)
     env_files = [
         ".env",  # Base environment file
         f".env.{env}"  # Environment-specific file
-        
+
     ]
 
     final_env_files = []
     # print found env files only if path exists
-    print("Environment files loading:")    
+    print("Environment files loading:")
     for f in env_files:
         print(f"Loading: {f}")
         if os.path.exists(f):
@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     2. Environment variables
     3. Base .env file
     4. Environment-specific .env file (e.g., .env.development, .env.production)
-    
+
     The environment is determined by the ENVIRONMENT environment variable or defaults to 'development'.
     """
 
@@ -53,8 +53,8 @@ class Settings(BaseSettings):
     #Logging and monitoring
     APPLICATIONINSIGHTS_CONNECTION_STRING: str | None = Field(default=None)
     ENABLE_OTEL : bool = Field(default=True)
-  
-    
+
+
     # Foundry hosted agent configuration
     FOUNDRY_PROJECT_ENDPOINT: str | None = Field(default=None)
     MODEL_DEPLOYMENT_NAME: str | None = Field(default=None)

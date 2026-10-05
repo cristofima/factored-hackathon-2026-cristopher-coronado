@@ -4,8 +4,8 @@ from agent_framework import Agent, BaseChatClient, MCPStreamableHTTPTool
 from mcp import ClientSession
 
 from app.common.internal_identity import mcp_header_provider
-from app.helpers.tool_error_middleware import OwnershipErrorMiddleware
-from app.helpers.user_profile_provider import UserProfileProvider
+from app.adapters.tool_error_middleware import OwnershipErrorMiddleware
+from app.context.user_profile_provider import UserProfileProvider
 
 
 logger = logging.getLogger(__name__)
@@ -53,9 +53,9 @@ class AccountAgent :
 
 
     def build_af_agent(self) -> Agent:
-    
+
       logger.info("Initializing Account Agent connection for account api ")
-      
+
       logger.info("Initializing Account MCP server tools for AccountAgent ")
       account_mcp_server = MCPStreamableHTTPTool(
                 name="Account MCP server client",
@@ -64,7 +64,7 @@ class AccountAgent :
                 header_provider=(mcp_header_provider(self.internal_identity_secret)
                                  if self.account_mcp_session is None else None),
       )
-      
+
       return Agent(
                 client=self.azure_chat_client,
                 instructions=AccountAgent.instructions.strip(),
@@ -74,4 +74,3 @@ class AccountAgent :
                 middleware=[OwnershipErrorMiddleware()],
                 context_providers=[UserProfileProvider(self.internal_identity_secret)]
             )
-        

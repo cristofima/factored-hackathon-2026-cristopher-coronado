@@ -10,8 +10,8 @@ from agent_framework import MCPStreamableHTTPTool
 from app.agents.azure_chat.account_agent import AccountAgent
 from app.agents.azure_chat.transaction_agent import TransactionHistoryAgent
 from app.agents.azure_chat.hosted_workflow import build_hosted_workflow
-from evals.mcp_replay import ReplayReply, ReplayServer, load_contracts
-from evals.run_mcp_replay import evaluation_names, run_case
+from banking_evals.mcp_replay import ReplayReply, ReplayServer, load_contracts
+from banking_evals.mcp.runner import evaluation_names, run_case
 
 
 async def test_replay_discovers_contracts_and_executes_without_http() -> None:
@@ -152,7 +152,7 @@ async def test_runner_preserves_signed_identity_and_records_failures() -> None:
         raise RuntimeError("controlled model failure")
 
     original_context = get_request_context()
-    with patch("evals.run_mcp_replay.build_hosted_workflow", side_effect=fail_workflow):
+    with patch("banking_evals.mcp.runner.build_hosted_workflow", side_effect=fail_workflow):
         result = await run_case(MagicMock(), {
             "id": "failure", "locale": "es", "query": "test", "expected_behavior": "test",
         })
@@ -198,7 +198,7 @@ async def test_runner_records_full_transcript_and_interleaved_tools() -> None:
 
     account_session = None
     transaction_session = None
-    with patch("evals.run_mcp_replay.build_hosted_workflow", side_effect=build_workflow):
+    with patch("banking_evals.mcp.runner.build_hosted_workflow", side_effect=build_workflow):
         result = await run_case(triage_client, {
             "id": "success", "query": "test", "expected_behavior": "test",
             "account": [{"tool": "getAccountDetails", "arguments": {"product_number": "TEST"}, "result": {}}],
@@ -243,7 +243,7 @@ async def test_multi_turn_runner_reuses_session_and_isolates_cases() -> None:
 
     case = {"id": "continuation", "query": "first", "turns": ["first", "approve"],
             "expected_behavior": "test"}
-    with patch("evals.run_mcp_replay.build_hosted_workflow", side_effect=build_workflow):
+    with patch("banking_evals.mcp.runner.build_hosted_workflow", side_effect=build_workflow):
         first = await run_case(MagicMock(), case)
         second = await run_case(MagicMock(), case)
     assert first["protocol_passed"] and second["protocol_passed"]
@@ -267,15 +267,15 @@ async def test_replay_cli_resolves_and_records_participant_models(
 ) -> None:
     from unittest.mock import AsyncMock
 
-    from evals.run_mcp_replay import main, main_async
+    from banking_evals.mcp.runner import main, main_async
 
     dataset = tmp_path / "cases.json"
     dataset.write_text(json.dumps([{"id": "model-routing"}]), encoding="utf-8")
     output = tmp_path / "report.json"
     argv = ["run_mcp_replay", "--project-endpoint", "https://example.invalid",
             "--model", "base", "--dataset", str(dataset), "--output", str(output), *overrides]
-    with patch("sys.argv", argv), patch("evals.run_mcp_replay.asyncio.run", return_value=0) as run:
-        with patch("evals.run_mcp_replay.main_async", new=MagicMock()) as parse:
+    with patch("sys.argv", argv), patch("banking_evals.mcp.runner.asyncio.run", return_value=0) as run:
+        with patch("banking_evals.mcp.runner.main_async", new=MagicMock()) as parse:
             assert main() == 0
         args = parse.call_args.args[0]
         run.assert_called_once()
@@ -284,10 +284,10 @@ async def test_replay_cli_resolves_and_records_participant_models(
     credential_context.__aenter__ = AsyncMock(return_value=MagicMock())
     credential_context.__aexit__ = AsyncMock(return_value=False)
     clients = {model: MagicMock() for model in set(expected.values())}
-    with patch("evals.run_mcp_replay.AzureCliCredential", return_value=credential_context), \
-         patch("evals.run_mcp_replay.FoundryChatClient",
+    with patch("banking_evals.mcp.runner.AzureCliCredential", return_value=credential_context), \
+         patch("banking_evals.mcp.runner.FoundryChatClient",
                side_effect=lambda **kwargs: clients[kwargs["model"]]) as factory, \
-         patch("evals.run_mcp_replay.run_case", new=AsyncMock(
+         patch("banking_evals.mcp.runner.run_case", new=AsyncMock(
              return_value={"protocol_passed": True},
          )) as replay:
         assert await main_async(args) == 0
