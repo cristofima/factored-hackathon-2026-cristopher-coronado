@@ -8,6 +8,13 @@ import { formatDateTime } from "@/common/dateTime";
 const event = { eventType: "OPERATOR_CLAIMED", actor: "operator", message: "Original stored audit", createdAt: "2026-10-04T10:30:00Z" };
 
 describe("shared support case timeline", () => {
+  it("wraps long audit text while retaining literal manual-note line breaks", () => {
+    const note = "Original note\n" + "x".repeat(200);
+    const html = renderToStaticMarkup(<I18nextProvider i18n={createUiI18n("en")}><SupportCaseTimeline events={[{ ...event, eventType: "UNKNOWN_EVENT", displayMessage: note }]} transactionId="txn" /></I18nextProvider>);
+    expect(html).toContain("[overflow-wrap:anywhere]");
+    expect(html).toContain("whitespace-pre-wrap");
+    expect(html).toContain(note);
+  });
   it.each([
     ["en", "Operator assigned", "no verdict or financial effect"],
     ["es", "Operador asignado", "ni un efecto financiero"],

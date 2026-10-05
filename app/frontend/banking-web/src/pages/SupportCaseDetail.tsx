@@ -129,9 +129,9 @@ export default function SupportCaseDetail() {
   };
 
   return (
-    <div className="p-6 max-w-4xl space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-foreground font-mono">
+    <div className="min-w-0 p-4 sm:p-6 max-w-4xl space-y-6">
+      <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="min-w-0 text-2xl font-bold text-foreground font-mono [overflow-wrap:anywhere]">
           {caseId}
         </h1>
         <Button
@@ -150,7 +150,7 @@ export default function SupportCaseDetail() {
       {supportCase && (
         <>
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0">
+            <CardHeader className="flex flex-wrap flex-row items-center justify-between gap-2 space-y-0">
               <CardTitle className="text-base">{t("Case Details")}</CardTitle>
               <Badge
                 variant={
@@ -202,7 +202,7 @@ export default function SupportCaseDetail() {
                   {t("Dispute approval prompt")}
                 </p>
                 {actionError && <div role="alert">{t(actionError)}</div>}
-                <div className="flex gap-3">
+                <div className="flex flex-wrap gap-3">
                   <Button
                     disabled={actionPending}
                     onClick={() => respond(true)}

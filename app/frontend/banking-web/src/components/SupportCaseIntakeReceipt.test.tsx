@@ -13,6 +13,7 @@ describe.each(["en", "es", "pt"])("customer readback in %s", locale => {
   it("reads persisted references and reason without manufacturing consent", () => {
     const html = render([]);
     expect(html).toContain("case-ref"); expect(html).toContain("tx-ref");
+    expect(html).toContain("[overflow-wrap:anywhere]");
     expect(html).toContain("Customer&#x27;s original explanation");
     expect(html).toContain(i18n.t("Consent record unavailable"));
     expect(html).not.toContain("support-cases.");

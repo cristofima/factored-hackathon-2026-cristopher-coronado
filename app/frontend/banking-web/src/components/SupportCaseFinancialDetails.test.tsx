@@ -25,6 +25,15 @@ describe("truthful customer financial details", () => {
     expect(output).toContain("not the processor"); expect(output).not.toContain("Executed");
     expect(output).not.toContain("provisional");
   });
+  it("wraps long financial references and preserves multiline rationale", () => {
+    const transactionId = "tx-" + "x".repeat(200);
+    const rationale = "First line\nSecond line";
+    const output = SupportCaseFinancialDetails({ supportCase: { ...base, transactionId, rationale } });
+    expect(text(output)).toContain(transactionId);
+    expect(text(output)).toContain(rationale);
+    expect(elements(output).some(e => String(e.props.className).includes("[overflow-wrap:anywhere]"))).toBe(true);
+    expect(elements(output).some(e => e.props.className === "whitespace-pre-wrap" && text(e).includes(rationale))).toBe(true);
+  });
   it("describes invalid verdict without a customer resolution action", () => {
     const output = text(SupportCaseFinancialDetails({ supportCase: { ...base, status: "RESOLVED_INVALID" } }));
     expect(output).toContain("No restitution was posted"); expect(output).not.toContain("Resolve dispute");
