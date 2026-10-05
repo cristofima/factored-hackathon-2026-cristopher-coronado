@@ -168,8 +168,23 @@ never imply completed restitution. Recorded application movements do not confirm
 settlement; application-local protection remains a separately recorded action.
 
 Dispute product, transaction-status, source and protection labels use controlled en/es/pt
-lookups with unavailable fallbacks. Amounts use the shared precision-safe locale formatter;
-stored scores retain their decimal precision without a currency or probability suffix.
+lookups with unavailable fallbacks. Amounts use the shared precision-safe locale formatter.
+Operator transaction statuses use canonical values for badge colors: Approved green,
+Declined red, Pending amber and Reversed gray; unknown values use a neutral badge.
+Labels are localized without changing stored statuses or financial calculations.
+
+Stored fraud scores display localized numeric text out of 100 and an accessible meter
+on a continuous green–amber–red scale. Only finite decimal strings in the inclusive
+0–100 range, with at most four decimal places, are displayed; missing or invalid
+scores remain unavailable, never zero. Scores retain their decimal precision without
+a currency or probability suffix. Colors do not introduce risk bands, determine
+legitimacy or change the existing routing threshold.
+
+Owned operator detail also displays nullable `customerName` from Transaction's current
+persisted Customer record, with a localized unavailable fallback. It is current customer
+metadata, separate from immutable claim evidence; it is not included in queue summaries.
+Older payloads without the field remain supported by the
+[operator client](src/api/operatorDisputeClient.ts).
 Multiple debit destinations still require explicit selection. No allocation or default
 policy has been added; that policy remains unratified.
 
@@ -456,6 +471,35 @@ through a dedicated `support-cases.*` i18n namespace in all three locale catalog
 The backend's `DISPUTE_WINDOW_DAYS` demo policy (365 days, evaluated against the real
 system clock) rejects opening a _new_ dispute once every loaded transaction falls
 outside that window; this is a dataset-staleness constraint, not a frontend bug.
+
+The customer list masks full card numbers and shows a localized unavailable label
+when no number exists. Case links encode their identifiers. Detail headers and legacy
+consent actions wrap on narrow screens; financial references, intake receipts and
+timeline content wrap without truncating stored text. Manual timeline notes preserve
+literal line breaks.
+
+Customer-page regressions cover rendering, loading/empty/refresh states, duplicate-action
+suppression, persisted-state readback, cancellation, authentication failures and
+stale-session isolation. These synthetic checks do not establish responsive browser
+acceptance or live service authorization.
+
+## UI-readiness validation
+
+Checks run from the repository root after the customer layout/privacy repairs and
+operator customer-name, badge and score-meter changes:
+
+| Command                                                                                                                                                                                     | Result                                       |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| `rtk proxy npm --prefix app\frontend\banking-web run test -- src\components\DisputePresentation.test.tsx src\api\operatorDisputeClient.test.ts src\components\OperatorCaseActions.test.tsx` | 155 passed across three files                |
+| `rtk proxy npm --prefix app\frontend\banking-web run test`                                                                                                                                  | 776 passed across 41 files                   |
+| `rtk proxy npm --prefix app\frontend\banking-web run lint`                                                                                                                                  | Zero errors; 14 existing warnings            |
+| `rtk proxy npm --prefix app\frontend\banking-web run build`                                                                                                                                 | Passed with the existing large-chunk warning |
+
+Related Transaction operator/adjudication tests passed 45 synthetic cases; see the
+[Transaction guide](../../business-api/transaction/README.md). No browser, stack,
+database or cloud run was performed for these changes. Authenticated en/es/pt browser
+checks, narrow-screen layouts, score-meter endpoints and live/hosted data parity remain
+separate acceptance gates. Earlier suite counts in this README are historical snapshots.
 
 ## Validation
 
