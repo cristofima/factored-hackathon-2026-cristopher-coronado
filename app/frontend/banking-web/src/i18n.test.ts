@@ -4,6 +4,38 @@ import { supportCaseEventMessageKey } from "./models/SupportCase";
 
 describe("profile UI locale", () => {
     it.each([
+        ["en", "Card"],
+        ["es", "Tarjeta"],
+        ["pt", "Cartão"],
+    ])("owns consent preview translations in %s without relying on fallback", (locale, card) => {
+        const catalog = locale === "en" ? english : translations[locale as "es" | "pt"];
+        for (const key of [
+            "Dispute proposal", "Amount", "Date", "Merchant", "Card", "Country", "City",
+            "Status", "Dispute reason", "Not available", "Dispute creation consent explanation",
+            "Dispute preview expired", "Dispute preview unavailable", "Dispute proposal declined",
+            "Dispute request recorded", "View support case", "Dispute acceptance uncertain",
+            "Recover dispute request", "Create dispute and request human review", "Decline dispute proposal",
+        ]) {
+            expect(Object.hasOwn(catalog, key), key).toBe(true);
+        }
+        expect(createUiI18n(locale).t("Card")).toBe(card);
+    });
+    it("uses reclamo consistently in Spanish display text while preserving canonical keys", () => {
+        const instance = createUiI18n("es");
+        expect(instance.t("Dispute proposal")).toBe("Propuesta de reclamo");
+        expect(instance.t("Create dispute and request human review"))
+            .toBe("Crear reclamo y solicitar revisión humana");
+        expect(instance.t("Approve dispute review")).toBe("Aprobar revisión del reclamo");
+        const checkValues = (value: unknown): void => {
+            if (typeof value === "string") {
+                expect(value).not.toMatch(/disputa|reclamaci[oó]n/iu);
+            } else if (value && typeof value === "object") {
+                Object.values(value).forEach(checkValues);
+            }
+        };
+        checkValues(translations.es);
+    });
+    it.each([
         ["en", "Review cases", "Reason"],
         ["es", "Casos en revisión", "Motivo"],
         ["pt", "Casos em revisão", "Motivo"],
