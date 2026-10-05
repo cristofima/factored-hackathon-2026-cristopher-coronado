@@ -71,17 +71,42 @@ The authoritative SQLModel definitions live in
 [database helpers](src/banking_data/database.py) are compatibility reexports;
 Alembic owns schema evolution, not ingestion or service startup.
 
-| Owner / purpose                       | Tables                                                                           | Population path                                    |
-| ------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------- |
-| CSV ingestion                         | `branches`, `customers`, `products`, `transactions`                              | Dependency-ordered pipeline                        |
-| Identity                              | `users`, `roles`, `user_roles`, `customer_users`, `operators`, `identity_audits` | Identity operations, migrations and explicit seeds |
-| Historical archives                   | `legacy_service_agents`, `legacy_operator_service_agents`                        | Catalog-retirement migration; never new CSV loads  |
-| Estimated projections                 | `product_monthly_snapshots`                                                      | Explicit snapshot builder                          |
-| Dispute workflow and recorded effects | `support_cases`, `support_case_events`, `runtime_postings`, `card_protections`   | Authorized application service operations          |
+| Owner / purpose                       | Tables                                                                                                                                       | Population path                                    |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| CSV ingestion                         | `branches`, `customers`, `products`, `transactions`                                                                                          | Dependency-ordered pipeline                        |
+| Identity                              | `users`, `roles`, `user_roles`, `customer_users`, `operators`, `identity_audits`                                                             | Identity operations, migrations and explicit seeds |
+| Historical archives                   | `legacy_service_agents`, `legacy_operator_service_agents`                                                                                    | Catalog-retirement migration; never new CSV loads  |
+| Estimated projections                 | `product_monthly_snapshots`                                                                                                                  | Explicit snapshot builder                          |
+| Dispute workflow and recorded effects | `support.support_cases`, `support.support_case_events`, `support.runtime_postings`, `support.card_protections`, `support.case_conversations` | Authorized application service operations          |
 
 The [migration chain](alembic/versions) ends at
-[revision 20261004_0011](alembic/versions/20261004_0011_operator_effects.py).
+[revision 20261005_0012](alembic/versions/20261005_0012_case_conversation_history.py).
 This is the source head, not proof of the revision applied to any database.
+Revision `20261005_0012` creates `support`, moves the four existing support-domain tables
+without recreating rows, and adds immutable customer-provided conversation snapshots.
+Banking and Identity tables remain in `public`; no global search-path change is needed.
+Alembic reflection includes only managed tables in the default and `support` schemas,
+so unrelated or retained tables are not automatic drop candidates.
+Downgrade is blocked pending explicit evidence-retention review.
+
+A database still reporting withdrawn revision `20261004_0012` cannot upgrade through
+this source chain (`20261005_0012` descends from `20261004_0011`). The new revision
+was renumbered from 0013 with owner approval; its full ID remains distinct from the
+withdrawn refresh revision `20261004_0012`. Renumbering does not repair that database's
+migration marker or revert its retained tables. Do not stamp, downgrade, recreate the
+withdrawn migration or remove retained refresh tables implicitly; lineage recovery
+requires separate authorization.
+
+The authorized local recovery and populated migration were completed on 2026-10-05:
+the owner had removed the empty withdrawn refresh tables, then the migration marker
+was corrected to `20261004_0011` and upgraded to `20261005_0012`. Verification
+preserved seven cases, 34 events, the empty posting/protection tables and all 13
+other public-table counts. The new conversation table was empty with its restrictive
+foreign key. The local backup catalog was validated; restore was not tested.
+This is local migration evidence only, not deployed-schema, browser, authorization,
+contention or financial-effect acceptance. Other environments require independent
+lineage inspection and authorization; do not repeat marker correction by default.
+
 Revision 0010 archives simulated reviewers and former operator mappings, preserving
 historical case references and audit text without inventing real ownership.
 New loads do not require `service_agents.csv`. Older manifests can check its count

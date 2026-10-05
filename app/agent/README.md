@@ -271,6 +271,14 @@ for prompts that need no tools. Hosted deployment success does not close that ga
 
 ## Conversation State
 
+The browser-facing BFF uses `previous_response_id` for both local and hosted
+Responses turns. It exposes only a signed customer/endpoint-bound continuation
+token to the browser, then verifies and translates that token on the next request.
+See the [BFF continuity contract](../responses-bff/README.md) for completion,
+cancellation and temporary versus saved case-history limits. This follows the
+[Microsoft multi-turn guidance](https://learn.microsoft.com/azure/foundry/how-to/develop/framework-hosted-agents#multi-turn-conversations);
+offline checkpoint tests do not establish live hosted acceptance.
+
 [The isolated host](src/app/adapters/isolated_responses_host.py) builds a fresh workflow
 for each request. The hosting runtime restores the matching conversation checkpoint
 inside that request before delivering new input; different requests do not share
@@ -295,3 +303,10 @@ the installed SDK writes JSON files under `~/.agentserver/state_stores`, or unde
 but checkpoints can survive process restarts. They are not stored in PostgreSQL.
 Treat these files as sensitive conversation data; a browser reload neither deletes
 them nor resumes them automatically.
+
+Completed-response continuation and workflow checkpoints are not failed-turn retry
+or exactly-once guarantees. The current browser locks an uncertain failed,
+incomplete or disconnected thread to prevent blind mutation replay. Resilient
+background execution, correlated operation recovery and safe chatbot retry are not
+implemented. PostgreSQL case snapshots contain only submitted visible intake
+messages; they cannot restore provider execution state or a complete chat archive.

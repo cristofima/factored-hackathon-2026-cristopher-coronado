@@ -23,8 +23,8 @@ entrypoint and owns application/client/credential lifecycle.
   identity envelopes, and verified downstream headers.
 - [config](src/bff/config/) owns settings and tracing configuration.
 
-The Responses router preserves local payload compatibility and raw streaming
-behavior. Effectful sends are never retried; pre-stream transport/credential failures
+The Responses router forwards Responses events and appends an invisible signed
+continuation control after a clean, completed stream. Effectful sends are never retried; pre-stream transport/credential failures
 expose controlled 503 errors. Cancellation still propagates after streaming begins,
 while cleanup closes the upstream response.
 
@@ -168,20 +168,30 @@ card, and transaction contract tests moved to the
 [business-api suite](../business-api/README.md) along with the endpoints themselves.
 The suite also covers W3C propagation and export configuration.
 
-The frontend keeps conversation IDs only in React state. A reload sends the next
-message without `conversation`; the BFF creates a new opaque ID bound to verified
-`sub`. Subsequent messages reuse it, and another user's ID is rejected. The local
-agent persists workflow checkpoints through the SDK filesystem store, not this BFF
-or PostgreSQL. See the [agent state guide](../agent/README.md#conversation-state).
+Local and hosted modes use the same completed-response checkpoint chain. The BFF
+signs the response ID, binding it to verified `sub`, upstream mode and endpoint.
+The frontend retains this token per thread in tab-scoped session storage and sends it as `conversation`;
+the BFF verifies it and sends only the decoded `previous_response_id` upstream.
+Browser-supplied raw `previous_response_id` and `agent_session_id` fields are rejected.
+The token is signed, not encrypted. JSON replies expose it through `X-Conversation-Id`;
+SSE replies append an invisible `bff.continuation` event only after clean EOF.
 
-This opaque, BFF-signed conversation token is only forwarded upstream in `local`
-mode. The hosted Foundry Responses gateway validates `conversation` against its
-own platform-managed Conversation object ids (for example `conv_...`), so an
-opaque token in that format is rejected as a malformed identifier; in `foundry`
-mode the field is dropped from the upstream payload entirely, and each hosted
-turn starts without cross-request conversation state on the Azure side. Wiring
-real multi-turn continuity for hosted mode (via the platform's own Conversations
-API or `previous_response_id` chaining) remains open.
+Failures, cancellation or missing completed checkpoints block further sends on the
+uncertain thread instead of silently resetting context or replaying effectful input.
+A new thread starts a fresh chain. This transport safety rule is not business chat
+closure. Same-login reload restores temporary frontend history and completed
+continuation tokens; explicit logout/new login clears them. Help separately retrieves
+owning-customer, read-only PostgreSQL intake snapshots through Transaction REST.
+Those snapshots are associated with cases, not a general transcript archive, and
+cannot resume provider execution. The BFF remains database-free. Legacy conversation
+tokens are not accepted; failed-turn recovery and safe retry are not implemented.
+
+The hosting SDK restores workflow state using `previous_response_id`; see the
+[agent state guide](../agent/README.md#conversation-state). This follows Microsoft's
+[local and hosted multi-turn guidance](https://learn.microsoft.com/azure/foundry/how-to/develop/framework-hosted-agents#multi-turn-conversations).
+Deterministic tests cover local/hosted payload translation, JSON/SSE chaining,
+customer/endpoint isolation and failure precedence. Browser and real-model hosted
+checkpoint acceptance remain separate, unexecuted validations.
 
 Hosted identity transport and deployed parity still require separate validation.
 Public registration, self-service password reset, MFA, production database grants,
