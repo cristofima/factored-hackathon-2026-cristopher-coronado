@@ -7,10 +7,13 @@ import { ApiError, errorTranslationKey } from "@/api/errors";
 import { useAuth } from "@/context/AuthContext";
 import type { SupportCase } from "@/models/SupportCase";
 import type { ClientWidgetProps } from "../WidgetRegistry";
+import { useChat } from "../../ResponsesChatProvider";
 
 export function DisputeConsent({ args }: ClientWidgetProps) {
   const { t } = useTranslation();
   const { user, sessionKey, logout } = useAuth();
+  const { activeThreadId, isThreadLocked } = useChat();
+  const locked = Boolean(activeThreadId && isThreadLocked(activeThreadId));
   const caseId = typeof args.caseId === "string" && args.caseId.trim() ? args.caseId : null;
   const scope = JSON.stringify([caseId, user?.id, user?.identityVersion, sessionKey]);
   const latestScope = useRef(scope);
@@ -23,7 +26,7 @@ export function DisputeConsent({ args }: ClientWidgetProps) {
 
   const run = async (approved?: boolean) => {
     if (!caseId || !user || latestScope.current !== scope || pending.current) return;
-    if (approved !== undefined && (state.scope !== scope || state.supportCase?.status !== "WAITING_USER_APPROVAL")) return;
+    if (approved !== undefined && (locked || state.scope !== scope || state.supportCase?.status !== "WAITING_USER_APPROVAL")) return;
     const controller = new AbortController();
     pending.current = controller;
     const active = () => !controller.signal.aborted && latestScope.current === scope;
@@ -97,8 +100,8 @@ export function DisputeConsent({ args }: ClientWidgetProps) {
           <p className="text-sm">{t("Status")}: {t(`support-cases.status.${current.supportCase.status}`, { keySeparator: ".", defaultValue: t("Unavailable") })}</p>
           {current.supportCase.status === "WAITING_USER_APPROVAL" ? (
             <div className="flex flex-wrap gap-2">
-              <Button disabled={current.busy} onClick={() => void run(true)}>{t("Approve dispute review")}</Button>
-              <Button variant="outline" disabled={current.busy} onClick={() => void run(false)}>{t("Decline dispute review")}</Button>
+              <Button disabled={current.busy || locked} onClick={() => void run(true)}>{t("Approve dispute review")}</Button>
+              <Button variant="outline" disabled={current.busy || locked} onClick={() => void run(false)}>{t("Decline dispute review")}</Button>
             </div>
           ) : <p className="text-sm">{t("This case is not awaiting your consent.")}</p>}
         </>
