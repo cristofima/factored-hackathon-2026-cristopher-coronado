@@ -9,11 +9,19 @@ services:
     host: azure.ai.project
     endpoint: ${FOUNDRY_PROJECT_ENDPOINT}
     deployments:
-      - name: gpt-4.1-mini
+      - name: model-router
         model:
           format: OpenAI
-          name: gpt-4.1-mini
-          version: "2025-04-14"
+          name: model-router
+          version: "2025-11-18"
+        sku:
+          name: GlobalStandard
+          capacity: 10
+      - name: gpt-5.4
+        model:
+          format: OpenAI
+          name: gpt-5.4
+          version: "2026-03-05"
         sku:
           name: GlobalStandard
           capacity: 10
@@ -40,6 +48,9 @@ services:
         version: 2.0.0
     env:
       MODEL_DEPLOYMENT_NAME: ${MODEL_DEPLOYMENT_NAME}
+      TRIAGE_MODEL_DEPLOYMENT_NAME: ${TRIAGE_MODEL_DEPLOYMENT_NAME}
+      ACCOUNT_MODEL_DEPLOYMENT_NAME: ${ACCOUNT_MODEL_DEPLOYMENT_NAME}
+      TRANSACTION_MODEL_DEPLOYMENT_NAME: ${TRANSACTION_MODEL_DEPLOYMENT_NAME}
       ACCOUNT_MCP_URL: ${ACCOUNT_MCP_URL}
       TRANSACTION_MCP_URL: ${TRANSACTION_MCP_URL}
       INTERNAL_IDENTITY_SECRET: ${INTERNAL_IDENTITY_SECRET}

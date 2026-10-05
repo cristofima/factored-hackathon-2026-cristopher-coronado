@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     # Foundry hosted agent configuration
     FOUNDRY_PROJECT_ENDPOINT: str | None = Field(default=None)
     MODEL_DEPLOYMENT_NAME: str | None = Field(default=None)
+    TRIAGE_MODEL_DEPLOYMENT_NAME: str | None = Field(default=None)
+    ACCOUNT_MODEL_DEPLOYMENT_NAME: str | None = Field(default=None)
+    TRANSACTION_MODEL_DEPLOYMENT_NAME: str | None = Field(default=None)
     INTERNAL_IDENTITY_SECRET: str | None = Field(default=None, min_length=32)
 
     #MCP servers
