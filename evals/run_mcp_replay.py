@@ -44,6 +44,8 @@ def error_details(error: BaseException) -> dict[str, Any]:
 
 async def run_case(
     client: BaseChatClient, case: dict[str, Any], timeout_seconds: float = 120,
+    *, account_chat_client: BaseChatClient | None = None,
+    transaction_chat_client: BaseChatClient | None = None,
 ) -> dict[str, Any]:
     secret = "synthetic-replay-only-not-a-production-secret"
     identity = customer_identity(case.get("locale", "en"))
@@ -77,6 +79,8 @@ async def run_case(
                 client, "in-memory://account", "in-memory://transaction", secret,
                 account_mcp_session=sessions["account"],
                 transaction_mcp_session=sessions["transaction"],
+                account_chat_client=account_chat_client,
+                transaction_chat_client=transaction_chat_client,
             )
             agent = workflow.as_agent(name="home_banking_agent")
             conversation = agent.create_session() if "turns" in case else None
@@ -126,16 +130,29 @@ async def main_async(args: argparse.Namespace) -> int:
             raise ValueError("Unknown replay case ID")
     if not cases or len({case["id"] for case in cases}) != len(cases):
         raise ValueError("Replay requires a nonempty dataset with unique case IDs")
+    models = {
+        "triage": args.triage_model or args.model,
+        "account": args.account_model or args.model,
+        "transaction": args.transaction_model or args.model,
+    }
     async with AzureCliCredential() as credential:
-        client = FoundryChatClient(
-            project_endpoint=args.project_endpoint, model=args.model, credential=credential,
-        )
-        results = [await run_case(client, case, args.timeout_seconds) for case in cases]
+        clients = {
+            model: FoundryChatClient(
+                project_endpoint=args.project_endpoint, model=model, credential=credential,
+            )
+            for model in set(models.values())
+        }
+        results = [await run_case(
+            clients[models["triage"]], case, args.timeout_seconds,
+            account_chat_client=clients[models["account"]],
+            transaction_chat_client=clients[models["transaction"]],
+        ) for case in cases]
     evaluation_name, run_name = evaluation_names(args.agent_name)
     report = {
         "evaluation_name": evaluation_name, "run_name": run_name,
         "created_at": datetime.now(timezone.utc).isoformat(),
-        "model": args.model, "model_execution": "real", "sample_size": len(results),
+        "model": args.model, "participant_models": models,
+        "model_execution": "real", "sample_size": len(results),
         "offline_or_simulated": True, "results": results,
         "foundry_submission": "not_submitted", "behavior_review": "pending",
     }
@@ -150,6 +167,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project-endpoint", required=True)
     parser.add_argument("--model", required=True)
+    parser.add_argument("--triage-model", help="Triage deployment; defaults to --model")
+    parser.add_argument("--account-model", help="Account deployment; defaults to --model")
+    parser.add_argument("--transaction-model", help="Transaction deployment; defaults to --model")
     parser.add_argument("--agent-name", default="home-banking-agent")
     parser.add_argument("--dataset", type=Path, default=ROOT / "evals" / "replay_cases.json")
     parser.add_argument("--output", type=Path)
