@@ -10,11 +10,10 @@ import pytest
 from sqlmodel import Session, create_engine
 from sqlalchemy.pool import StaticPool
 
-from models import LegacyServiceAgent, SQLModel
+from banking_data.models import LegacyServiceAgent, SQLModel
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
-from scripts import verify_load
+from banking_data.ingestion import verify_load
 
 
 @pytest.mark.parametrize("expected_count", [1, 2])

@@ -7,7 +7,7 @@ import pytest
 from banking_shared.models import TransactionRecord
 from sqlalchemy.dialects import postgresql
 
-from scripts.load_scoped_data import upsert_batches
+from banking_data.ingestion.load_scoped_data import upsert_batches
 
 
 def test_source_ingestion_rejects_existing_runtime_id_before_update() -> None:

@@ -7,12 +7,8 @@ import sys
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-DATA_DIR = Path(__file__).resolve().parents[1]
-if str(DATA_DIR) not in sys.path:
-    sys.path.insert(0, str(DATA_DIR))
-
-from database import get_database_url
-from models import SQLModel
+from banking_data.database import get_database_url
+from banking_data.models import SQLModel
 
 config = context.config
 config.set_main_option("sqlalchemy.url", get_database_url().replace("%", "%%"))

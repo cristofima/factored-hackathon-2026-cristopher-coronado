@@ -11,7 +11,7 @@ from sqlalchemy.engine import Connection
 from sqlmodel import SQLModel
 
 from banking_shared.models import Customer
-from test_identity_migrations import additive, legacy, revision, run, table
+from .test_identity_migrations import additive, legacy, revision, run, table
 
 SCOPED_TABLES = (
     "users", "roles", "user_roles", "customer_users", "operators", "identity_audits",

@@ -6,14 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from scripts.run_pipeline import (
+from banking_data.ingestion.run_pipeline import (
     PipelineSettings,
     PipelineStep,
     build_artifacts,
     build_steps,
     run_pipeline,
 )
-from scripts.shared import parse_customer_ids
+from banking_data.shared import parse_customer_ids
 
 
 def test_settingsRequireSourceDirectory() -> None:

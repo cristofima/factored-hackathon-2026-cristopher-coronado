@@ -16,8 +16,8 @@ from banking_shared.identity_models import (
     User,
     UserRole,
 )
-from models import Customer
-from scripts import seed_demo_users
+from banking_data.models import Customer
+from banking_data import seed_demo_users
 
 
 @pytest.fixture

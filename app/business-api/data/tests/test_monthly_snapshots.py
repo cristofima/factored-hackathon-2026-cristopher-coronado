@@ -6,15 +6,15 @@ from decimal import Decimal
 
 import pytest
 
-from scripts.build_monthly_snapshots import (
+from banking_data.snapshots.build_monthly_snapshots import (
     CALCULATION_METHOD,
     MonthlyMovement,
     TransactionPolicy,
     build_snapshot_values,
     parse_month,
 )
-from models import ProductMonthlySnapshot
-from scripts.verify_monthly_snapshots import verify_snapshots
+from banking_data.models import ProductMonthlySnapshot
+from banking_data.snapshots.verify_monthly_snapshots import verify_snapshots
 
 
 def test_buildSnapshotValuesReconstructsCompletedMonthsFromPartialAnchorMonth() -> None:
