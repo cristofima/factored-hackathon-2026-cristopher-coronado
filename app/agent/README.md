@@ -119,6 +119,22 @@ uv run python -m app.main_responses_host
 
 The agent listens on port `8088`. Browser traffic should go through the BFF on port `8080`, not directly to this process. The root `DEV - Full Stack Ordered` VS Code launch starts the supported local topology.
 
+The hosted code package contains only this project. Its manifest and lockfile must
+not depend on repository-root evaluation packages or other external local paths.
+The evaluation project owns the optional dependency on the agent, not the reverse.
+Run the complete agent suite, including evaluation integration tests, from the
+repository root using the combined evaluation environment:
+
+```powershell
+rtk proxy uv sync --project evals --extra offline --extra model --frozen
+$env:OTEL_SDK_DISABLED = "true"
+rtk proxy uv run --project evals --frozen --no-sync python -m pytest app\agent\tests -q
+```
+
+Hosted-agent CI also restores an isolated copy of this project's dependencies on
+Python 3.13, without the repository-root evaluation directory, before running tests.
+This check verifies packaging isolation, not hosted activation or model behavior.
+
 ## Configuration
 
 This directory is a separate `azd` project root because it has its own `azure.yaml` at `app/agent/azure.yaml`. The repository root `azure.yaml` (App Service stack) and this agent `azure.yaml` (hosted agent stack) do not share `azd` environment state automatically.

@@ -63,6 +63,17 @@ resources, not wheel data. The resolver rejects escaped or missing resources. Mo
 execution requires `--extra model` and separate authorization; installation alone
 does not authorize billable runs.
 
+For the complete agent suite and evaluation integration regressions, use both
+extras from the repository root. The agent's deployment environment intentionally
+does not install `banking-evals`; the dependency points from evaluations to the
+agent so the hosted package remains self-contained.
+
+```powershell
+rtk proxy uv sync --project evals --extra offline --extra model --frozen
+$env:OTEL_SDK_DISABLED = "true"
+rtk proxy uv run --project evals --frozen --no-sync python -m pytest app\agent\tests evals\tests -q
+```
+
 Verified locally: **25 tests passed**, offline comparator **25/25 structured passes**,
 and saved-evidence rescoring **25/25 passes**. These are synthetic results only.
 The existing replay tests now bind paired fixtures to the current scorer and frozen

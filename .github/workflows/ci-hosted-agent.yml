@@ -49,11 +49,34 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: ./.github/actions/ci-python
+      - uses: astral-sh/setup-uv@v8.3.2
         with:
-          project-path: app/agent
-          artifact-name: agent-test-results
-          run-tests: "true"
+          python-version: "3.11"
+          enable-cache: true
+      - name: Verify isolated hosted dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_dir="$(mktemp -d)"
+          trap 'rm -rf "$package_dir"' EXIT
+          cp app/agent/pyproject.toml app/agent/uv.lock app/agent/README.md "$package_dir/"
+          cp -R app/agent/src "$package_dir/src"
+          uv lock --project "$package_dir" --check
+          uv sync --project "$package_dir" --python 3.13 --dev --frozen
+      - name: Install agent and evaluation dependencies
+        run: uv sync --project evals --extra offline --extra model --frozen
+      - name: Compile agent source
+        run: uv run --project evals --frozen --no-sync python -m compileall -q app/agent/src
+      - name: Run agent tests
+        run: uv run --project evals --frozen --no-sync python -m pytest app/agent/tests -q --junitxml=app/agent/junit.xml
+      - name: Upload agent test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: agent-test-results
+          path: app/agent/junit.xml
+          retention-days: 14
+          if-no-files-found: error
 
   dispute-offline:
     name: Dispute Replay (offline structured checks)
@@ -71,14 +94,14 @@ jobs:
         with:
           python-version: "3.11"
           enable-cache: true
-      - name: Install agent dependencies
-        run: uv sync --project app/agent --dev --frozen
+      - name: Install evaluation dependencies
+        run: uv sync --project evals --extra offline --extra model --frozen
       - name: Run offline dispute alignment regressions
-        run: uv run --project app/agent --frozen --no-sync python -m pytest evals/tests -q --junitxml=evals/results/dispute-tests.xml
+        run: uv run --project evals --frozen --no-sync python -m pytest evals/tests -q --junitxml=evals/results/dispute-tests.xml
       - name: Execute deterministic comparator
-        run: uv run --project app/agent --frozen --no-sync python -m banking_evals.run_dispute_replay --system baseline --timeout-seconds 10 --output evals/results/dispute-baseline.json
+        run: uv run --project evals --frozen --no-sync python -m banking_evals.run_dispute_replay --system baseline --timeout-seconds 10 --output evals/results/dispute-baseline.json
       - name: Rescore saved evidence
-        run: uv run --project app/agent --frozen --no-sync python -m banking_evals.run_dispute_replay --rescore evals/results/dispute-baseline.json --output evals/results/dispute-rescored.json
+        run: uv run --project evals --frozen --no-sync python -m banking_evals.run_dispute_replay --rescore evals/results/dispute-baseline.json --output evals/results/dispute-rescored.json
       - name: Publish structured summary
         if: always()
         shell: bash
@@ -141,8 +164,8 @@ jobs:
               exit 1
             fi
           done
-      - name: Install agent dependencies
-        run: uv sync --project app/agent --dev --frozen
+      - name: Install evaluation dependencies
+        run: uv sync --project evals --extra offline --extra model --frozen
       - name: Azure model login
         uses: azure/login@v2
         with:
@@ -152,7 +175,7 @@ jobs:
       - name: Run real-model replay
         shell: bash
         run: |
-          uv run --project app/agent --frozen --no-sync python -m banking_evals.run_mcp_replay \
+          uv run --project evals --frozen --no-sync python -m banking_evals.run_mcp_replay \
             --project-endpoint "$FOUNDRY_PROJECT_ENDPOINT" --model "$MODEL_DEPLOYMENT_NAME" \
             --triage-model "$TRIAGE_MODEL_DEPLOYMENT_NAME" \
             --account-model "$ACCOUNT_MODEL_DEPLOYMENT_NAME" \
@@ -163,7 +186,7 @@ jobs:
         shell: bash
         run: |
           status=0
-          uv run --project app/agent --frozen --no-sync python -m banking_evals.replay_summary --report evals/results/mcp-replay.json \
+          uv run --project evals --frozen --no-sync python -m banking_evals.replay_summary --report evals/results/mcp-replay.json \
             --dataset evals/replay_cases.json --output evals/results/replay-summary.md || status=$?
           cat evals/results/replay-summary.md >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
