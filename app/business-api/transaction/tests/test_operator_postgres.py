@@ -36,7 +36,7 @@ def postgres_factory() -> Iterator[Callable[[], Session]]:
     try:
         with engine.begin() as connection:
             connection.execute(CreateSchema(schema))
-        isolated = engine.execution_options(schema_translate_map={None: schema})
+        isolated = engine.execution_options(schema_translate_map={None: schema, "support": schema})
         SQLModel.metadata.create_all(isolated)
         now = datetime.now(timezone.utc)
         with Session(isolated) as session:

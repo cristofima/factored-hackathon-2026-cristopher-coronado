@@ -23,6 +23,7 @@ PRINCIPAL = OperatorPrincipal("operator", 1)
 @pytest.fixture
 def factory() -> Callable[[], Session]:
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    engine = engine.execution_options(schema_translate_map={"support": None})
     SQLModel.metadata.create_all(engine)
     now = datetime.now(timezone.utc)
     with Session(engine) as session:
@@ -106,7 +107,7 @@ def test_effect_failure_rolls_back_posting_movement_audit_and_closure(factory: C
         connection: object, cursor: object, statement: str, parameters: object,
         context: object, executemany: bool,
     ) -> None:
-        if statement.startswith("INSERT INTO runtime_postings"):
+        if statement.startswith(("INSERT INTO runtime_postings", "INSERT INTO main.runtime_postings")):
             raise IntegrityError(statement, parameters, RuntimeError("synthetic failure"))
     event.listen(engine, "before_cursor_execute", fail)
     try:

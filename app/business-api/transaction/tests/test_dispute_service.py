@@ -22,6 +22,12 @@ from banking_transaction.routers import disputes as dispute_routers
 from banking_transaction.services.disputes import CardOnlyDisputeError, SupportCaseService
 from banking_transaction.models.transactions import DisputeCase
 from banking_transaction.auth.jwt_identity import get_jwt_customer_id
+from banking_transaction.auth.operator_identity import OperatorPrincipal
+from banking_transaction.models.conversation import CaseConversation, ConversationMessage
+from banking_transaction.models.conversation_record import CaseConversationSnapshot
+from banking_transaction.models.transactions import AcceptDisputeRequest
+from banking_transaction.services.operator import OperatorCaseService
+from pydantic import ValidationError
 
 NOW = datetime.now(timezone.utc)
 
@@ -33,7 +39,9 @@ def session_factory() -> Callable[[], Session]:
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+    engine = engine.execution_options(schema_translate_map={"support": None})
     SQLModel.metadata.create_all(engine)
+    CaseConversationSnapshot.metadata.create_all(engine)
     with Session(engine) as session:
         session.add_all(
             [
@@ -811,6 +819,87 @@ def test_accepted_preview_recovers_terminal_case_without_reopening(
     assert recovered.caseId == accepted.caseId
     assert recovered.status == "RESOLVED"
     assert len(preview_service.get_case_timeline(accepted.caseId, "customer-owned")) == 3
+
+
+@pytest.mark.parametrize("history", [
+    [{"role": "system", "text": "hidden"}],
+    [{"role": "user", "text": ""}],
+    [{"role": "user", "text": 42}],
+    [{"role": "user", "text": "x", "token": "excluded"}],
+    [{"role": "user", "text": "x"}] * 101,
+    [{"role": "user", "text": "x" * 100_001}],
+    [{"role": "user", "text": "x" * 50_001}] * 2,
+])
+def test_acceptance_rejects_invalid_conversation(history: list[dict[str, object]]) -> None:
+    with pytest.raises(ValidationError):
+        AcceptDisputeRequest(previewToken="proposal", conversationHistory=history)
+
+
+def test_conversation_snapshot_is_owned_and_immutable(
+    preview_service: SupportCaseService, session_factory: Callable[[], Session],
+) -> None:
+    messages = [ConversationMessage(role="user", text="Óptica Visión"),
+                ConversationMessage(role="assistant", text="Earlier purchases found")]
+    preview = preview_service.preview_transaction_dispute(
+        "tx-low-risk", "customer-owned", "Unrecognized",
+    )
+    accepted = preview_service.accept_transaction_dispute(
+        preview.previewToken, "customer-owned", messages,
+    )
+    assert preview_service.get_case_conversation(
+        accepted.caseId, "customer-owned",
+    ) == CaseConversation(messages=messages)
+    preview_service.accept_transaction_dispute(preview.previewToken, "customer-owned", [])
+    assert preview_service.get_case_conversation(accepted.caseId, "customer-owned").messages == messages
+    with pytest.raises(PermissionError):
+        preview_service.get_case_conversation(accepted.caseId, "customer-foreign")
+    with pytest.raises(PermissionError):
+        preview_service.get_case_conversation("missing", "customer-owned")
+    operator = OperatorCaseService(session_factory)
+    principal = OperatorPrincipal("assigned-operator", 1)
+    with pytest.raises(LookupError):
+        operator.get_case_conversation(accepted.caseId, principal)
+    with session_factory() as session:
+        case = session.get(SupportCase, accepted.caseId)
+        assert case is not None
+        case.assigned_operator_sub = principal.sub
+        case.claimed_at = datetime.now(timezone.utc)
+        session.add(case)
+        session.commit()
+    assert operator.get_case_conversation(accepted.caseId, principal).messages == messages
+    with pytest.raises(LookupError):
+        operator.get_case_conversation(accepted.caseId, OperatorPrincipal("other", 1))
+
+
+def test_direct_case_conversation_is_empty(
+    preview_service: SupportCaseService,
+) -> None:
+    case = preview_service.open_transaction_dispute("tx-low-risk", "customer-owned", "Reason")
+    assert preview_service.get_case_conversation(case.caseId, "customer-owned") == CaseConversation()
+
+
+def test_conversation_failure_rolls_back_intake(
+    preview_service: SupportCaseService, session_factory: Callable[[], Session],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    preview = preview_service.preview_transaction_dispute(
+        "tx-low-risk", "customer-owned", "Reason",
+    )
+
+    def fail_snapshot(session: Session, case_id: str, history: CaseConversation) -> None:
+        raise RuntimeError("synthetic snapshot failure")
+
+    from banking_transaction.services import disputes as dispute_service
+
+    monkeypatch.setattr(dispute_service, "append_conversation", fail_snapshot)
+    with pytest.raises(RuntimeError, match="synthetic snapshot failure"):
+        preview_service.accept_transaction_dispute(
+            preview.previewToken, "customer-owned", [ConversationMessage(role="user", text="Reason")],
+        )
+    with session_factory() as session:
+        assert session.exec(select(SupportCase)).all() == []
+        assert session.exec(select(SupportCaseEvent)).all() == []
+        assert session.exec(select(CaseConversationSnapshot)).all() == []
 
 
 def test_mcp_sdk_preview_acceptance_and_recovery(
