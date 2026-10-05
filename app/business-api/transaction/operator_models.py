@@ -64,6 +64,7 @@ class OperatorCaseEvent(BaseModel):
 
 
 class OperatorCaseDetail(OperatorCaseSummary):
+    customerName: str | None = None
     assignedOperatorSub: str
     claimedAt: str
     reason: str

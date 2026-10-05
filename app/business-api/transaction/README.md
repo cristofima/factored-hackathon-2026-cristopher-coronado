@@ -88,7 +88,20 @@ The page contains `items`, `total`, `offset`, `limit`. Each item contains `caseI
 reasons, product/transaction IDs and financial values are omitted.
 
 Owned detail adds `assignedOperatorSub`, `claimedAt`, `reason`, `transactionId`,
-`productId`, `events`. Events contain `eventId`, `eventType`, `actor`, `message`,
+`productId`, `events`, and nullable `customerName`. The name is read from the case's
+current persisted Customer record: trimmed nonempty first/last names are joined with
+one space; missing customers or blank names return `null`. It is current metadata,
+not immutable transaction evidence, and never appears in queue summaries. The same
+owned-detail contract applies to claim and subsequent action responses; name changes
+do not modify evidence snapshots or case/evidence versions.
+
+The operator UI displays localized transaction-status badges (Approved green,
+Declined red, Pending amber, Reversed gray) using canonical values for styling.
+Stored fraud scores use an accessible continuous green–amber–red scale from 0 to 100,
+with numeric text; missing or invalid values remain unavailable. Colors introduce no
+risk bands or probability interpretation and do not change routing or verdict rules.
+
+Events contain `eventId`, `eventType`, `actor`, `message`,
 `createdAt`, `operatorSub`, `operatorIdentityVersion`, `claimVersion`.
 Event messages preserve original audit text, including historical simulated wording;
 that wording is not evidence of human investigation, settlement or product protection.

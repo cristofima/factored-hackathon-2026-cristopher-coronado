@@ -3,7 +3,7 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 
 import pytest
-from banking_shared.models import SQLModel, SupportCase, SupportCaseEvent
+from banking_shared.models import Customer, SQLModel, SupportCase, SupportCaseEvent
 from banking_shared.identity_models import User, Operator
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -206,6 +206,86 @@ def test_claim_rolls_back_written_audit_and_remains_claimable(
     claimed = service.claim_case("case-0", OTHER)
     assert claimed.assignedOperatorSub == OTHER.sub and claimed.claimVersion == 1
     assert len([item for item in claimed.events if item.eventType == "OPERATOR_CLAIMED"]) == 1
+
+
+@pytest.mark.parametrize(("first_name", "last_name", "expected"), [
+    (" Ana ", " Silva ", "Ana Silva"),
+    ("Ana", None, "Ana"),
+    (None, " Silva ", "Silva"),
+    ("   ", "", None),
+    (None, None, None),
+])
+def test_detail_returns_normalized_current_customer_name(
+    factory: Callable[[], Session], first_name: str | None, last_name: str | None,
+    expected: str | None,
+) -> None:
+    with factory() as session:
+        session.add(Customer(customer_id="customer-sensitive", email="customer@synthetic.invalid",
+                             first_name=first_name, last_name=last_name))
+        session.add(Customer(customer_id="unrelated-customer", email="unrelated@synthetic.invalid",
+                             first_name="Unrelated", last_name="Person"))
+        session.commit()
+    service = OperatorCaseService(factory)
+    claimed = service.claim_case("case-0", OPERATOR)
+    assert claimed.customerName == expected
+    assert service.get_case("case-0", OPERATOR).customerName == expected
+    with pytest.raises(LookupError):
+        service.get_case("case-0", OTHER)
+
+
+def test_customer_name_changes_without_mutating_evidence(factory: Callable[[], Session]) -> None:
+    service = OperatorCaseService(factory)
+    assert service.claim_case("case-0", OPERATOR).customerName is None
+    snapshot = {"customerId": "customer-sensitive", "merchant": "Original merchant"}
+    with factory() as session:
+        case = session.get(SupportCase, "case-0")
+        assert case is not None
+        case.evidence_snapshot = snapshot
+        case.evidence_version = 1
+        session.add(Customer(customer_id="customer-sensitive", email="customer@synthetic.invalid",
+                             first_name="Ana", last_name="Silva"))
+        session.commit()
+    before = service.get_case("case-0", OPERATOR)
+    assert before.customerName == "Ana Silva"
+    with factory() as session:
+        customer = session.get(Customer, "customer-sensitive")
+        assert customer is not None
+        customer.first_name = "Eva"
+        session.commit()
+    after = service.get_case("case-0", OPERATOR)
+    assert after.customerName == "Eva Silva"
+    assert before.evidence == after.evidence == snapshot
+    assert before.evidenceVersion == after.evidenceVersion == 1
+    assert before.caseVersion == after.caseVersion
+    assert before.events == after.events
+
+
+@pytest.mark.parametrize("first_name", [None, " Ana "])
+def test_rest_serializes_current_customer_name_only_for_owner(
+    factory: Callable[[], Session], monkeypatch: pytest.MonkeyPatch, first_name: str | None,
+) -> None:
+    if first_name is not None:
+        with factory() as session:
+            session.add(Customer(customer_id="customer-sensitive", email="customer@synthetic.invalid",
+                                 first_name=first_name, last_name=" Silva "))
+            session.commit()
+    monkeypatch.setattr(operator_routers, "service", OperatorCaseService(factory))
+    app = FastAPI()
+    app.include_router(operator_routers.router, prefix="/api/operator/support-cases")
+    app.dependency_overrides[get_operator_principal] = lambda: OPERATOR
+    with TestClient(app) as client:
+        prefix = "/api/operator/support-cases/case-0"
+        claim = client.post(prefix + "/claim")
+        assert claim.status_code == 200
+        expected = "Ana Silva" if first_name is not None else None
+        assert claim.json()["customerName"] == expected
+        detail = client.get(prefix)
+        assert detail.status_code == 200
+        assert detail.json()["customerName"] == expected
+        app.dependency_overrides[get_operator_principal] = lambda: OTHER
+        foreign = client.get(prefix)
+        assert foreign.status_code == 404
+        assert foreign.json() == {"detail": {"code": "CASE_NOT_FOUND"}}
 
 
 def test_rest_contract_and_conflict_codes(factory: Callable[[], Session], monkeypatch: pytest.MonkeyPatch) -> None:

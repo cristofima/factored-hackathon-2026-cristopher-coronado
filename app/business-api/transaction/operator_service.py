@@ -5,7 +5,7 @@ from typing import Literal
 
 from banking_shared.database import create_session
 from banking_shared.identity_models import Operator
-from banking_shared.models import CardProtection, Product, SupportCase, SupportCaseEvent
+from banking_shared.models import CardProtection, Customer, Product, SupportCase, SupportCaseEvent
 from adjudication import AdjudicationConflict, advance, audit, capture_evidence, destinations, execute_effects, owned_case, source_snapshot
 from sqlalchemy import func, update
 from sqlalchemy.sql.elements import ColumnElement
@@ -47,8 +47,13 @@ def _detail(session: Session, case: SupportCase) -> OperatorCaseDetail:
     events = session.exec(select(SupportCaseEvent).where(
         SupportCaseEvent.case_id == case.case_id,
     ).order_by(SupportCaseEvent.created_at, SupportCaseEvent.event_id)).all()
+    customer = session.get(Customer, case.customer_id)
+    customer_name = " ".join(
+        part.strip() for part in (customer.first_name, customer.last_name) if part and part.strip()
+    ) if customer is not None else ""
     return OperatorCaseDetail(
-        **_summary(case).model_dump(), assignedOperatorSub=case.assigned_operator_sub,
+        **_summary(case).model_dump(), customerName=customer_name or None,
+        assignedOperatorSub=case.assigned_operator_sub,
         claimedAt=case.claimed_at.isoformat(), reason=case.reason,
         transactionId=case.transaction_id, productId=case.product_id,
         caseVersion=case.case_version, evidenceVersion=case.evidence_version,
