@@ -444,6 +444,7 @@
       "transactionId": "ID da transação",
       "productId": "ID do produto",
       "productType": "Tipo de produto",
+      "customerName": "Nome atual do cliente",
       "customerId": "ID do cliente",
       "amount": "Valor original",
       "currency": "Moeda original",

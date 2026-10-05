@@ -12,6 +12,7 @@ import { ApiError, errorTranslationKey } from "@/api/errors";
 import type { SupportCase } from "@/models/SupportCase";
 import { useAuth } from "@/context/AuthContext";
 import { formatDateTime } from "@/common/dateTime";
+import { maskedCardNumber } from "@/common/products";
 
 export default function SupportCases() {
   const { t } = useTranslation();
@@ -51,8 +52,8 @@ export default function SupportCases() {
   }, [user?.id, sessionKey, user?.identityVersion, attempt, logout]);
 
   return (
-    <div className="p-6 max-w-5xl space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="min-w-0 p-4 sm:p-6 max-w-5xl space-y-6">
+      <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold text-foreground">
           {t("Transaction Disputes")}
         </h1>
@@ -79,10 +80,10 @@ export default function SupportCases() {
       {cases.length > 0 && (
         <div className="space-y-3">
           {cases.map((item) => (
-            <Link key={item.caseId} to={`/support-cases/${item.caseId}`}>
-              <Card className="transition-colors hover:bg-muted/40">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-base font-mono">
+            <Link className="block" key={item.caseId} to={`/support-cases/${encodeURIComponent(item.caseId)}`}>
+              <Card className="min-w-0 transition-colors hover:bg-muted/40">
+                <CardHeader className="flex flex-wrap flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                  <CardTitle className="min-w-0 text-base font-mono [overflow-wrap:anywhere]">
                     {item.caseId}
                   </CardTitle>
                   <Badge
@@ -96,11 +97,11 @@ export default function SupportCases() {
                     })}
                   </Badge>
                 </CardHeader>
-                <CardContent className="text-sm text-muted-foreground space-y-1">
-                  <p className="break-words">{item.reason}</p>
+                <CardContent className="min-w-0 text-sm text-muted-foreground space-y-1 [overflow-wrap:anywhere]">
+                  <p className="whitespace-pre-wrap">{item.reason}</p>
                   <p>
                     {t("Opened")}: {formatDateTime(item.openedAt, user?.locale, "date-time")}
-                    {item.productNumber ? ` · ${item.productNumber}` : ""}
+                    {item.productNumber ? ` · ${maskedCardNumber(item.productNumber) ?? t("Unavailable")}` : ""}
                   </p>
                 </CardContent>
               </Card>

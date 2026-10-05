@@ -21,9 +21,9 @@ export default function SupportCaseTimeline({ events, transactionId, perspective
     <CardHeader><CardTitle className="text-base">{t("Timeline")}</CardTitle></CardHeader>
     <CardContent>
       <ol className="space-y-3">
-        {events.map((event, index) => <li key={`${event.eventType}-${index}`} className="text-sm border-l-2 pl-3">
+        {events.map((event, index) => <li key={`${event.eventType}-${index}`} className="text-sm border-l-2 pl-3 [overflow-wrap:anywhere]">
           <p className="font-medium">{translate(`support-cases.events.${event.eventType}`, event.eventType)}</p>
-          {(event.displayMessage ?? event.message) && <p className="text-muted-foreground">
+          {(event.displayMessage ?? event.message) && <p className="text-muted-foreground whitespace-pre-wrap">
             {translate(supportCaseEventMessageKey(event), event.displayMessage ?? event.message ?? t("Not available"))}
           </p>}
           <p className="text-xs text-muted-foreground"><time dateTime={event.createdAt}>{formatDateTime(event.createdAt, i18n.language, "date-time-seconds")}</time></p>

@@ -25,6 +25,7 @@ const detailSchema = caseSchema.extend({
         productType: z.string(), currency: z.string().nullable() })).optional(),
     effects: effectsSchema.nullable().optional(), effectCode: z.string().nullable().optional(),
     cardProtection: protectionSchema.nullable().optional(), productProtectionStatus: z.string().nullable().optional(),
+    customerName: z.string().nullable().optional(),
     assignedOperatorSub: z.string().min(1), claimedAt: timestamp,
     reason: z.string(), transactionId: z.string().min(1), productId: z.string().min(1),
     events: z.array(z.object({

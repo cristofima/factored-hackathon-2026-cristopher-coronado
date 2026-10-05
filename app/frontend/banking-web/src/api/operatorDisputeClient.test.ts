@@ -40,6 +40,15 @@ describe("operator dispute transport", () => {
     expect(fetch.mock.calls[1][1]).toMatchObject({ method: "POST" });
     expect(fetch.mock.calls[1][1]).not.toHaveProperty("body");
   });
+  it.each(["Ana Silva", null, undefined])("accepts current customer name %j and legacy omission", async customerName => {
+    const detail = { ...claimed, ...(customerName === undefined ? {} : { customerName }) };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(detail))));
+    expect(await getOperatorCase("case-id")).toEqual(detail);
+  });
+  it.each([42, {}, []])("rejects malformed customer name %j", async customerName => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ ...claimed, customerName }))));
+    await expect(getOperatorCase("case-id")).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
+  });
   it.each(["", " ", ".", ".."]) ("rejects unsafe identifier %j", async (id) => {
     const fetch = vi.fn(); vi.stubGlobal("fetch", fetch);
     await expect(getOperatorCase(id)).rejects.toMatchObject({ code: "INVALID_REQUEST" });

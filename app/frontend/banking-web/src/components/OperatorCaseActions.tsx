@@ -6,12 +6,20 @@ import { ApiError, errorTranslationKey } from "@/api/errors";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { formatDateTime } from "@/common/dateTime";
 import { maskedCardNumber } from "@/common/products";
 import { formatProductAmount } from "@/common/productAmount";
-import { disputeProductLabel, disputeTransactionStatus, disputeProtectionStatus, disputeSourceLabel, formatStoredScore } from "@/common/disputePresentation";
+import { disputeProductLabel, disputeTransactionStatus, disputeProtectionStatus, disputeSourceLabel, formatStoredScore, storedScoreValue } from "@/common/disputePresentation";
+
+const transactionStatusStyles: Record<string, string> = {
+  Approved: "border-green-200 bg-green-100 text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-200",
+  Declined: "border-red-200 bg-red-100 text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-200",
+  Pending: "border-amber-200 bg-amber-100 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200",
+  Reversed: "border-gray-200 bg-gray-100 text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200",
+};
 
 type Action = "valid" | "invalid" | "retry" | "block" | "unblock";
 const evidenceGroups = [
@@ -79,6 +87,8 @@ export default function OperatorCaseActions({ supportCase }: { supportCase: Oper
   return <Card>
     <CardHeader><CardTitle>{t("Review evidence and actions")}</CardTitle></CardHeader>
     <CardContent className="space-y-4">
+      <dl><dt className="text-muted-foreground">{t("operator.evidence.customerName", { keySeparator: "." })}</dt>
+        <dd className="break-words">{supportCase.customerName?.trim() || t("Unavailable")}</dd></dl>
       <p>{t("Case version")}: {version ?? t("Unavailable")} · {t("Evidence version")}: {evidenceVersion ?? t("Unavailable")}</p>
       {!evidence && <p role="alert">{t("Verified evidence is unavailable. No financial completion is confirmed.")}</p>}
       {evidence && <p>{t("Stored transaction data supports review; it does not prove the dispute is valid.")}</p>}
@@ -95,7 +105,20 @@ export default function OperatorCaseActions({ supportCase }: { supportCase: Oper
               : key === "sourceKind" ? disputeSourceLabel(String(value), t)
               : key === "amount" ? formatProductAmount(String(value), user?.locale ?? "en")
               : key === "fraudScore" ? formatStoredScore(String(value), user?.locale ?? "en") : String(value);
-            return <div key={key}><dt className="text-muted-foreground">{t(`operator.evidence.${key}`, { keySeparator: "." })}</dt><dd className="break-words">{display}</dd></div>;
+            const score = key === "fraudScore" ? storedScoreValue(value) : null;
+            return <div key={key}><dt className="text-muted-foreground">{t(`operator.evidence.${key}`, { keySeparator: "." })}</dt>
+              <dd className="break-words">
+                {key === "status" ? <Badge variant="outline" className={transactionStatusStyles[String(value)]}>{display}</Badge>
+                  : key === "fraudScore" ? score === null ? t("Unavailable") : <div className="space-y-1">
+                    <span>{display} / 100</span>
+                    <div role="meter" aria-label={t("operator.evidence.fraudScore", { keySeparator: "." })}
+                      aria-valuemin={0} aria-valuemax={100} aria-valuenow={score} aria-valuetext={`${display} / 100`}
+                      className="relative h-3 w-full max-w-xs overflow-hidden rounded-full bg-gradient-to-r from-green-500 via-amber-400 to-red-500">
+                      <span aria-hidden="true" className="absolute inset-y-0 w-1 -translate-x-1/2 bg-black ring-1 ring-white" style={{ left: `${score}%` }} />
+                    </div>
+                    <div aria-hidden="true" className="flex max-w-xs justify-between text-xs text-muted-foreground"><span>0</span><span>100</span></div>
+                  </div> : display}
+              </dd></div>;
           })}
         </dl>
       </section>)}

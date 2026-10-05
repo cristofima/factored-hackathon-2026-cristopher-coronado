@@ -5,7 +5,7 @@ export default function SupportCaseIntakeReceipt({ supportCase, events }: { supp
   const { t } = useTranslation();
   const consent = events.filter(event => ["APPROVAL_REQUESTED", "APPROVAL_GRANTED", "APPROVAL_DECLINED"].includes(event.eventType))
     .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))[0];
-  return <div className="space-y-2" role="status">
+  return <div className="min-w-0 space-y-2 [overflow-wrap:anywhere]" role="status">
     <p>{t("Support case")}: <span className="font-mono">{supportCase.caseId}</span></p>
     <p>{t("Original transaction")}: <span className="font-mono">{supportCase.transactionId}</span></p>
     <p>{t("Customer statement")}: <span className="whitespace-pre-wrap">{supportCase.reason}</span></p>

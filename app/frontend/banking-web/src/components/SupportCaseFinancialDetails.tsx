@@ -18,7 +18,7 @@ export default function SupportCaseFinancialDetails({ supportCase }: { supportCa
   const rationale = supportCase.rationale ?? supportCase.resolutionNotes;
   return <Card>
     <CardHeader><CardTitle className="text-base">{t("Financial movement")}</CardTitle></CardHeader>
-    <CardContent className="space-y-3 text-sm">
+    <CardContent className="min-w-0 space-y-3 text-sm [overflow-wrap:anywhere]">
       <p>{t("Original transaction")}: <span className="font-mono">{supportCase.transactionId}</span></p>
       {supportCase.status === "PENDING_EFFECTS" && <p>{t("Restitution is pending. No completed credit or balance change is confirmed.")}</p>}
       {supportCase.status === "RESOLVED_INVALID" && <p>{t("Invalid verdict recorded. No restitution was posted for this case.")}</p>}
