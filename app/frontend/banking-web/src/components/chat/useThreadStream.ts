@@ -121,8 +121,10 @@ export function useThreadStream({ url, request, onEvent, onConversation, onError
           return;
         }
 
+        let hasContinuation = false;
         const conversationId = response.headers.get("X-Conversation-Id");
         if (conversationId && typeof request.threadId === "string") {
+          hasContinuation = true;
           onConversationRef.current?.(request.threadId, conversationId);
         }
 
@@ -134,17 +136,37 @@ export function useThreadStream({ url, request, onEvent, onConversation, onError
         }
 
         let buffer = "";
-        const emitLine = (line: string) => {
-          const trimmed = line.trim();
-          if (!trimmed.startsWith("data:")) return;
-          const data = trimmed.slice(5).trimStart();
+        let eventData: string[] = [];
+        const emitEvent = () => {
+          if (!eventData.length) return;
+          const data = eventData.join("\n");
+          eventData = [];
           if (data === "[DONE]") return;
           const event: unknown = JSON.parse(data);
           if (!event || typeof event !== "object" ||
             !("type" in event) || typeof event.type !== "string") {
             throw new Error("Invalid stream event");
           }
-          if (isCurrent()) onEventRef.current(event as StreamEvent);
+          if (!isCurrent()) return;
+          if (event.type === "bff.continuation") {
+            if (!("token" in event) || typeof event.token !== "string" ||
+              !event.token || event.token.length > 2048) {
+              throw new Error("Invalid continuation");
+            }
+            hasContinuation = true;
+            if (typeof request.threadId === "string") {
+              onConversationRef.current?.(request.threadId, event.token);
+            }
+            return;
+          }
+          onEventRef.current(event as StreamEvent);
+        };
+        const emitLine = (line: string) => {
+          const normalized = line.replace(/\r$/, "");
+          if (!normalized) emitEvent();
+          else if (normalized.startsWith("data:")) {
+            eventData.push(normalized.slice(5).replace(/^ /, ""));
+          }
         };
 
         while (true) {
@@ -153,7 +175,11 @@ export function useThreadStream({ url, request, onEvent, onConversation, onError
 
           if (done) {
             buffer += decoder.decode();
-            if (buffer.trim()) emitLine(buffer);
+            if (buffer) emitLine(buffer);
+            emitEvent();
+            if (!hasContinuation && isCurrent()) {
+              onEventRef.current({ type: "error", code: "CONTINUATION_UNAVAILABLE", allow_retry: false });
+            }
             if (isCurrent()) onCompleteRef.current?.();
             break;
           }

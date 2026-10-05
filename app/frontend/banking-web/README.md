@@ -48,6 +48,46 @@ Restart Identity and sign in again after changing the TTL: existing JWTs keep th
 original expiry. Refresh tokens and renewal dialogs are deferred; expiry requires
 a new login. Current-identity checks still fail closed.
 
+## Chat recovery and case evidence
+
+Help separates two kinds of history:
+
+- **Chats from this session:** all chat types use bounded, tab-scoped `sessionStorage`,
+  tied to the authenticated subject, identity version and server. Navigation and hard
+  reload during the same login preserve signed completed-response continuation tokens
+  and visible history.
+  Explicit logout or a new login clears them. They are not a durable cross-login,
+  cross-tab or cross-device archive. Interrupted or uncertain threads remain read-only;
+  there is no automatic resend.
+- **Saved case conversations:** owning customers can select their cases in Help and
+  read the immutable PostgreSQL intake snapshot. It can omit older messages and does
+  not include later exchanges. Legacy/direct cases can have no snapshot. This is not
+  a general-chat archive and does not restore provider state or enable continuation.
+
+The browser sends signed `conversation` continuation tokens; the BFF translates them
+internally to `previous_response_id` in both local and hosted modes. PostgreSQL snapshots
+do not replace these tokens or workflow checkpoints. No Cosmos conversation export is used.
+
+After recorded case acceptance and a successful assistant continuation containing
+prose, Continue/Close offers an explicit choice once streaming ends. The controls
+remain hidden during creation or failed continuation; transport completion is not
+proof of the model's confirmation wording. Continue uses the primary style and Close
+the destructive style, with responsive spacing. Close blocks further sends and
+approvals in that thread, not the authenticated session; starting a new thread
+remains available. An ordinary answer of “no” does not heuristically close the conversation.
+
+Explicit intake acceptance forwards a bounded visible user/assistant snapshot.
+Customer and assigned-operator case details display it with the shared safe Markdown
+renderer in an initially collapsed section; customer history follows the timeline.
+Stored original text remains unchanged, with loading, empty and retry states. It is
+not provider trace evidence; legacy/direct cases can have no snapshot. Missing or
+inaccessible customer cases show the same localized unavailable state and navigation
+to support cases within the customer layout. See the
+[Transaction history contract](../../business-api/transaction/README.md#customer-provided-case-conversation).
+The owner confirmed history display, customer isolation and session change in the
+browser. Reload, closure, the revised controls and exact-assigned-operator negative
+checks remain user-owned validations.
+
 ## App Service Deployment
 
 [Frontend CD](../../../.github/workflows/cd-frontend.yaml) requires GitHub
@@ -540,9 +580,12 @@ and masked card number, and a foreign-account denial rendered after `ACCESS_DENI
 The reported blank chat response is resolved for these cases; Transaction chat,
 missing/empty results, multi-turn and approval continuation remain separate checks.
 
-Threads, messages, and the returned conversation identifier live in React state.
-Reloading clears them: the next message creates a new conversation even if the
-login JWT is still valid. Later messages in the same thread reuse the identifier.
+Temporary threads, visible messages and signed completed-response continuation
+identifiers survive same-login reloads through tab-scoped session storage. Explicit
+logout/new login clears them; a JWT alone is not a durable archive of general chats.
+Help separately lists owning-customer, read-only PostgreSQL case-intake snapshots,
+which survive logout but cannot resume a thread or include later exchanges. Failed or
+uncertain turns remain conservatively locked; automatic recovery is not implemented.
 Hosted identity transport and deployed financial parity are not verified; the
 separately tracked real-data verification checklist lives outside this public
 repository. Payment submission and attachment upload are not active features.

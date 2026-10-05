@@ -33,6 +33,85 @@ Local development uses port 8071. The ASGI target is `banking_transaction.main:a
 production uses port 8080. Imports use the nested package namespaces without runtime
 path injection. See the [shared packaging guide](../README.md#python-dependency-artifacts).
 
+## Optional charge-recognition assistance
+
+The read-only MCP tool `getTransactionRecognitionContext(transaction_id)` checks the
+selected transaction and card against the authenticated customer. It returns up to
+three earlier matching records from the same owned card: canonical `Purchase` and
+`Approved`, exact persisted amount and currency, and a trimmed, case-insensitive
+exact merchant match. The window starts inclusively 180 days before the selected
+charge and ends exclusively at that charge's timestamp. Results are newest first,
+with transaction ID as the deterministic tie-breaker; the full matching count and
+`matchesTruncated` distinguish the three-record display limit from query coverage.
+
+The response declares comparison boundaries, available fields, missing-field count
+and a masked card reference. `queryComplete` describes the bounded query only;
+`historyCoverage: INSUFFICIENT_HISTORY` explicitly retains uncertainty about the
+loaded source window. No matches means no matching available record in that window,
+not a first-ever purchase. Matching uses database trim/lower semantics; synthetic
+SQLite tests do not establish PostgreSQL normalization parity.
+
+Assistance is optional and must never delay a requested report. Similar purchases
+are clues, not proof of authorization, legitimacy, fraud or a subscription. Intake
+stops only when the customer explicitly recognizes the charge **and** chooses not
+to report; otherwise existing eligibility and consent continue without rewriting
+the customer reason. English tool/instruction metadata preserves profile-driven
+final-response localization.
+
+Recognition alone creates no case, events, consent, financial effects or protection.
+Provider conversations and traces remain separate records. The approved conversation
+snapshot extension below preserves visible recognition assistance only when the
+customer explicitly accepts intake with browser-provided history.
+
+## Customer-provided case conversation
+
+REST intake accepts optional `conversationHistory` containing at most 100 visible
+user/assistant messages and 100,000 total characters. Malformed or oversized history
+is rejected, not silently truncated. The snapshot is saved atomically with case,
+consent and routing; retries cannot overwrite it. It is customer-provided evidence,
+not an authoritative Foundry trace, and excludes hidden reasoning and tool state.
+
+`GET /api/support-cases/{case_id}/conversation` requires customer ownership.
+`GET /api/operator/support-cases/{case_id}/conversation` requires the exact assigned
+operator. Both return `source: CUSTOMER_PROVIDED` and `messages`; authorized legacy
+or direct cases without a snapshot return an empty list. No public queue history
+or administrator bypass is introduced.
+
+The owning customer can also select these read-only snapshots in the frontend Help
+history, independently of temporary session chats. A snapshot survives logout but is
+bounded to visible messages submitted at accepted intake, not a complete conversation:
+older omitted messages and post-intake exchanges are not appended. It does not restore
+a Foundry checkpoint or enable chat continuation. General chats without accepted case
+intake have no durable archive here. No Cosmos export or BFF database access is used.
+
+Revision 0012 moves the four existing support-domain tables into `support` and adds
+`support.case_conversations`, registered in Shared SQLModel metadata. Banking and
+Identity tables remain in the default schema. The BFF stays DB-free. See
+[Data migration prerequisites](../data/README.md#migration-prerequisites). Schema
+migration, browser validation and hosted acceptance are separate gates.
+
+Focused offline validation:
+
+```powershell
+$env:OTEL_SDK_DISABLED = "true"
+rtk proxy uv run --directory app\business-api\transaction python -m pytest tests\test_recognition.py tests\test_authorization.py tests\test_dispute_replay_contract.py -q
+rtk proxy uv run --directory app\agent python -m pytest tests\test_hosted_workflow.py tests\test_settings.py -q
+rtk proxy uv run --project evals --extra offline --frozen python -m pytest evals\tests -q --tb=short
+```
+
+Historical focused results: **46 Transaction tests**, **74 agent tests** and
+**71 combined offline replay/eval tests passed**. Evals now runs in its independent
+offline environment; the latest full Evals run passed **52 tests** using
+`--extra offline --frozen --no-sync`, including package-aware DTO loading.
+Replay freeze revision 7 reviews the new tool, instructions and package-aware
+DTO dependency graph;
+scenario bytes and expanded inputs remain unchanged. The owner confirmed browser
+recognition demonstrations with similar purchases and without matches, plus case
+history display, customer isolation and session switching. These are limited owner
+observations, not an exhaustive recognition, operator-negative or locale matrix.
+Real-model clue/locale quality, PostgreSQL read parity and hosted acceptance remain
+open. These checks do not prove reduced operator workload.
+
 ## Customer dispute proposal and consent
 
 New intake is a read-only proposal followed by explicit consent to create a case

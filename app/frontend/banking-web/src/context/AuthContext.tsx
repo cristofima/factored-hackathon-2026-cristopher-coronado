@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { type AuthenticatedUser, login as authenticate, restoreUser } from "@/api/authClient";
 import { AUTH_TOKEN_KEY, getAuthToken, getTokenExpiry } from "@/api/authToken";
 import { resetToasts } from "@/hooks/use-toast";
+import { clearChatSnapshot } from "@/components/chat/sessionHistory";
 
 interface AuthContextValue {
   user: AuthenticatedUser | null;
@@ -36,6 +37,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [queryClient]);
 
   const logout = useCallback(() => {
+    clearChatSnapshot();
     reset();
     localStorage.removeItem(AUTH_TOKEN_KEY);
     setLoading(false);
@@ -58,7 +60,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
     restore();
     const onStorage = (event: StorageEvent) => {
-      if (event.key === AUTH_TOKEN_KEY || event.key === null) restore();
+      if (event.key === AUTH_TOKEN_KEY || event.key === null) {
+        clearChatSnapshot();
+        restore();
+      }
     };
     window.addEventListener("storage", onStorage);
     return () => {
@@ -90,6 +95,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [user, loading, logout]);
 
   const login = useCallback(async (email: string, password: string) => {
+    clearChatSnapshot();
     const controller = reset();
     setLoading(true);
     localStorage.removeItem(AUTH_TOKEN_KEY);

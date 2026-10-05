@@ -4,6 +4,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from banking_transaction.auth.operator_identity import OperatorPrincipal, get_operator_principal
+from banking_transaction.models.conversation import CaseConversation
 from banking_transaction.services.adjudication import AdjudicationConflict
 from banking_transaction.models.operator import AdjudicateRequest, CardProtectionRequest, RetryEffectsRequest, OperatorCaseDetail, OperatorCasePage
 from banking_transaction.services.operator import (
@@ -25,6 +26,14 @@ def list_operator_cases(principal: Principal, offset: Annotated[int, Query(ge=0)
 def get_operator_case(case_id: str, principal: Principal) -> OperatorCaseDetail:
     try:
         return service.get_case(case_id, principal)
+    except LookupError:
+        raise HTTPException(404, detail={"code": "CASE_NOT_FOUND"}) from None
+
+
+@router.get("/{case_id}/conversation", response_model=CaseConversation)
+def get_operator_case_conversation(case_id: str, principal: Principal) -> CaseConversation:
+    try:
+        return service.get_case_conversation(case_id, principal)
     except LookupError:
         raise HTTPException(404, detail={"code": "CASE_NOT_FOUND"}) from None
 

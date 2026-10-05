@@ -46,6 +46,26 @@ def get_last_transactions(
 
 
 @mcp.tool(
+    name="getTransactionRecognitionContext",
+    description=(
+        "Read up to three strictly earlier matching Approved purchases on the same owned "
+        "card and currency within 180 days of the selected charge. Merchant matches are "
+        "trimmed case-insensitive exact matches and amounts match exactly. Loaded history "
+        "coverage is unverified. No matches never means first-ever purchase. This creates "
+        "no case or events; continue reporting immediately if the customer wishes."
+    ),
+)
+async def get_transaction_recognition_context(
+    transaction_id: str,
+    headers: dict[str, str] = CurrentHeaders(),
+) -> dict[str, Any]:
+    return await run_in_threadpool(
+        service.get_transaction_recognition_context,
+        transaction_id, get_customer_id(headers),
+    )
+
+
+@mcp.tool(
     name="previewTransactionDispute",
     description=(
         "Read eligible owned transaction context and prepare a ten-minute consent proposal. "

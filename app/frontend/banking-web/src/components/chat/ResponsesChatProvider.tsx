@@ -28,6 +28,9 @@ import { useThreadStream, type StreamEvent } from "./useThreadStream";
 import { useTranslation } from "react-i18next";
 import { readToolCase, readToolPreview, toolOutputFailed, toolProgressKey, type ToolOutputItem } from "./responseItems";
 
+import { useAuth } from "@/context/AuthContext";
+import { clearChatSnapshot, markChatInterrupted, persistChatSnapshot, readChatSnapshot } from "./sessionHistory";
+
 const ChatContext = createContext<ChatContextValue | undefined>(undefined);
 const generateId = (prefix: string) => `${prefix}_${crypto.randomUUID()}`;
 const now = () => new Date().toISOString();
@@ -108,14 +111,77 @@ export function ChatProvider({
   const streamingThreadRef = useRef<string | null>(null);
   const assistantItemsRef = useRef(new Map<string, string>());
   const visibleOutputRef = useRef(false);
+  const assistantTextRef = useRef(false);
   const reportedErrorRef = useRef(false);
   const lastMessageRef = useRef<string | null>(null);
   const { t } = useTranslation();
   const toolCallsRef = useRef(new Map<string, { id: string; name: string }>());
   const streamOutcomeRef = useRef<"success" | "error" | "cancelled">("error");
-  const actionRef = useRef<((outcome: "success" | "error" | "cancelled") => void) | null>(null);
+  const actionRef = useRef<((outcome: "success" | "error" | "cancelled") => "success" | "error" | "cancelled") | null>(null);
   const completedApprovalsRef = useRef(new Set<string>());
   const streamFailedRef = useRef(false);
+  const continuationsRef = useRef(new Map<string, string>());
+  const uncertainThreadsRef = useRef(new Set<string>());
+  const recoveryBlockedRef = useRef(new Set<string>());
+  const closedThreadsRef = useRef(new Set<string>());
+  const furtherHelpRef = useRef(new Set<string>());
+  const recordedDecisionsRef = useRef(new Map<string, { caseId: string | null; declined: boolean }>());
+  const { user, loading, sessionKey } = useAuth();
+  const scope = user ? JSON.stringify([user.id, user.identityVersion, chatServerUrl]) : null;
+  // The auth epoch resets live state, but must not identify persisted reload history.
+  const restorationKey = !loading && scope ? JSON.stringify([scope, sessionKey]) : null;
+  const [restoredScope, setRestoredScope] = useState<string | null>(null);
+
+  const previousScopeRef = useRef<string | null>(null);
+  const previousSessionRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (loading) {
+      setRestoredScope(null);
+      return;
+    }
+    if (!scope || (previousScopeRef.current && previousScopeRef.current !== scope) ||
+      (previousSessionRef.current !== null && previousSessionRef.current !== sessionKey)) clearChatSnapshot();
+    previousScopeRef.current = scope;
+    previousSessionRef.current = sessionKey;
+    const recovered = scope ? readChatSnapshot(scope) : null;
+    setThreads(recovered?.threads ?? []);
+    setActiveThreadId(recovered?.activeThreadId ?? null);
+    setThreadItems(recovered?.items ?? {});
+    completedApprovalsRef.current = new Set(recovered?.completed ?? []);
+    furtherHelpRef.current = new Set(recovered?.threads.filter(thread => thread.metadata?.furtherHelp === true).map(thread => thread.id) ?? []);
+    recordedDecisionsRef.current.clear();
+    recoveryBlockedRef.current.clear();
+    uncertainThreadsRef.current = new Set(recovered?.threads.filter(thread => thread.status.type === "locked").map(thread => thread.id) ?? []);
+    closedThreadsRef.current = new Set(recovered?.threads.filter(thread => thread.status.type === "closed").map(thread => thread.id) ?? []);
+    continuationsRef.current = new Map(recovered?.threads.flatMap(thread => typeof thread.metadata?.conversationId === "string" ? [[thread.id, thread.metadata.conversationId] as [string, string]] : []) ?? []);
+    actionRef.current?.("cancelled");
+    actionRef.current = null;
+    streamingThreadRef.current = null;
+    assistantItemsRef.current.clear();
+    toolCallsRef.current.clear();
+    lastMessageRef.current = null;
+    setCurrentRequest(null);
+    setIsStreaming(false);
+    setHasReceivedStreamEvent(false);
+    setRestoredScope(restorationKey);
+  }, [scope, loading, sessionKey, restorationKey]);
+
+  useEffect(() => {
+    if (scope && restorationKey && restoredScope === restorationKey) persistChatSnapshot(scope, threads, threadItems, activeThreadId,
+      completedApprovalsRef.current, new Set([...uncertainThreadsRef.current, ...recoveryBlockedRef.current]), streamingThreadRef.current);
+  }, [scope, restorationKey, restoredScope, threads, threadItems, activeThreadId, isStreaming]);
+
+  const isThreadLocked = (threadId: string) => closedThreadsRef.current.has(threadId) || uncertainThreadsRef.current.has(threadId);
+  const closeThread = (threadId: string) => {
+    if (streamingThreadRef.current) return;
+    closedThreadsRef.current.add(threadId);
+    setThreads(previous => previous.map(thread => thread.id === threadId ? { ...thread, status: { type: "closed" } } : thread));
+  };
+  const setFurtherHelp = useCallback((threadId: string, visible: boolean) => {
+    if (visible) furtherHelpRef.current.add(threadId);
+    else furtherHelpRef.current.delete(threadId);
+    setThreads(previous => previous.map(thread => thread.id === threadId ? { ...thread, metadata: { ...thread.metadata, furtherHelp: visible } } : thread));
+  }, []);
 
   useEffect(() => () => {
     const settle = actionRef.current;
@@ -168,7 +234,10 @@ export function ChatProvider({
     const key = outputId === undefined ? "fallback" : `output:${outputId}`;
     const itemId = assistantItemsRef.current.get(key) ?? generateId("assistant");
     assistantItemsRef.current.set(key, itemId);
-    if (delta.trim()) visibleOutputRef.current = true;
+    if (delta.trim()) {
+      visibleOutputRef.current = true;
+      assistantTextRef.current = true;
+    }
     setThreadItems((previous) => {
       const existing = previous[threadId] ?? [];
       const index = existing.findIndex((item) => item.id === itemId);
@@ -319,7 +388,7 @@ export function ChatProvider({
         return;
       }
 
-      if (event.type === "error" || event.type === "response.failed") {
+      if (event.type === "error" || event.type === "response.failed" || event.type === "response.incomplete") {
         streamOutcomeRef.current = "error";
         streamFailedRef.current = true;
         const responseError = (
@@ -328,6 +397,7 @@ export function ChatProvider({
             | undefined
         )?.error;
         const receivedCode = event.code ?? responseError?.code;
+        uncertainThreadsRef.current.add(threadId);
         const code = receivedCode === "AUTH_REQUIRED" || receivedCode === "ACCESS_DENIED"
           ? receivedCode : "SERVICE_UNAVAILABLE";
         reportStreamError(threadId, code, Boolean(event.allow_retry),
@@ -339,6 +409,7 @@ export function ChatProvider({
 
   const handleConversation = useCallback(
     (threadId: string, conversationId: string) => {
+      continuationsRef.current.set(threadId, conversationId);
       setThreads((previous) =>
         previous.map((thread) =>
           thread.id === threadId
@@ -386,7 +457,9 @@ export function ChatProvider({
     streamingThreadRef.current = null;
     const settle = actionRef.current;
     actionRef.current = null;
-    settle?.(streamOutcomeRef.current);
+    const outcome = settle?.(streamOutcomeRef.current) ?? streamOutcomeRef.current;
+    if (outcome === "success") recoveryBlockedRef.current.delete(threadId);
+    else recoveryBlockedRef.current.add(threadId);
     onResponseEnd?.(threadId);
   }, [onResponseEnd, reportStreamError, t]);
 
@@ -399,7 +472,10 @@ export function ChatProvider({
       streamOutcomeRef.current = "error";
       streamFailedRef.current = true;
       const threadId = streamingThreadRef.current;
-      if (threadId) reportStreamError(threadId, "stream_error");
+      if (threadId) {
+        uncertainThreadsRef.current.add(threadId);
+        reportStreamError(threadId, "stream_error");
+      }
       finishStream();
     },
     onComplete: finishStream,
@@ -409,15 +485,20 @@ export function ChatProvider({
 
   const submitInput = useCallback(
     (threadId: string, input: unknown) => {
-      if (streamingThreadRef.current) return;
+      if (!scope || streamingThreadRef.current || closedThreadsRef.current.has(threadId)) return;
       streamOutcomeRef.current = "error";
       streamFailedRef.current = false;
       toolCallsRef.current.clear();
-      const conversationId = threads.find((thread) => thread.id === threadId)
-        ?.metadata?.conversationId;
+      if (uncertainThreadsRef.current.has(threadId)) {
+        reportStreamError(threadId);
+        return;
+      }
+      const conversationId = continuationsRef.current.get(threadId);
+      markChatInterrupted(scope, threadId);
       streamingThreadRef.current = threadId;
       assistantItemsRef.current.clear();
       visibleOutputRef.current = false;
+      assistantTextRef.current = false;
       reportedErrorRef.current = false;
       setIsStreaming(true);
       setHasReceivedStreamEvent(false);
@@ -432,7 +513,7 @@ export function ChatProvider({
         },
       });
     },
-    [threads],
+    [reportStreamError, scope],
   );
 
   const createLocalThread = useCallback(
@@ -455,7 +536,11 @@ export function ChatProvider({
   const sendMessage = useCallback(
     (text: string) => {
       const trimmed = text.trim();
-      if (!trimmed || streamingThreadRef.current) return;
+      if (!scope || !trimmed || streamingThreadRef.current || (activeThreadId && (closedThreadsRef.current.has(activeThreadId) || furtherHelpRef.current.has(activeThreadId))) || activeThread?.metadata?.furtherHelp === true) return;
+      if (activeThreadId && uncertainThreadsRef.current.has(activeThreadId)) {
+        reportStreamError(activeThreadId);
+        return;
+      }
       lastMessageRef.current = trimmed;
       const threadId = activeThreadId ?? createLocalThread(trimmed);
 
@@ -472,22 +557,37 @@ export function ChatProvider({
         { role: "user", content: [{ type: "input_text", text: trimmed }] },
       ]);
     },
-    [activeThreadId, addItem, createLocalThread, onMessageSent, submitInput],
+    [activeThreadId, activeThread, scope, addItem, createLocalThread, onMessageSent, reportStreamError, submitInput],
   );
 
   const sendWidgetAction = useCallback(
     (threadId: string, itemId: string, action: ActionConfig): Promise<"success" | "error" | "cancelled"> => {
       const key = `${threadId}:${itemId}`;
-      if (completedApprovalsRef.current.has(key)) return Promise.resolve("success");
       const widget = (threadItems[threadId] ?? []).find((item) => item.id === itemId && item.type === "client_widget");
       const previewDecision = widget?.type === "client_widget" && widget.name === "dispute_preview" && action.type === "dispute_preview_decision";
       const approval = widget?.type === "client_widget" && widget.name === "tool_approval_request" && action.type === "approval";
-      if (streamingThreadRef.current || (!previewDecision && !approval)) return Promise.resolve("error");
+      if (!scope || (!previewDecision && !approval)) return Promise.resolve("error");
       if (previewDecision && action.payload?.declined !== true && typeof action.payload?.caseId !== "string") return Promise.resolve("error");
+      const recorded = previewDecision ? recordedDecisionsRef.current.get(key) ?? widget.args.recordedDecision as { caseId: string | null; declined: boolean } | undefined : undefined;
+      if (recorded && (recorded.declined !== (action.payload?.declined === true) || recorded.caseId !== (action.payload?.caseId ?? null))) return Promise.resolve("error");
+      if (previewDecision && !recorded) {
+        recordedDecisionsRef.current.set(key, { caseId: action.payload?.caseId as string ?? null, declined: action.payload?.declined === true });
+        setThreadItems(previous => ({ ...previous, [threadId]: (previous[threadId] ?? []).map(item => item.id === itemId && item.type === "client_widget"
+          ? { ...item, args: { ...item.args, recordedDecision: { caseId: action.payload?.caseId ?? null, declined: action.payload?.declined === true } } } : item) }));
+      }
+      if (closedThreadsRef.current.has(threadId) || uncertainThreadsRef.current.has(threadId) || activeThreadId !== threadId || streamingThreadRef.current) return Promise.resolve("error");
+      if (completedApprovalsRef.current.has(key)) return Promise.resolve("success");
       const result = new Promise<"success" | "error" | "cancelled">((resolve) => {
         actionRef.current = (outcome) => {
-          if (outcome === "success") completedApprovalsRef.current.add(key);
+          if (previewDecision && action.payload?.declined !== true && outcome === "success" && !assistantTextRef.current) outcome = "error";
+          if (outcome === "success") {
+            completedApprovalsRef.current.add(key);
+            if (previewDecision && action.payload?.declined !== true && assistantTextRef.current) {
+              setFurtherHelp(threadId, true);
+            }
+          }
           resolve(outcome);
+          return outcome;
         };
       });
       submitInput(threadId, previewDecision ? [{
@@ -500,12 +600,12 @@ export function ChatProvider({
       }]);
       return result;
     },
-    [submitInput, threadItems],
+    [activeThreadId, scope, setFurtherHelp, submitInput, threadItems],
   );
 
   const createThread = useCallback(
     (initialMessage?: string) => {
-      if (streamingThreadRef.current) return;
+      if (!scope || streamingThreadRef.current) return;
       setHistoryOpen(false);
       setHasReceivedStreamEvent(false);
       if (!initialMessage) {
@@ -530,7 +630,7 @@ export function ChatProvider({
         },
       ]);
     },
-    [addItem, createLocalThread, submitInput],
+    [scope, addItem, createLocalThread, submitInput],
   );
 
   const value: ChatContextValue = {
@@ -551,6 +651,7 @@ export function ChatProvider({
     shellContainerConfig,
     sendMessage,
     cancelStreaming: () => {
+      if (streamingThreadRef.current) uncertainThreadsRef.current.add(streamingThreadRef.current);
       streamOutcomeRef.current = "cancelled";
       cancel();
       finishStream();
@@ -560,6 +661,9 @@ export function ChatProvider({
     },
     sendWidgetAction,
     isApprovalCompleted: (threadId, itemId) => completedApprovalsRef.current.has(`${threadId}:${itemId}`),
+    isThreadLocked,
+    closeThread,
+    setFurtherHelp,
     createThread,
     selectThread: (threadId) => {
       setActiveThreadId(threadId);

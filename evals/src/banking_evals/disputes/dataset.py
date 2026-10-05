@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import importlib.util
 import json
+import sys
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -14,6 +16,9 @@ from banking_evals.resources import repository_root
 ROOT = repository_root()
 DATASET = ROOT / "evals/dispute_cases.json"
 EXPANSION_VERSION = "dispute-consent-v3"
+TRANSACTION_PACKAGE_NAME = "banking_transaction"
+TRANSACTION_MODULE_NAME = f"{TRANSACTION_PACKAGE_NAME}.models.transactions"
+TRANSACTION_PACKAGE_ROOT = ROOT / "app/business-api/transaction/src/banking_transaction"
 
 
 DISPLAY_VALUES = {
@@ -42,6 +47,25 @@ def dependency_fingerprint(path: Path) -> str:
     return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
 
 
+def _load_transaction_models() -> ModuleType:
+    try:
+        return importlib.import_module(TRANSACTION_MODULE_NAME)
+    except ModuleNotFoundError as exc:
+        if exc.name != TRANSACTION_PACKAGE_NAME:
+            raise
+    package_spec = importlib.util.spec_from_file_location(
+        TRANSACTION_PACKAGE_NAME,
+        TRANSACTION_PACKAGE_ROOT / "__init__.py",
+        submodule_search_locations=[str(TRANSACTION_PACKAGE_ROOT)],
+    )
+    if package_spec is None or package_spec.loader is None:
+        raise ValueError("Missing response models")
+    package = importlib.util.module_from_spec(package_spec)
+    sys.modules[TRANSACTION_PACKAGE_NAME] = package
+    package_spec.loader.exec_module(package)
+    return importlib.import_module(TRANSACTION_MODULE_NAME)
+
+
 def load_cases(path: Path = DATASET) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     metadata = json.loads(path.read_text(encoding="utf-8"))
     cases = metadata["cases"]
@@ -49,14 +73,7 @@ def load_cases(path: Path = DATASET) -> tuple[dict[str, Any], list[dict[str, Any
         raise ValueError("Unsupported or empty dispute dataset")
     if len({case["id"] for case in cases}) != len(cases):
         raise ValueError("Duplicate dispute IDs")
-    spec = importlib.util.spec_from_file_location(
-        "dispute_response_models",
-        ROOT / "app/business-api/transaction/src/banking_transaction/models/transactions.py",
-    )
-    if spec is None or spec.loader is None:
-        raise ValueError("Missing response models")
-    models = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(models)
+    models = _load_transaction_models()
     expanded = []
     for source in cases:
         if source["locale"] not in {"en", "es", "pt"} or not source["turns"]:
@@ -91,6 +108,9 @@ def required_dependencies() -> set[str]:
         for path in directory.rglob("*.py")
     }
     paths.update({
+        "app/business-api/transaction/src/banking_transaction/__init__.py",
+        "app/business-api/transaction/src/banking_transaction/models/__init__.py",
+        "app/business-api/transaction/src/banking_transaction/models/conversation.py",
         "app/business-api/transaction/src/banking_transaction/models/transactions.py",
         "app/business-api/transaction/src/banking_transaction/mcp_tools.py",
         "app/business-api/account/src/banking_account/mcp_tools.py",

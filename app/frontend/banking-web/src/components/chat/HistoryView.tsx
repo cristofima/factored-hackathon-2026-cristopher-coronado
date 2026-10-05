@@ -10,6 +10,7 @@ import { cn } from "@/common/utils";
 import { useChat } from "./ResponsesChatProvider";
 import { useTranslation } from "react-i18next";
 import { enUS, es, pt } from "date-fns/locale";
+import { SavedCaseConversations } from "./SavedCaseConversations";
 
 export function HistoryView() {
   const { t, i18n } = useTranslation();
@@ -23,7 +24,7 @@ export function HistoryView() {
   } = useChat();
 
   const renderThreads = () => (
-    <ScrollArea className="flex-1">
+    <div>
       <div className="grid gap-3 p-4 sm:grid-cols-2">
         {threads.map((thread) => {
           const threadItems = getThreadItems(thread.id);
@@ -72,7 +73,7 @@ export function HistoryView() {
                     thread.status.type === "active" ? "secondary" : "outline"
                   }
                 >
-                  {thread.status.type}
+                  {t(`Conversation status ${thread.status.type}`)}
                 </Badge>
               </div>
               <div>
@@ -93,7 +94,7 @@ export function HistoryView() {
           );
         })}
       </div>
-    </ScrollArea>
+    </div>
   );
 
   const renderStarterPrompts = () => (
@@ -147,20 +148,30 @@ export function HistoryView() {
         </Button>
       </div>
 
-      {threads.length ? (
-        <>
-          {renderThreads()}
-          <Separator className="mx-4" />
-          <div className="flex flex-col gap-2 px-4 py-3 text-xs text-muted-foreground">
-            <div className="flex items-center gap-2">
-              <Clock className="h-3.5 w-3.5" />
-              <span>{t("Threads are sorted by most recent activity.")}</span>
-            </div>
+      <ScrollArea className="min-h-0 flex-1">
+        <section aria-label={t("Session chats")}>
+          <div className="space-y-1 px-4 pt-4">
+            <h2 className="text-sm font-semibold">{t("Session chats")}</h2>
+            <p className="text-xs text-muted-foreground">{t("Session chats description")}</p>
           </div>
-        </>
-      ) : (
-        renderStarterPrompts()
-      )}
+          {threads.length ? (
+            <>
+              {renderThreads()}
+              <Separator className="mx-4" />
+              <div className="flex flex-col gap-2 px-4 py-3 text-xs text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <Clock className="h-3.5 w-3.5" />
+                  <span>{t("Threads are sorted by most recent activity.")}</span>
+                </div>
+              </div>
+            </>
+          ) : (
+            renderStarterPrompts()
+          )}
+        </section>
+        <Separator />
+        <SavedCaseConversations />
+      </ScrollArea>
     </div>
   );
 }

@@ -27,6 +27,7 @@ def session_factory() -> Callable[[], Session]:
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+    engine = engine.execution_options(schema_translate_map={"support": None})
     SQLModel.metadata.create_all(engine)
     with Session(engine) as session:
         session.add_all(

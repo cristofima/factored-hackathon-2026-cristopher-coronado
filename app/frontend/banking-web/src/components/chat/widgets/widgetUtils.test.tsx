@@ -34,7 +34,7 @@ vi.mock("react", async original => ({
 }));
 vi.mock("@/components/chat/ResponsesChatProvider", () => ({ useChat: () => ({
   activeThreadId: h.thread, sendWidgetAction: h.send, isStreaming: h.streaming,
-  isApprovalCompleted: h.completed,
+  isApprovalCompleted: h.completed, isThreadLocked: () => false,
 }) }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 

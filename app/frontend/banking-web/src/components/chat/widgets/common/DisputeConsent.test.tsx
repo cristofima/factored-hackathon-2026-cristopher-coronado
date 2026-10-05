@@ -7,7 +7,7 @@ const h = vi.hoisted(() => ({
   states: [] as unknown[], refs: [] as Array<{ current: unknown }>, cursor: 0,
   effects: [] as Array<{ deps: unknown[]; cleanup?: () => void }>,
   queued: [] as Array<() => void>, get: vi.fn(), respond: vi.fn(), logout: vi.fn(),
-  sessionKey: 1, user: { id: "customer", identityVersion: 1 } as { id: string; identityVersion: number } | null,
+  locked: false, sessionKey: 1, user: { id: "customer", identityVersion: 1 } as { id: string; identityVersion: number } | null,
 }));
 vi.mock("react", async (original) => ({
   ...await original<typeof import("react")>(),
@@ -33,6 +33,7 @@ vi.mock("react-router-dom", () => ({ Link: "a" }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("@/context/AuthContext", () => ({ useAuth: () => ({ user: h.user, sessionKey: h.sessionKey, logout: h.logout }) }));
 vi.mock("@/api/disputeClient", () => ({ getSupportCase: h.get, respondToSupportCaseApproval: h.respond }));
+vi.mock("../../ResponsesChatProvider", () => ({ useChat: () => ({ activeThreadId: "thread-1", isThreadLocked: () => h.locked }) }));
 
 type Element = ReactElement<Record<string, unknown>>;
 function elements(node: ReactNode): Element[] {
@@ -64,11 +65,18 @@ function unmount() { h.effects.forEach(effect => effect?.cleanup?.()); }
 
 beforeEach(() => {
   vi.resetAllMocks(); h.states = []; h.refs = []; h.effects = []; h.queued = [];
-  h.sessionKey = 1; h.user = { id: "customer", identityVersion: 1 };
+  h.locked = false; h.sessionKey = 1; h.user = { id: "customer", identityVersion: 1 };
   h.get.mockResolvedValue(waiting()); h.respond.mockResolvedValue(waiting("IN_REVIEW"));
 });
 
 describe("persisted dispute consent", () => {
+  it("disables both consent choices and refuses submission on a locked thread", async () => {
+    await mount(); h.locked = true;
+    expect(find("Approve dispute review").props.disabled).toBe(true);
+    expect(find("Decline dispute review").props.disabled).toBe(true);
+    click("Approve dispute review"); click("Decline dispute review"); await settle();
+    expect(h.respond).not.toHaveBeenCalled();
+  });
   it("loads current state rather than trusting tool status and links the owned case", async () => {
     await mount({ caseId: "case-1", status: "RESOLVED" });
     expect(h.get).toHaveBeenCalledWith("case-1", expect.any(AbortSignal));

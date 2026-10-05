@@ -27,6 +27,7 @@ class SupportCase(SQLModel, table=True):
               postgresql_where=column("status").in_(("OPEN", "WAITING_USER_APPROVAL", "IN_REVIEW", "PENDING_EFFECTS")),
               sqlite_where=column("status").in_(("OPEN", "WAITING_USER_APPROVAL", "IN_REVIEW", "PENDING_EFFECTS"))),
         Index("ix_support_cases_operator_queue", "status", "assigned_operator_sub", "opened_at"),
+        {"schema": "support"},
     )
 
     case_id: str = Field(
@@ -71,10 +72,13 @@ class SupportCase(SQLModel, table=True):
 
 class SupportCaseEvent(SQLModel, table=True):
     __tablename__ = "support_case_events"
-    __table_args__ = (Index("ix_support_case_events_case_created", "case_id", "created_at"),)
+    __table_args__ = (
+        Index("ix_support_case_events_case_created", "case_id", "created_at"),
+        {"schema": "support"},
+    )
 
     event_id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True, max_length=36)
-    case_id: str = Field(foreign_key="support_cases.case_id", index=True, max_length=64)
+    case_id: str = Field(foreign_key="support.support_cases.case_id", index=True, max_length=64)
     event_type: str = Field(max_length=64)
     actor: str = Field(max_length=32)
     message: str | None = Field(default=None, max_length=1000)

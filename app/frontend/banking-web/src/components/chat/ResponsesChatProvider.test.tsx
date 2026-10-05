@@ -11,7 +11,9 @@ const h = vi.hoisted(() => ({
   effects: [] as Array<{ deps: unknown[]; cleanup?: () => void }>,
   queued: [] as Array<() => void>, cancel: vi.fn(),
   stream: null as unknown as Parameters<typeof import("./useThreadStream").useThreadStream>[0],
-  catalog: {} as Record<string, string>,
+  catalog: {} as Record<string, unknown>,
+  user: { id: "test-user", identityVersion: 1 } as { id: string; identityVersion: number } | null,
+  sessionKey: 1, loading: false, chatServerUrl: "/api",
 }));
 vi.mock("react", async original => ({
   ...await original<typeof import("react")>(),
@@ -37,6 +39,7 @@ vi.mock("react", async original => ({
     }
   },
 }));
+vi.mock("@/context/AuthContext", () => ({ useAuth: () => ({ user: h.user, sessionKey: h.sessionKey, loading: h.loading }) }));
 vi.mock("./useThreadStream", () => ({ useThreadStream: (options: typeof h.stream) => {
   h.stream = options;
   return { cancel: h.cancel };
@@ -48,7 +51,7 @@ const ended = vi.fn();
 const errors = vi.fn();
 function render(): ChatContextValue {
   h.cursor = 0;
-  const value = ChatProvider({ children: null, onResponseEnd: ended, onError: errors }).props.value;
+  const value = ChatProvider({ children: null, chatServerUrl: h.chatServerUrl, onResponseEnd: ended, onError: errors }).props.value;
   h.queued.splice(0).forEach(effect => effect());
   return value;
 }
@@ -68,6 +71,9 @@ function act(value = render(), approved = true) {
 
 beforeEach(() => {
   vi.clearAllMocks(); h.slots = []; h.effects = []; h.queued = []; h.catalog = {};
+  h.user = { id: "test-user", identityVersion: 1 }; h.sessionKey = 1; h.loading = false; h.chatServerUrl = "/api";
+  const storage = new Map<string, string>();
+  vi.stubGlobal("sessionStorage", { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value), removeItem: (key: string) => storage.delete(key) });
 });
 
 describe("Responses provider tool progress", () => {
@@ -178,7 +184,7 @@ describe("Responses provider visible output", () => {
     }
     finish(); finish();
     expect(errorItems()).toHaveLength(1);
-    expect(errorItems()[0]).toMatchObject({ message: failureText, allow_retry: true });
+    expect(errorItems()[0]).toMatchObject({ message: failureText, allow_retry: mode !== "incomplete" });
     expect(messages().every(item => !item.streaming)).toBe(true);
     expect(ended).toHaveBeenCalledOnce();
   });
@@ -295,16 +301,244 @@ describe("Responses dispute preview lifecycle", () => {
     await expect(render().sendWidgetAction(value.activeThreadId!, widget.id, action)).resolves.toBe("success");
     expect(h.stream.request).toBeNull();
   });
-  it("permits continuation-only retry after failure", async () => {
+  it("persists an accepted help offer and requires explicit continue or close", async () => {
+    const widget = proposal(); const value = render();
+    const result = value.sendWidgetAction(value.activeThreadId!, widget.id, { type: "dispute_preview_decision", payload: { declined: false, caseId: "recorded-case" } }); render();
+    expect(render().activeThread?.metadata?.furtherHelp).not.toBe(true);
+    event({ type: "response.output_text.delta", delta: "Recorded" });
+    expect(render().activeThread?.metadata?.furtherHelp).not.toBe(true);
+    event({ type: "response.completed" }); finish();
+    await expect(result).resolves.toBe("success");
+    value.sendMessage("Blocked before rerender"); render();
+    expect(h.stream.request).toBeNull();
+    const recovered = reloadProvider();
+    expect(recovered.activeThread?.metadata?.furtherHelp).toBe(true);
+    expect(recovered.isThreadLocked(value.activeThreadId!)).toBe(false);
+    recovered.sendMessage("Blocked until continue"); render();
+    expect(h.stream.request).toBeNull();
+    recovered.setFurtherHelp(value.activeThreadId!, false);
+    render().sendMessage("Continue"); render();
+    expect(h.stream.request).not.toBeNull();
+  });
+  it.each(["failed", "cancelled", "tool-only", "whitespace"])("does not offer further help after %s acknowledgment", async mode => {
+    const widget = proposal(); const value = render();
+    const action = { type: "dispute_preview_decision", payload: { declined: false, caseId: "recorded-case" } };
+    const result = value.sendWidgetAction(value.activeThreadId!, widget.id, action); render();
+    if (mode === "failed") {
+      event({ type: "response.output_text.delta", delta: "Partial" });
+      h.stream.onError?.(new Error("private"));
+    } else if (mode === "cancelled") {
+      event({ type: "response.output_text.delta", delta: "Partial" });
+      render().cancelStreaming();
+    } else {
+      if (mode === "whitespace") event({ type: "response.output_text.delta", delta: "   " });
+      else {
+        event({ type: "response.output_item.added", item: { type: "function_call", call_id: "readback", name: "getSupportCase" } });
+        event({ type: "response.output_item.done", item: { type: "function_call_output", call_id: "readback", output: { caseId: "recorded-case", status: "IN_REVIEW" } } });
+      }
+      event({ type: "response.completed" });
+    }
+    finish();
+    await expect(result).resolves.toBe(mode === "cancelled" ? "cancelled" : "error");
+    expect(render().activeThread?.metadata?.furtherHelp).not.toBe(true);
+    if (mode === "tool-only") {
+      const retry = render().sendWidgetAction(value.activeThreadId!, widget.id, action); render();
+      event({ type: "response.output_text.delta", delta: "Case recorded" });
+      event({ type: "response.completed" }); finish();
+      await expect(retry).resolves.toBe("success");
+      expect(render().activeThread?.metadata?.furtherHelp).toBe(true);
+    }
+  });
+  it("restores tool-only accepted continuation as read-only without losing the recorded case", async () => {
+    const widget = proposal(); const value = render();
+    const result = value.sendWidgetAction(value.activeThreadId!, widget.id, { type: "dispute_preview_decision", payload: { declined: false, caseId: "recorded-case" } }); render();
+    event({ type: "response.output_item.added", item: { type: "function_call", call_id: "readback", name: "getSupportCase" } });
+    event({ type: "response.completed" }); finish();
+    await expect(result).resolves.toBe("error");
+    const recovered = reloadProvider();
+    expect(recovered.isThreadLocked(value.activeThreadId!)).toBe(true);
+    expect(recovered.activeThread?.metadata?.furtherHelp).not.toBe(true);
+    expect(recovered.items.find(item => item.id === widget.id)).toMatchObject({ args: { recordedDecision: { caseId: "recorded-case", declined: false } } });
+    expect(h.stream.request).toBeNull();
+  });
+  it("retains a late REST receipt on a closed thread without submitting or accepting a conflicting decision", async () => {
+    const widget = proposal(); const value = render();
+    value.closeThread(value.activeThreadId!);
+    await expect(value.sendWidgetAction(value.activeThreadId!, widget.id, { type: "dispute_preview_decision", payload: { declined: false, caseId: "recorded-case" } })).resolves.toBe("error");
+    await expect(value.sendWidgetAction(value.activeThreadId!, widget.id, { type: "dispute_preview_decision", payload: { declined: true, caseId: null } })).resolves.toBe("error");
+    render();
+    expect(h.stream.request).toBeNull();
+    expect(reloadProvider().items.find(item => item.id === widget.id)).toMatchObject({ args: { recordedDecision: { caseId: "recorded-case", declined: false } } });
+  });
+  it("refuses continuation-only retry after uncertain failure", async () => {
     const widget = proposal(); const value = render();
     const action = { type: "dispute_preview_decision", payload: { declined: false, caseId: "recorded-case" } };
     const result = value.sendWidgetAction(value.activeThreadId!, widget.id, action); render();
     h.stream.onError?.(new Error("private")); finish();
     await expect(result).resolves.toBe("error");
     const retry = render().sendWidgetAction(value.activeThreadId!, widget.id, action); render();
-    expect(JSON.stringify(h.stream.request?.payload)).toContain("already recorded support case recorded-case");
-    event({ type: "response.output_text.delta", delta: "Acknowledged" }); event({ type: "response.completed" }); finish();
-    await expect(retry).resolves.toBe("success");
+    expect(h.stream.request).toBeNull();
+    await expect(retry).resolves.toBe("error");
+  });
+});
+
+function reloadProvider() {
+  h.effects.forEach(effect => effect?.cleanup?.());
+  h.slots = []; h.effects = []; h.queued = [];
+  render();
+  return render();
+}
+
+describe("Responses provider session recovery", () => {
+  it("recovers completed visible history and signed checkpoint without auto-submitting", () => {
+    const value = start();
+    event({ type: "response.output_text.delta", delta: "Safe answer" });
+    h.stream.onConversation?.(value.activeThreadId!, "signed-checkpoint");
+    event({ type: "response.completed" }); finish();
+    const recovered = reloadProvider();
+    expect(recovered.items).toEqual(expect.arrayContaining([expect.objectContaining({ type: "assistant_message" })]));
+    expect(recovered.isThreadLocked(value.activeThreadId!)).toBe(false);
+    expect(h.stream.request).toBeNull();
+    recovered.sendMessage("Follow up"); render();
+    expect(h.stream.request?.payload).toMatchObject({ conversation: "signed-checkpoint" });
+  });
+  it("recovers a hard reload with a different process-local auth epoch", () => {
+    h.sessionKey = 2;
+    const value = start();
+    event({ type: "response.output_text.delta", delta: "Reload-safe answer" });
+    h.stream.onConversation?.(value.activeThreadId!, "reload-checkpoint");
+    event({ type: "response.completed" }); finish();
+    h.sessionKey = 1;
+    const recovered = reloadProvider();
+    expect(recovered.activeThreadId).toBe(value.activeThreadId);
+    expect(recovered.items).toEqual(expect.arrayContaining([expect.objectContaining({ type: "assistant_message" })]));
+    recovered.sendMessage("Continue after reload"); render();
+    expect(h.stream.request?.payload).toMatchObject({ conversation: "reload-checkpoint" });
+  });
+  it("leaves saved history untouched while initial authentication is loading", () => {
+    const value = start();
+    event({ type: "response.output_text.delta", delta: "Saved answer" });
+    event({ type: "response.completed" }); finish();
+    const saved = sessionStorage.getItem("banking-chat-session-v1");
+    h.user = null; h.loading = true; h.sessionKey = 0;
+    expect(reloadProvider().threads).toEqual([]);
+    expect(sessionStorage.getItem("banking-chat-session-v1")).toBe(saved);
+    h.sessionKey = 1; render();
+    expect(sessionStorage.getItem("banking-chat-session-v1")).toBe(saved);
+    h.user = { id: "test-user", identityVersion: 1 }; h.loading = false;
+    render();
+    expect(render().activeThreadId).toBe(value.activeThreadId);
+  });
+  it("clears history after initial authentication finishes without a user", () => {
+    start(); event({ type: "response.completed" }); finish();
+    h.user = null; h.loading = true;
+    reloadProvider();
+    expect(sessionStorage.getItem("banking-chat-session-v1")).not.toBeNull();
+    h.loading = false; render(); render();
+    expect(sessionStorage.getItem("banking-chat-session-v1")).toBeNull();
+  });
+  it("does not repersist old state during an explicit same-identity login reset", () => {
+    start(); event({ type: "response.output_text.delta", delta: "Old session" }); event({ type: "response.completed" }); finish();
+    h.user = null; h.loading = true; h.sessionKey++;
+    sessionStorage.removeItem("banking-chat-session-v1");
+    sessionStorage.removeItem("banking-chat-session-v1-pending");
+    render(); render();
+    expect(sessionStorage.getItem("banking-chat-session-v1")).toBeNull();
+    h.user = { id: "test-user", identityVersion: 1 }; h.loading = false;
+    render();
+    expect(JSON.parse(sessionStorage.getItem("banking-chat-session-v1") ?? "null")).toBeNull();
+    expect(render().threads).toEqual([]);
+    expect(render().items).toEqual([]);
+  });
+  it.each(["interrupted", "failed", "outputless"])("recovers %s turns read-only", mode => {
+    const value = start();
+    if (mode === "failed") { h.stream.onError?.(new Error("private")); finish(); }
+    if (mode === "outputless") { event({ type: "response.completed" }); finish(); }
+    const recovered = reloadProvider();
+    expect(recovered.isThreadLocked(value.activeThreadId!)).toBe(true);
+    recovered.sendMessage("Never resubmit"); render();
+    expect(h.stream.request).toBeNull();
+    recovered.createThread("New safe thread"); render();
+    expect(h.stream.request?.threadId).not.toBe(value.activeThreadId);
+  });
+  it.each(["identity", "version", "server"])("isolates saved snapshots across %s changes on reload", change => {
+    start(); event({ type: "response.output_text.delta", delta: "Private answer" }); event({ type: "response.completed" }); finish();
+    if (change === "identity") h.user = { id: "other", identityVersion: 1 };
+    else if (change === "version") h.user = { id: "test-user", identityVersion: 2 };
+    else h.chatServerUrl = "/other-api";
+    const recovered = reloadProvider();
+    expect(recovered.threads).toEqual([]);
+    expect(recovered.items).toEqual([]);
+    expect(sessionStorage.getItem("banking-chat-session-v1-pending")).toBeNull();
+  });
+  it.each(["logout", "identity", "version", "session", "server"])("clears history on %s change", change => {
+    start(); event({ type: "response.output_text.delta", delta: "Safe" }); event({ type: "response.completed" }); finish();
+    if (change === "logout") h.user = null;
+    else if (change === "identity") h.user = { id: "other", identityVersion: 1 };
+    else if (change === "version") h.user = { id: "test-user", identityVersion: 2 };
+    else if (change === "server") h.chatServerUrl = "/other-api";
+    else h.sessionKey++;
+    render(); const changed = render();
+    expect(changed.items).toEqual([]);
+    expect(changed.threads).toEqual([]);
+    expect(sessionStorage.getItem("banking-chat-session-v1-pending")).toBeNull();
+    expect(h.stream.request).toBeNull();
+  });
+  it("locks explicit closure synchronously while permitting a new thread", async () => {
+    const value = approval();
+    value.closeThread(value.activeThreadId!);
+    value.sendMessage("Must not send");
+    await expect(act(value)).resolves.toBe("error");
+    render();
+    expect(h.stream.request).toBeNull();
+    expect(reloadProvider().activeThread?.status.type).toBe("closed");
+    render().createThread("New question"); render();
+    expect(h.stream.request?.threadId).not.toBe(value.activeThreadId);
+  });
+  it("does not interpret arbitrary no as thread closure", () => {
+    start(); event({ type: "response.output_text.delta", delta: "Answer" }); event({ type: "response.completed" }); finish();
+    render().sendMessage("no"); render();
+    expect(h.stream.request).not.toBeNull();
+  });
+});
+
+describe("Responses provider checkpoint chaining", () => {
+  it("uses the new checkpoint synchronously before metadata rerender", () => {
+    const value = start();
+    event({ type: "response.output_text.delta", delta: "First answer" });
+    event({ type: "response.completed" });
+    h.stream.onConversation?.(value.activeThreadId!, "signed-first");
+    h.stream.onComplete?.();
+    value.sendMessage("Follow up");
+    render();
+    expect(h.stream.request?.payload).toMatchObject({ conversation: "signed-first" });
+    expect(JSON.stringify(h.stream.request?.payload)).not.toContain("First answer");
+  });
+  it("continues approval on its checkpoint", async () => {
+    const value = approval();
+    h.stream.onConversation?.(value.activeThreadId!, "signed-approval");
+    const result = act(value); render();
+    expect(h.stream.request?.payload).toMatchObject({ conversation: "signed-approval" });
+    event({ type: "response.output_text.delta", delta: "Processed" });
+    event({ type: "response.completed" }); finish();
+    await expect(result).resolves.toBe("success");
+  });
+  it("starts a separate thread without borrowing the first checkpoint", () => {
+    const value = start();
+    event({ type: "response.output_text.delta", delta: "First" });
+    h.stream.onConversation?.(value.activeThreadId!, "signed-first");
+    event({ type: "response.completed" }); finish();
+    render().createThread("Separate question"); render();
+    expect(h.stream.request?.threadId).not.toBe(value.activeThreadId);
+    expect(h.stream.request?.payload).not.toHaveProperty("conversation");
+  });
+  it("blocks stale continuation after a controlled transport failure", () => {
+    const value = start();
+    h.stream.onConversation?.(value.activeThreadId!, "old-checkpoint");
+    event({ type: "error", code: "SERVICE_UNAVAILABLE", http_status: 503, allow_retry: true });
+    finish();
+    render().sendMessage("Retry"); render();
+    expect(h.stream.request).toBeNull();
   });
 });
 
@@ -325,7 +559,7 @@ describe("Responses provider approval lifecycle", () => {
     expect(render().isStreaming).toBe(false);
     expect(h.stream.request).toBeNull();
   });
-  it.each(["error", "failed", "incomplete", "eof", "tool-error", "outputless-tool-error", "cancel"])("settles %s exactly once without consuming approval and permits retry", async mode => {
+  it.each(["error", "failed", "incomplete", "eof", "tool-error", "outputless-tool-error", "cancel"])("settles %s once and retries only recoverable tool outcomes", async mode => {
     const value = approval(); ended.mockClear();
     const settled = vi.fn(); const result = act(value).then(settled); render();
     if (mode === "error") h.stream.onError?.(new Error("private"));
@@ -343,6 +577,11 @@ describe("Responses provider approval lifecycle", () => {
     expect(ended).toHaveBeenCalledOnce();
     expect(render().isApprovalCompleted(value.activeThreadId!, "approval-1")).toBe(false);
     const retry = act(render(), false); render();
+    if (["error", "cancel", "failed", "incomplete"].includes(mode)) {
+      expect(h.stream.request).toBeNull();
+      await expect(retry).resolves.toBe("error");
+      return;
+    }
     expect(h.stream.request?.payload).toMatchObject({ input: [{ type: "mcp_approval_response", approval_request_id: "approval-1", approve: false }] });
     event({ type: "response.output_text.delta", delta: "Request declined" });
     event({ type: "response.completed" }); finish();

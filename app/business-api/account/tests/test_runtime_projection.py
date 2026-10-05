@@ -14,6 +14,7 @@ from banking_shared.runtime import effective_balance, project_runtime, project_r
 @pytest.mark.parametrize("count", [1, 8])
 def test_batch_projection_has_constant_query_budget(count: int) -> None:
     engine = create_engine("sqlite://")
+    engine = engine.execution_options(schema_translate_map={"support": None})
     SQLModel.metadata.create_all(engine)
     now = datetime.now(timezone.utc)
     with Session(engine) as session:

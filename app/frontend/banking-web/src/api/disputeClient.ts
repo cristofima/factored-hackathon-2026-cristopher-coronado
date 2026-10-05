@@ -1,7 +1,7 @@
 import { getAuthToken } from "@/api/authToken";
 import { ApiError, readApiError } from "@/api/errors";
 import { z } from "zod";
-import { supportCaseSchema, supportCaseEventSchema, disputePreviewSchema, type DisputePreview } from "@/api/supportCaseContracts";
+import { supportCaseSchema, supportCaseEventSchema, disputePreviewSchema, caseConversationSchema, type CaseConversation, type ConversationMessage, type DisputePreview } from "@/api/supportCaseContracts";
 import type { SupportCase, SupportCaseEvent } from "@/models/SupportCase";
 
 const TRANSACTION_API_URL = import.meta.env.VITE_TRANSACTION_API_URL || "";
@@ -83,11 +83,22 @@ export async function previewSupportCase(
     return preview;
 }
 
-export async function openSupportCase(previewToken: string, signal?: AbortSignal): Promise<SupportCase> {
+export async function getCaseConversation(caseId: string, signal?: AbortSignal): Promise<CaseConversation> {
     signal?.throwIfAborted();
+    const response = await fetch(`${TRANSACTION_API_URL}/support-cases/${encodeURIComponent(caseId)}/conversation`, {
+        headers: authHeaders(), signal,
+    });
+    return decode(response, caseConversationSchema, signal);
+}
+
+export async function openSupportCase(previewToken: string, signal?: AbortSignal, conversationHistory?: ConversationMessage[]): Promise<SupportCase> {
+    signal?.throwIfAborted();
+    if (conversationHistory !== undefined && !caseConversationSchema.safeParse({ source: "CUSTOMER_PROVIDED", messages: conversationHistory }).success) {
+        throw new ApiError("INVALID_REQUEST");
+    }
     const response = await fetch(`${TRANSACTION_API_URL}/support-cases`, {
         method: "POST", headers: { ...authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({ previewToken }), signal,
+        body: JSON.stringify({ previewToken, ...(conversationHistory === undefined ? {} : { conversationHistory }) }), signal,
     });
     return decode(response, supportCaseSchema, signal);
 }

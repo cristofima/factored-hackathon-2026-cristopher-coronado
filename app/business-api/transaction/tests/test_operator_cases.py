@@ -22,6 +22,7 @@ OTHER = OperatorPrincipal("operator-two", 1)
 @pytest.fixture
 def factory() -> Callable[[], Session]:
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    engine = engine.execution_options(schema_translate_map={"support": None})
     SQLModel.metadata.create_all(engine)
     with Session(engine) as session:
         for subject in ("operator-one", "operator-two"):

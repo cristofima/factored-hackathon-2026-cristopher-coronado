@@ -13,6 +13,8 @@ from sqlmodel import Session, select
 
 from banking_transaction.projections.cases import effects as _effects, protection as _protection, product_protection_status
 from banking_transaction.auth.operator_identity import OperatorPrincipal
+from banking_transaction.models.conversation import CaseConversation
+from banking_transaction.services.conversation import read_conversation
 from banking_transaction.models.operator import AdjudicateRequest, CardProtectionRequest, OperatorCaseDetail, OperatorCaseEvent, OperatorCasePage, OperatorCaseSummary
 
 
@@ -99,6 +101,15 @@ class OperatorCaseService:
             if case is None:
                 raise LookupError("Case not found")
             return _detail(session, case)
+
+    def get_case_conversation(self, case_id: str, principal: OperatorPrincipal) -> CaseConversation:
+        with self._session_factory() as session:
+            case = session.exec(select(SupportCase).where(
+                SupportCase.case_id == case_id, SupportCase.assigned_operator_sub == principal.sub,
+            )).first()
+            if case is None or case.claimed_at is None:
+                raise LookupError("Case not found")
+            return read_conversation(session, case.case_id)
 
     def claim_case(self, case_id: str, principal: OperatorPrincipal) -> OperatorCaseDetail:
         with self._session_factory() as session:

@@ -183,9 +183,12 @@ owns requirements regeneration and zip packaging.
   Check the dataset's latest transaction before a demo; recent synthetic test dates
   do not establish live eligibility. Changing the window or loading fresher data is
   an explicit business/demo decision.
-- **Continuity:** local user-bound conversation restoration exists. Browser threads
-  live in React state and clear on reload. Hosted identity transport and linked-turn
-  continuity are not established; local behavior must not be advertised as hosted parity.
+- **Continuity:** temporary browser threads and signed completed-response tokens
+  survive same-login reloads in tab-scoped session storage, but clear on logout/new
+  login. Help also exposes owning-customer, read-only PostgreSQL case snapshots:
+  bounded visible intake messages, not a complete durable chat archive or resumable
+  checkpoint. Uncertain failed turns remain locked; safe retry is not implemented.
+  Hosted identity transport and linked-turn acceptance remain separate gates.
 - **Cost:** account for the shared five-site App Service plan, PostgreSQL, Key Vault,
   storage, monitoring and model usage. No measured operating-cost estimate is published.
 

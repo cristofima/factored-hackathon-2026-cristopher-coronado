@@ -1,8 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { adjudicateOperatorCase, retryOperatorEffects, protectOperatorCard, claimOperatorCase, getOperatorCase, listOperatorCases } from "./operatorDisputeClient";
+import { adjudicateOperatorCase, retryOperatorEffects, protectOperatorCard, claimOperatorCase, getOperatorCase, getOperatorCaseConversation, listOperatorCases } from "./operatorDisputeClient";
+import { getAuthToken } from "./authToken";
 
 vi.mock("./authToken", () => ({ getAuthToken: vi.fn(() => "test-only-token") }));
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.mocked(getAuthToken).mockReset().mockReturnValue("test-only-token");
+});
 const supportCase = {
   caseId: "case-id", status: "IN_REVIEW", triageOutcome: null,
   openedAt: "2026-10-04T12:00:00Z", updatedAt: "2026-10-04T12:00:00Z", claimVersion: 0,
@@ -158,4 +162,74 @@ describe("operator adjudication contract", () => {
   it("rejects malformed effects without fabricating a balance", async () => { vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({...claimed, effects: {amount: 10}})))); await expect(adjudicateOperatorCase("case-id", body)).rejects.toMatchObject({code: "SERVICE_UNAVAILABLE"}); });
   it.each(["CASE_VERSION_CONFLICT", "EVIDENCE_VERSION_CONFLICT", "CASE_VERDICT_CONFLICT", "DESTINATION_NOT_ELIGIBLE", "CREDIT_ALREADY_APPLIED", "DESTINATION_UNAVAILABLE"]) ("preserves controlled action error %s", async code => { vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({detail: {code}}), {status: 409}))); await expect(adjudicateOperatorCase("case-id", body)).rejects.toMatchObject({code}); });
   it("aborts mutation decoding without accepting a stale result", async () => { const controller = new AbortController(); vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ok: true, json: async () => {controller.abort(); return claimed;}})); await expect(adjudicateOperatorCase("case-id", body, controller.signal)).rejects.toMatchObject({name: "AbortError"}); });
+});
+
+describe("operator conversation getter", () => {
+  const conversation = { source: "CUSTOMER_PROVIDED", messages: [{ role: "user", text: "Original customer text\n<literal>" }, { role: "assistant", text: "Assistant text" }] };
+  it.each([conversation.messages, []].map(messages => ({ messages })))("decodes an authenticated encoded GET including empty history %#", async ({ messages }) => {
+    const controller = new AbortController();
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ...conversation, messages })));
+    vi.stubGlobal("fetch", fetch);
+    expect(await getOperatorCaseConversation("case /?#", controller.signal)).toEqual({ ...conversation, messages });
+    expect(fetch.mock.calls[0][0]).toMatch(/\/operator\/support-cases\/case%20%2F%3F%23\/conversation$/);
+    expect(fetch.mock.calls[0][1]).toMatchObject({ method: "GET", signal: controller.signal, headers: { Authorization: `Bearer test-only-token` } });
+    expect(fetch.mock.calls[0][1]).not.toHaveProperty("body");
+  });
+  it.each(["", " ", ".", ".."]) ("rejects unsafe ID %j before fetch", async caseId => {
+    const fetch = vi.fn(); vi.stubGlobal("fetch", fetch);
+    await expect(getOperatorCaseConversation(caseId)).rejects.toMatchObject({ code: "INVALID_REQUEST" });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it.each([
+    null, {}, { ...conversation, source: "MODEL_VERIFIED" }, { ...conversation, messages: null },
+    { ...conversation, messages: [{}] }, { ...conversation, messages: [{ role: "system", text: "text" }] },
+    { ...conversation, messages: [{ role: "user", text: "" }] }, { ...conversation, messages: [{ role: "user", text: 42 }] },
+    { ...conversation, messages: Array.from({ length: 101 }, () => ({ role: "user", text: "x" })) },
+    { ...conversation, messages: [{ role: "user", text: "x".repeat(100001) }] },
+    { ...conversation, messages: [{ role: "user", text: "x".repeat(50000) }, { role: "assistant", text: "x".repeat(50001) }] },
+  ])("rejects malformed or out-of-bounds history %#", async payload => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(payload))));
+    await expect(getOperatorCaseConversation("case")).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
+  });
+  it("rejects malformed JSON safely", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("private response")));
+    await expect(getOperatorCaseConversation("case")).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
+  });
+  it.each([[401, "AUTH_REQUIRED"], [403, "ACCESS_DENIED"], [404, "CASE_NOT_FOUND"]] as const)("preserves controlled %s errors", async (status, code) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ detail: { code } }), { status })));
+    await expect(getOperatorCaseConversation("case")).rejects.toMatchObject({ code });
+  });
+  it("fails before fetch without auth or when already aborted", async () => {
+    const fetch = vi.fn(); vi.stubGlobal("fetch", fetch);
+    vi.mocked(getAuthToken).mockReturnValue(null);
+    await expect(getOperatorCaseConversation("case")).rejects.toMatchObject({ code: "AUTH_REQUIRED" });
+    const controller = new AbortController(); controller.abort();
+    await expect(getOperatorCaseConversation("case", controller.signal)).rejects.toMatchObject({ name: "AbortError" });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it("strips unsupported response fields without changing original text", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      ...conversation, privateField: "ignored", messages: conversation.messages.map(message => ({ ...message, privateField: "ignored" })),
+    }))));
+    expect(await getOperatorCaseConversation("case")).toEqual(conversation);
+  });
+  it("does not decode a response received after cancellation", async () => {
+    const controller = new AbortController();
+    const json = vi.fn().mockResolvedValue(conversation);
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => {
+      controller.abort();
+      return { ok: true, json };
+    }));
+    await expect(getOperatorCaseConversation("case", controller.signal)).rejects.toMatchObject({ name: "AbortError" });
+    expect(json).not.toHaveBeenCalled();
+  });
+  it.each(["success", "malformed JSON", "error", "malformed error JSON"])("preserves cancellation during %s decoding", async kind => {
+    const controller = new AbortController();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: !kind.includes("error"), status: 401, json: async () => {
+      controller.abort();
+      if (kind.includes("JSON")) throw new SyntaxError("private response");
+      return kind === "success" ? conversation : { detail: { code: "AUTH_REQUIRED" } };
+    } }));
+    await expect(getOperatorCaseConversation("case", controller.signal)).rejects.toMatchObject({ name: "AbortError" });
+  });
 });

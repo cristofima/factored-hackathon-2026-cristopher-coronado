@@ -13,9 +13,10 @@ TRANSACTION_ID_FOREIGN_KEY = "transactions.transaction_id"
 
 class RuntimePosting(SQLModel, table=True):
     __tablename__ = "runtime_postings"
+    __table_args__ = {"schema": "support"}
 
     original_transaction_id: str = Field(primary_key=True, foreign_key=TRANSACTION_ID_FOREIGN_KEY, max_length=64)
-    case_id: str = Field(foreign_key="support_cases.case_id", unique=True, max_length=64)
+    case_id: str = Field(foreign_key="support.support_cases.case_id", unique=True, max_length=64)
     movement_id: str = Field(foreign_key=TRANSACTION_ID_FOREIGN_KEY, unique=True, max_length=64)
     product_id: str = Field(foreign_key=PRODUCT_ID_FOREIGN_KEY, index=True, max_length=64)
     customer_id: str = Field(foreign_key=CUSTOMER_ID_FOREIGN_KEY, max_length=64)
@@ -28,9 +29,10 @@ class RuntimePosting(SQLModel, table=True):
 
 class CardProtection(SQLModel, table=True):
     __tablename__ = "card_protections"
+    __table_args__ = {"schema": "support"}
 
     product_id: str = Field(primary_key=True, foreign_key=PRODUCT_ID_FOREIGN_KEY, max_length=64)
-    case_id: str = Field(foreign_key="support_cases.case_id", max_length=64)
+    case_id: str = Field(foreign_key="support.support_cases.case_id", max_length=64)
     prior_status: str | None = Field(default=None, max_length=32)
     blocked: bool = Field(default=True)
     rationale: str = Field(max_length=1000)

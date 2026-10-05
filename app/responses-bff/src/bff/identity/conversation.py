@@ -1,26 +1,13 @@
 """Authenticated conversation token ownership."""
 
+import base64
 import hashlib
 import hmac
-import secrets
+import json
+
 from fastapi import HTTPException, status
+
 from bff.config.settings import Settings
-
-def _conversation_token(user_id: str, settings: Settings) -> str:
-    conversation_id = secrets.token_urlsafe(24)
-    signature = _conversation_signature(user_id, conversation_id, settings)
-    return f"{conversation_id}_{signature}"
-
-
-def _validate_conversation(token: str, user_id: str, settings: Settings) -> None:
-    try:
-        conversation_id, signature = token.rsplit("_", maxsplit=1)
-    except ValueError:
-        raise _forbidden_conversation() from None
-
-    expected = _conversation_signature(user_id, conversation_id, settings)
-    if not hmac.compare_digest(signature, expected):
-        raise _forbidden_conversation()
 
 
 def _conversation_signature(user_id: str, conversation_id: str, settings: Settings) -> str:
@@ -34,6 +21,39 @@ def _conversation_signature(user_id: str, conversation_id: str, settings: Settin
         f"{user_id}:{conversation_id}".encode(),
         hashlib.sha256,
     ).hexdigest()
+
+
+def _response_token(response_id: str, user_id: str, settings: Settings) -> str:
+    encoded = base64.urlsafe_b64encode(response_id.encode()).decode().rstrip("=")
+    value = f"v2.{encoded}"
+    return f"{value}.{_response_signature(value, user_id, settings)}"
+
+
+def _response_signature(value: str, user_id: str, settings: Settings) -> str:
+    scope = json.dumps(
+        [user_id, settings.responses_upstream_mode, settings.responses_agent_endpoint, value],
+        separators=(",", ":"),
+    )
+    return _conversation_signature(scope, "response-continuation", settings)
+
+
+def _previous_response(token: str, user_id: str, settings: Settings) -> str:
+    if len(token) > 2048:
+        raise _forbidden_conversation()
+    try:
+        version, encoded, signature = token.split(".")
+        if version != "v2" or not hmac.compare_digest(
+            signature, _response_signature(f"{version}.{encoded}", user_id, settings)
+        ):
+            raise _forbidden_conversation()
+        response_id = base64.b64decode(
+            encoded + "=" * (-len(encoded) % 4), altchars=b"-_", validate=True
+        ).decode()
+        if not response_id or len(response_id) > 512:
+            raise _forbidden_conversation()
+        return response_id
+    except (ValueError, UnicodeError):
+        raise _forbidden_conversation() from None
 
 
 def _forbidden_conversation() -> HTTPException:

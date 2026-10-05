@@ -2,20 +2,22 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { openSupportCase, recoverSupportCase } from "@/api/disputeClient";
-import { disputePreviewSchema, type DisputePreview } from "@/api/supportCaseContracts";
+import { disputePreviewSchema, type ConversationMessage, type DisputePreview } from "@/api/supportCaseContracts";
 import { ApiError, errorTranslationKey } from "@/api/errors";
 import { useAuth } from "@/context/AuthContext";
 import type { SupportCase } from "@/models/SupportCase";
 import { Button } from "@/components/ui/button";
+import { disputeTransactionStatus } from "@/common/disputePresentation";
 
 interface Props {
   preview: DisputePreview;
   disabled?: boolean;
+  conversationHistory?: ConversationMessage[];
   onAccepted?: (supportCase: SupportCase) => void;
   onDeclined?: () => void;
 }
 
-export function DisputePreviewConsent({ preview, disabled = false, onAccepted, onDeclined }: Props) {
+export function DisputePreviewConsent({ preview, disabled = false, conversationHistory, onAccepted, onDeclined }: Props) {
   const { t, i18n } = useTranslation();
   const { user, sessionKey, logout } = useAuth();
   const scope = JSON.stringify([preview.previewToken, user?.id, user?.identityVersion, sessionKey]);
@@ -48,14 +50,16 @@ export function DisputePreviewConsent({ preview, disabled = false, onAccepted, o
       let result: SupportCase | null;
       try {
         result = recoveryOnly ? await recoverSupportCase(preview.previewToken, controller.signal)
-          : await openSupportCase(preview.previewToken, controller.signal);
+          : await (conversationHistory === undefined
+            ? openSupportCase(preview.previewToken, controller.signal)
+            : openSupportCase(preview.previewToken, controller.signal, conversationHistory));
       } catch (cause) {
         if (!current()) return;
         if (cause instanceof ApiError && ["AUTH_REQUIRED", "AUTH_EXPIRED", "AUTH_INVALID"].includes(cause.code)) { logout(); return; }
         if (recoveryOnly) throw cause;
         if (cause instanceof ApiError && [
           "DISPUTE_PREVIEW_INVALID", "DISPUTE_PREVIEW_EXPIRED", "DISPUTE_PREVIEW_STALE",
-          "DISPUTE_UNAVAILABLE", "DISPUTE_INELIGIBLE", "DISPUTE_CARD_ONLY", "DISPUTE_ALREADY_ACTIVE", "ACCESS_DENIED",
+          "DISPUTE_UNAVAILABLE", "DISPUTE_INELIGIBLE", "DISPUTE_CARD_ONLY", "DISPUTE_ALREADY_ACTIVE", "ACCESS_DENIED", "INVALID_REQUEST",
         ].includes(cause.code)) {
           setState("rejected");
           setError(cause.code === "DISPUTE_ALREADY_ACTIVE" ? "Dispute preview unavailable" : errorTranslationKey(cause, "Dispute preview unavailable"));
@@ -82,7 +86,7 @@ export function DisputePreviewConsent({ preview, disabled = false, onAccepted, o
   if (state === "declined") return <p>{t("Dispute proposal declined")}</p>;
   if (supportCase) return <section className="rounded-lg border p-4 space-y-3">
     <p>{t("Dispute request recorded")}</p>
-    <p>{t(`support-cases.status.${supportCase.status}`)}</p>
+    <p>{t(`support-cases.status.${supportCase.status}`, { keySeparator: "." })}</p>
     <Link to={`/support-cases/${supportCase.caseId}`}>{t("View support case")}</Link>
   </section>;
   const transaction = preview.transaction;
@@ -91,11 +95,11 @@ export function DisputePreviewConsent({ preview, disabled = false, onAccepted, o
     <dl className="grid grid-cols-2 gap-2 text-sm">
       <dt>{t("Amount")}</dt><dd>{transaction.amount ?? t("Not available")} {transaction.currency ?? ""}</dd>
       <dt>{t("Date")}</dt><dd>{transaction.timestamp && Number.isFinite(Date.parse(transaction.timestamp)) ? new Date(transaction.timestamp).toLocaleString(i18n.language) : t("Not available")}</dd>
-      <dt>{t("Merchant")}</dt><dd>{transaction.description ?? t("Not available")}</dd>
+      <dt>{t("Merchant")}</dt><dd>{transaction.recipientName?.trim() ? transaction.recipientName : t("Not available")}</dd>
       <dt>{t("Card")}</dt><dd>{transaction.product_number ? `•••• ${transaction.product_number.slice(-4)}` : t("Not available")}</dd>
       <dt>{t("Country")}</dt><dd>{transaction.country ?? t("Not available")}</dd>
       <dt>{t("City")}</dt><dd>{transaction.city ?? t("Not available")}</dd>
-      <dt>{t("Status")}</dt><dd>{transaction.status ? t(`transactions.statuses.${transaction.status}`, { defaultValue: t("Not available") }) : t("Not available")}</dd>
+      <dt>{t("Status")}</dt><dd>{transaction.status ? disputeTransactionStatus(transaction.status, t) : t("Not available")}</dd>
       <dt>{t("Dispute reason")}</dt><dd className="whitespace-pre-wrap">{preview.reason}</dd>
     </dl>
     <p>{t("Dispute creation consent explanation")}</p>

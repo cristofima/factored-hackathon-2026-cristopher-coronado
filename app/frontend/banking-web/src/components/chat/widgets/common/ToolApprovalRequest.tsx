@@ -38,7 +38,8 @@ export function ToolApprovalRequest({ args, itemId }: ClientWidgetProps) {
   const [loadingButton, setLoadingButton] = useState<
     "approve" | "reject" | null
   >(null);
-  const { activeThreadId, isApprovalCompleted, isStreaming } = useChat();
+  const { activeThreadId, isApprovalCompleted, isStreaming, isThreadLocked } = useChat();
+  const locked = Boolean(activeThreadId && isThreadLocked(activeThreadId));
   const [isDisabled, setIsDisabled] = useState(() =>
     Boolean(activeThreadId && isApprovalCompleted(activeThreadId, itemId)),
   );
@@ -64,7 +65,7 @@ export function ToolApprovalRequest({ args, itemId }: ClientWidgetProps) {
   const codeBlock = createPythonCodeBlock(argsStr);
 
   const handleResponse = (approved: boolean) => {
-    if (pendingRef.current || isDisabled || isStreaming) return;
+    if (pendingRef.current || isDisabled || isStreaming || locked) return;
     pendingRef.current = true;
     setFailed(false);
     setLoadingButton(approved ? "approve" : "reject");
@@ -117,7 +118,7 @@ export function ToolApprovalRequest({ args, itemId }: ClientWidgetProps) {
         <Button
           onClick={() => handleResponse(true)}
           className="flex-1"
-          disabled={isDisabled || isStreaming || loadingButton !== null}
+          disabled={locked || isDisabled || isStreaming || loadingButton !== null}
           loading={loadingButton === "approve"}
         >
           {t("Approve")}
@@ -126,7 +127,7 @@ export function ToolApprovalRequest({ args, itemId }: ClientWidgetProps) {
           onClick={() => handleResponse(false)}
           variant="outline"
           className="flex-1"
-          disabled={isDisabled || isStreaming || loadingButton !== null}
+          disabled={locked || isDisabled || isStreaming || loadingButton !== null}
           loading={loadingButton === "reject"}
         >
           {t("Reject")}

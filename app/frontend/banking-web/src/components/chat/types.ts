@@ -373,6 +373,9 @@ export interface ChatContextValue {
   retryLastMessage: () => void;
   sendWidgetAction: (threadId: string, itemId: string, action: ActionConfig) => Promise<"success" | "error" | "cancelled">;
   isApprovalCompleted: (threadId: string, itemId: string) => boolean;
+  isThreadLocked: (threadId: string) => boolean;
+  closeThread: (threadId: string) => void;
+  setFurtherHelp: (threadId: string, visible: boolean) => void;
   createThread: (initialMessage?: string, options?: { title?: string }) => void;
   selectThread: (threadId: string) => void;
   toggleHistory: () => void;
