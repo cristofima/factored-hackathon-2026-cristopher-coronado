@@ -1,7 +1,7 @@
 import { getAuthToken } from "@/api/authToken";
 import { ApiError, readApiError } from "@/api/errors";
 import { z } from "zod";
-import { effectsSchema, protectionSchema } from "@/api/supportCaseContracts";
+import { effectsSchema, protectionSchema, caseConversationSchema, type CaseConversation } from "@/api/supportCaseContracts";
 export { effectsSchema, protectionSchema } from "@/api/supportCaseContracts";
 
 const timestamp = z.string().datetime({ offset: true, local: true });
@@ -88,6 +88,11 @@ export async function listOperatorCases(signal?: AbortSignal, offset = 0, limit 
 export async function getOperatorCase(caseId: string, signal?: AbortSignal): Promise<OperatorCaseDetail> {
     validateId(caseId);
     return request(detailSchema, `/${encodeURIComponent(caseId)}`, signal);
+}
+
+export async function getOperatorCaseConversation(caseId: string, signal?: AbortSignal): Promise<CaseConversation> {
+    validateId(caseId);
+    return request(caseConversationSchema, `/${encodeURIComponent(caseId)}/conversation`, signal);
 }
 
 export async function claimOperatorCase(caseId: string, signal?: AbortSignal): Promise<OperatorCaseDetail> {

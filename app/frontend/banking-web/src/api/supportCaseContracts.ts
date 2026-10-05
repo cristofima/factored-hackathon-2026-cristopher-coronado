@@ -38,6 +38,7 @@ export const disputePreviewSchema = z.object({
   expiresAt: timestamp,
   transaction: z.object({
     id: z.string().min(1), description: z.string().nullable().optional(),
+    recipientName: z.string().nullable().optional(),
     amount: z.number().finite().nullable().optional(), currency: z.string().nullable().optional(),
     timestamp: z.string().nullable().optional(), product_number: z.string().nullable().optional(),
     country: z.string().nullable().optional(), city: z.string().nullable().optional(),
@@ -46,6 +47,16 @@ export const disputePreviewSchema = z.object({
 }).refine(preview => preview.transactionId === preview.transaction.id);
 
 export type DisputePreview = z.infer<typeof disputePreviewSchema>;
+
+export const conversationMessageSchema = z.object({
+  role: z.enum(["user", "assistant"]), text: z.string().min(1).max(100000),
+});
+export const caseConversationSchema = z.object({
+  source: z.literal("CUSTOMER_PROVIDED"),
+  messages: z.array(conversationMessageSchema).max(100),
+}).refine(history => history.messages.reduce((size, message) => size + message.text.length, 0) <= 100000);
+export type ConversationMessage = z.infer<typeof conversationMessageSchema>;
+export type CaseConversation = z.infer<typeof caseConversationSchema>;
 
 export function isTerminalCase(status: string): boolean {
   return ["RESOLVED", "RESOLVED_VALID", "RESOLVED_INVALID"].includes(status);
