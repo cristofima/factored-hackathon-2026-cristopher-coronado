@@ -522,5 +522,12 @@
   "Create dispute and request human review": "Criar contestação e solicitar revisão humana",
   "Decline dispute proposal": "Recusar proposta",
   "Dispute chat continuation unavailable": "Não foi possível continuar a decisão no chat. O comprovante confirmado permanece válido.",
-  "Retry chat continuation": "Tentar novamente a continuação do chat"
+  "Retry chat continuation": "Tentar novamente a continuação do chat",
+  "chat.recovery.interrupted": "Esta conversa foi interrompida e o resultado é incerto. Não repita a solicitação. Inicie uma nova conversa ou recupere a contestação registrada.",
+  "chat.recovery.new": "Nova conversa",
+  "chat.recovery.creating": "Registrando a contestação…",
+  "chat.recovery.storageUnavailable": "A solicitação não foi enviada porque não foi possível salvar a evidência de recuperação. Inicie uma nova conversa.",
+  "chat.recovery.continue": "Continuar com a contestação registrada",
+  "chat.recovery.loading": "Consultando a contestação registrada…",
+  "chat.recovery.acknowledgement": "A contestação {{caseId}} já está registrada. Leia e confirme este caso existente apenas com getSupportCase. Não repita a solicitação inicial, crie outra contestação, solicite consentimento de criação nem afirme efeitos financeiros não registrados."
 }

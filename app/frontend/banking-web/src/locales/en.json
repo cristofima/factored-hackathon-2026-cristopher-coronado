@@ -522,5 +522,12 @@
   "Create dispute and request human review": "Create dispute and request human review",
   "Decline dispute proposal": "Decline proposal",
   "Dispute chat continuation unavailable": "The recorded decision could not be continued in chat. Your confirmed receipt remains valid.",
-  "Retry chat continuation": "Retry chat continuation"
+  "Retry chat continuation": "Retry chat continuation",
+  "chat.recovery.interrupted": "This conversation was interrupted. Its outcome is uncertain; do not repeat the request. Start a new conversation or recover the recorded case.",
+  "chat.recovery.new": "New conversation",
+  "chat.recovery.creating": "Recording dispute request…",
+  "chat.recovery.storageUnavailable": "The request was not sent because recovery evidence could not be saved. Start a new conversation.",
+  "chat.recovery.continue": "Continue with recorded case",
+  "chat.recovery.loading": "Checking recorded case…",
+  "chat.recovery.acknowledgement": "Case {{caseId}} is already recorded. Read and acknowledge this existing case using getSupportCase only. Do not replay intake, create another dispute, request creation consent, or claim unrecorded financial effects."
 }

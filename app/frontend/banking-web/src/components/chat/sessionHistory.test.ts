@@ -59,6 +59,58 @@ describe("session chat checkpoints", () => {
   });
 });
 
+describe("required preview recovery durability", () => {
+  const preview = { previewToken: "signed-recovery", transactionId: "tx", reason: "Customer reason", expiresAt: "2026-10-04T10:10:00Z", transaction: { id: "tx" } };
+  const evidence: ThreadItem = { id: "preview", thread_id: "thread", created_at: "2026-10-04", type: "client_widget", name: "dispute_preview", args: { recoveryOnly: true, preview, hidden: "not-retained" } };
+  const required = { threadId: "thread", itemId: "preview", previewToken: preview.previewToken };
+  function persist(items: ThreadItem[], threads = [thread], requirement = required) {
+    return persistChatSnapshot(scope, threads, { thread: items }, "thread", new Set(), new Set(["thread"]), null, requirement);
+  }
+  it("retains exact recovery evidence and clears the pending marker only after saving", () => {
+    save(); markChatInterrupted(scope, "thread");
+    expect(persist([evidence])).toBe(true);
+    expect(sessionStorage.getItem(`${CHAT_HISTORY_KEY}-pending`)).toBeNull();
+    expect(readChatSnapshot(scope)).toMatchObject({ threads: [{ status: { type: "locked" } }], items: { thread: [{ id: "preview", args: { recoveryOnly: true, preview } }] } });
+    expect(sessionStorage.getItem(CHAT_HISTORY_KEY)).not.toContain("not-retained");
+  });
+  it.each(["missing-item", "missing-thread", "wrong-token", "unmarked", "malformed", "recorded", "item-truncated", "thread-truncated"])("rejects %s required evidence without claiming a durable write", kind => {
+    save(); markChatInterrupted(scope, "thread");
+    const prior = sessionStorage.getItem(CHAT_HISTORY_KEY);
+    let items: ThreadItem[] = [evidence]; let threads = [thread]; let requirement = required;
+    if (kind === "missing-item") requirement = { ...required, itemId: "missing" };
+    if (kind === "missing-thread") requirement = { ...required, threadId: "missing" };
+    if (kind === "wrong-token") requirement = { ...required, previewToken: "different-token" };
+    if (kind === "unmarked") items = [{ ...evidence, args: { preview } } as ThreadItem];
+    if (kind === "malformed") items = [{ ...evidence, args: { recoveryOnly: true, preview: { ...preview, transaction: { id: "other" } } } } as ThreadItem];
+    if (kind === "recorded") items = [{ ...evidence, args: { recoveryOnly: true, preview, recordedDecision: { caseId: "case", declined: false } } } as ThreadItem];
+    if (kind === "item-truncated") items = [evidence, ...Array.from({ length: 200 }, (_, index) => message(`user-${index}`, "Visible"))];
+    if (kind === "thread-truncated") threads = [...Array.from({ length: 10 }, (_, index): Thread => ({ ...thread, id: `other-${index}` })), thread];
+    expect(persist(items, threads, requirement)).toBe(false);
+    expect(sessionStorage.getItem(CHAT_HISTORY_KEY)).toBe(prior);
+    expect(sessionStorage.getItem(`${CHAT_HISTORY_KEY}-pending`)).not.toBeNull();
+    expect(readChatSnapshot(scope)?.threads[0].status.type).toBe("locked");
+  });
+  it("rejects oversized recovery snapshots and removes stale history without clearing the interruption marker", () => {
+    save(); markChatInterrupted(scope, "thread");
+    expect(persist([...Array.from({ length: 21 }, (_, index) => message(`large-${index}`, "x".repeat(100000))), evidence])).toBe(false);
+    expect(sessionStorage.getItem(CHAT_HISTORY_KEY)).toBeNull();
+    expect(sessionStorage.getItem(`${CHAT_HISTORY_KEY}-pending`)).not.toBeNull();
+  });
+  it.each(["write", "pending-cleanup", "all-storage"])("returns false when %s fails and never exposes an active stale checkpoint", kind => {
+    save(); markChatInterrupted(scope, "thread");
+    const remove = sessionStorage.removeItem.bind(sessionStorage);
+    if (kind !== "pending-cleanup") vi.spyOn(sessionStorage, "setItem").mockImplementation(() => { throw new Error("Storage denied"); });
+    if (kind !== "write") vi.spyOn(sessionStorage, "removeItem").mockImplementation(key => {
+      if (kind === "all-storage" || key === `${CHAT_HISTORY_KEY}-pending`) throw new Error("Storage denied");
+      remove(key);
+    });
+    expect(persist([evidence])).toBe(false);
+    expect(sessionStorage.getItem(`${CHAT_HISTORY_KEY}-pending`)).not.toBeNull();
+    if (kind === "all-storage") expect(readChatSnapshot(scope)?.threads[0].status.type).toBe("locked");
+    else expect(readChatSnapshot(scope)).toBeNull();
+  });
+});
+
 describe("visible intake transcript", () => {
   it("keeps the newest 100 messages in chronological order", () => {
     const result = visibleConversation(Array.from({ length: 110 }, (_, index) => message(String(index), String(index))));

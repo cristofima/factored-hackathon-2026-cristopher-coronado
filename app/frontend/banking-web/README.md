@@ -64,6 +64,41 @@ Help separates two kinds of history:
   not include later exchanges. Legacy/direct cases can have no snapshot. This is not
   a general-chat archive and does not restore provider state or enable continuation.
 
+Failed, incomplete or cancelled turns show an interrupted-response notice and offer
+New conversation without deleting the old messages or case receipts. The new thread
+does not reuse an uncertain continuation or resend the failed turn. Error retry hints
+never unlock an uncertain thread.
+
+Before chat consent dispatch, the browser must save the attempted proposal's bounded
+recovery evidence; storage failure prevents creation. After same-login reload, that
+proposal permits only read-only recovery, including when the composer is locked.
+Absent or mismatched recovery results remain uncertain. Confirmed receipts retain
+case status and View case without retaining proposal tokens. Recover acknowledgement
+first reads the owned existing case, then starts a fresh BFF chat identifying that
+case, never replaying intake or requesting creation consent again. Recovery is
+single-flight and aborts on thread selection, a new conversation or identity change.
+
+Recovery orchestration lives in
+[ResponsesChatProvider](src/components/chat/ResponsesChatProvider.tsx), bounded
+session persistence in [sessionHistory](src/components/chat/sessionHistory.ts), and
+consent/receipt controls in [DisputePreviewConsent](src/components/DisputePreviewConsent.tsx)
+and [DisputePreview](src/components/chat/widgets/common/DisputePreview.tsx).
+The composer and recovery controls use the authenticated UI locale (en/es/pt).
+Explicitly closed threads and saved case snapshots remain read-only; recovery does
+not reopen them or enable stale consent or generic MCP approval cards.
+
+The session's seven focused frontend regression files passed (218 tests); lint
+passed with zero errors and 14 warnings, and build passed with the existing
+chunk-size warning. The owner additionally confirmed recognizing a charge and
+choosing not to report it stops intake without creating a case or requesting more
+consent, and multi-turn intake preserves charge/context through acceptance and
+subsequent existing-case consultation without recreation or second consent.
+These are reported positive-path observations, not assistant-executed browser tests.
+Retry was not exercised because no error occurred. Browser interruption/recovery,
+reload, accessibility, real-model recovery acknowledgement and hosted acceptance
+remain separate validation gates. Same-provider-operation replay and resilient
+background execution are not implemented.
+
 The browser sends signed `conversation` continuation tokens; the BFF translates them
 internally to `previous_response_id` in both local and hosted modes. PostgreSQL snapshots
 do not replace these tokens or workflow checkpoints. No Cosmos conversation export is used.
