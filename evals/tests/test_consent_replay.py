@@ -6,12 +6,11 @@ from copy import deepcopy
 from typing import Any
 
 import pytest
-from agent_framework import MCPStreamableHTTPTool
 
-from evals.dispute_replay import DATASET, ROOT, _validate_replies, expand_case, score_case
-from evals.evidence import sanitize
-from evals.mcp_replay import ReplayReply, ReplayServer, load_contracts
-from evals.run_dispute_replay import run_baseline
+from banking_evals.dispute_replay import DATASET, ROOT, _validate_replies, expand_case, score_case
+from banking_evals.evidence import sanitize
+from banking_evals.mcp_replay import ReplayReply, ReplayServer, load_contracts
+from banking_evals.run_dispute_replay import run_baseline
 
 
 def expanded_sources() -> list[dict[str, Any]]:
@@ -91,6 +90,7 @@ async def test_existing_pending_case_retains_legacy_approval_without_preview() -
 
 @pytest.mark.asyncio
 async def test_async_consent_tools_are_discovered_and_invoked_through_sdk() -> None:
+    MCPStreamableHTTPTool = pytest.importorskip("agent_framework").MCPStreamableHTTPTool
     expected = {
         "previewTransactionDispute": {"transaction_id": "TX", "reason": "Reason"},
         "reportTransactionDispute": {"preview_token": "TOKEN"},
@@ -116,7 +116,8 @@ async def test_async_consent_tools_are_discovered_and_invoked_through_sdk() -> N
 
 def test_preview_and_null_recovery_validate_against_production_models() -> None:
     spec = importlib.util.spec_from_file_location(
-        "consent_replay_response_models", ROOT / "app" / "business-api" / "transaction" / "models.py",
+        "consent_replay_response_models",
+        ROOT / "app" / "business-api" / "transaction" / "src" / "banking_transaction" / "models" / "transactions.py",
     )
     assert spec is not None and spec.loader is not None
     models = importlib.util.module_from_spec(spec)

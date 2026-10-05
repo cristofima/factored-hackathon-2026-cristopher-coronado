@@ -1,0 +1,31 @@
+[project]
+name = "banking-evals"
+version = "0.1.0"
+description = "Synthetic banking evaluation contracts and offline scoring"
+requires-python = ">=3.11"
+dependencies = ["httpx==0.28.1", "pydantic>=2,<3", "mcp>=1.24,<2"]
+
+[project.optional-dependencies]
+offline = ["pytest==9.1.1", "pytest-asyncio==1.4.0"]
+model = ["banking-assistant-agent"]
+
+[project.scripts]
+banking-dispute-replay = "banking_evals.run_dispute_replay:main"
+banking-mcp-replay = "banking_evals.run_mcp_replay:main"
+banking-held-out-eval = "banking_evals.run_held_out_eval:main"
+
+[tool.uv]
+prerelease = "allow"
+
+[tool.uv.sources]
+banking-assistant-agent = { path = "../app/agent", editable = true }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
