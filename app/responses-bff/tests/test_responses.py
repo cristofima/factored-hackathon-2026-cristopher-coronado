@@ -79,7 +79,7 @@ class FakeCredential:
 
 class SseStream(httpx.AsyncByteStream):
     async def __aiter__(self):
-        yield b"event: response.completed\ndata: {}\n\n"
+        yield b'event: response.completed\ndata: {"type":"response.completed","response":{"id":"resp_first","status":"completed"}}\n\n'
 
 
 def _settings(mode: str) -> Settings:
@@ -151,8 +151,9 @@ async def test_local_mode_uses_signed_internal_identity_without_azure_credential
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/event-stream")
-    assert re.fullmatch(r"[A-Za-z0-9_-]{1,128}", response.headers["x-conversation-id"])
-    assert response.text == "event: response.completed\ndata: {}\n\n"
+    assert "x-conversation-id" not in response.headers
+    assert '"type": "bff.continuation"' in response.text
+    assert '"id":"resp_first"' in response.text
     assert credential_factory_called is False
 
 
@@ -168,7 +169,7 @@ async def test_foundry_mode_uses_managed_credential_and_delegated_identity() -> 
         )
         assert "user_isolation_key" not in request.headers
         assert "chat_isolation_key" not in request.headers
-        return httpx.Response(200, json={"status": "completed"})
+        return httpx.Response(200, json={"id": "resp_first", "status": "completed"})
 
     app = create_app(
         settings,
@@ -231,7 +232,7 @@ async def test_continuation_revalidates_identity_before_upstream(
     def upstream(request: httpx.Request) -> httpx.Response:
         nonlocal upstream_calls
         upstream_calls += 1
-        return httpx.Response(200, json={"status": "completed"})
+        return httpx.Response(200, json={"id": "resp_first", "status": "completed"})
 
     app = _create_app(
         settings, auth_transport=httpx.MockTransport(introspect),
@@ -265,7 +266,7 @@ async def test_staff_responses_never_reaches_agent(role: str) -> None:
     def upstream(request: httpx.Request) -> httpx.Response:
         nonlocal upstream_calls
         upstream_calls += 1
-        return httpx.Response(200, json={"status": "completed"})
+        return httpx.Response(200, json={"id": "resp_first", "status": "completed"})
 
     app = _create_app(
         settings, auth_transport=httpx.MockTransport(lambda _: httpx.Response(200, json=profile)),
@@ -281,7 +282,7 @@ async def test_conversation_cannot_cross_users() -> None:
     settings = _settings("local")
 
     async def upstream(_: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"status": "completed"})
+        return httpx.Response(200, json={"id": "resp_first", "status": "completed"})
 
     app = create_app(settings, transport=httpx.MockTransport(upstream))
     first = await _post(app, _token("user-a", settings), {"input": "First turn"})
@@ -299,6 +300,11 @@ async def test_conversation_cannot_cross_users() -> None:
     "payload",
     [
         {"input": "Continue", "previous_response_id": "caresp_foreign"},
+        {"input": "Continue", "agent_session_id": "foreign-session"},
+        {"input": "Continue", "previous_response_id": None},
+        {"input": "Continue", "previous_response_id": ""},
+        {"input": "Continue", "agent_session_id": None},
+        {"input": "Continue", "agent_session_id": ""},
         {"input": "Continue", "conversation": 123},
     ],
 )
@@ -323,10 +329,14 @@ async def test_w3c_context_propagates_to_agent(
     ) -> httpcore.Response:
         captured.append(httpx.Headers(request.headers))
         content = (
-            b"event: response.completed\ndata: {}\n\n"
-            if stream else b'{"status":"completed"}'
+            b'event: response.completed\ndata: {"type":"response.completed",'
+            b'"response":{"id":"resp_trace","status":"completed"}}\n\n'
+            if stream else b'{"id":"resp_trace","status":"completed"}'
         )
-        return httpcore.Response(200, content=content)
+        return httpcore.Response(
+            200, content=content,
+            headers=[(b"content-type", b"text/event-stream" if stream else b"application/json")],
+        )
 
     monkeypatch.setattr(httpcore.AsyncConnectionPool, "handle_async_request", upstream)
     settings = _settings("local")
@@ -372,7 +382,7 @@ async def test_concurrent_bff_requests_have_independent_traces(
         if len(captured) == 2:
             both_requests.set()
         await asyncio.wait_for(both_requests.wait(), timeout=5)
-        return httpcore.Response(200, content=b'{"status":"completed"}')
+        return httpcore.Response(200, content=b'{"id":"resp_trace","status":"completed"}')
 
     monkeypatch.setattr(httpcore.AsyncConnectionPool, "handle_async_request", upstream)
     settings = _settings("local")
@@ -389,3 +399,57 @@ async def test_concurrent_bff_requests_have_independent_traces(
 
     assert [response.status_code for response in responses] == [200, 200]
     assert len({value.split("-")[1] for value in captured}) == 2
+
+
+@pytest.mark.parametrize("mode", ["local", "foundry"])
+@pytest.mark.parametrize("stream", [False, True])
+async def test_two_turns_translate_customer_token_to_previous_response(
+    mode: str, stream: bool,
+) -> None:
+    settings = _settings(mode)
+    captured: list[dict[str, object]] = []
+
+    def upstream(request: httpx.Request) -> httpx.Response:
+        captured.append(json.loads(request.content))
+        if stream:
+            return httpx.Response(
+                200, headers={"Content-Type": "text/event-stream"}, stream=SseStream()
+            )
+        return httpx.Response(200, json={"id": "resp_first", "status": "completed"})
+
+    app = create_app(
+        settings, transport=httpx.MockTransport(upstream),
+        credential_factory=lambda _: FakeCredential(),
+    )
+    async with LifespanManager(app):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://bff") as client:
+            headers = {"Authorization": "Bearer " + _token("user-a", settings)}
+            first = await client.post(
+                "/responses", headers=headers, json={"input": "First", "stream": stream}
+            )
+            if stream:
+                controls = [json.loads(line[6:]) for line in first.text.splitlines()
+                            if line.startswith('data: {"type": "bff.continuation"')]
+                token = controls[0]["token"]
+            else:
+                token = first.headers["x-conversation-id"]
+            second = await client.post(
+                "/responses", headers=headers,
+                json={"input": "Next", "conversation": token, "stream": stream},
+            )
+    assert first.status_code == second.status_code == 200
+    assert captured == [
+        {"input": "First", "stream": stream},
+        {"input": "Next", "stream": stream, "previous_response_id": "resp_first"},
+    ]
+
+
+async def test_json_without_checkpoint_returns_controlled_failure() -> None:
+    settings = _settings("local")
+    app = create_app(settings, transport=httpx.MockTransport(
+        lambda _: httpx.Response(200, json={"status": "completed"})
+    ))
+    response = await _post(app, _token("user-a", settings), {"input": "First"})
+    assert response.status_code == 503
+    assert response.json() == {"detail": {"code": "SERVICE_UNAVAILABLE"}}
+    assert "x-conversation-id" not in response.headers

@@ -2,22 +2,19 @@
 
 from __future__ import annotations
 
-import hashlib
-import hmac
-import secrets
-from collections.abc import AsyncIterator
 from typing import Annotated, Any
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import Response, StreamingResponse
 
-from bff.identity.models import AuthenticatedUser
-from bff.identity.authentication import get_customer_user
-from bff.identity.conversation import _conversation_token, _validate_conversation
-from bff.identity.responses import AsyncCredential, _upstream_headers
-from bff.clients.responses import _stream_response, read_response, send_response
+from bff.clients.continuation import completed_token, stream_with_continuation
+from bff.clients.responses import read_response, send_response
 from bff.config.settings import Settings
+from bff.identity.authentication import get_customer_user
+from bff.identity.conversation import _previous_response
+from bff.identity.models import AuthenticatedUser
+from bff.identity.responses import _upstream_headers
 
 
 router = APIRouter(prefix="/responses")
@@ -30,7 +27,7 @@ async def create_response(
     user: Annotated[AuthenticatedUser, Depends(get_customer_user)],
 ) -> Response:
     """Forward a Responses request to the configured trusted upstream."""
-    if payload.get("previous_response_id"):
+    if "previous_response_id" in payload or "agent_session_id" in payload:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"code": "INVALID_REQUEST"},
@@ -44,19 +41,12 @@ async def create_response(
         )
 
     settings: Settings = request.app.state.settings
-    conversation = requested_conversation or _conversation_token(user.sub, settings)
-    _validate_conversation(conversation, user.sub, settings)
-
-    # The hosted Foundry Responses gateway validates "conversation" against its own
-    # platform-managed Conversation object ids (e.g. "conv_..."); our opaque, BFF-signed
-    # token can never match that format and upstream rejects it as a malformed identifier.
-    # Only the local agent host (which treats "conversation" as an arbitrary state-store
-    # key) can accept it, so omit the field entirely in foundry mode.
     upstream_payload = dict(payload)
-    if settings.responses_upstream_mode == "local":
-        upstream_payload["conversation"] = conversation
-    else:
-        upstream_payload.pop("conversation", None)
+    upstream_payload.pop("conversation", None)
+    if requested_conversation is not None:
+        upstream_payload["previous_response_id"] = _previous_response(
+            requested_conversation, user.sub, settings
+        )
 
     client: httpx.AsyncClient = request.app.state.http_client
     upstream_request = client.build_request(
@@ -67,18 +57,25 @@ async def create_response(
     )
     upstream = await send_response(client, upstream_request)
 
-    response_headers = {"X-Conversation-Id": conversation}
+    response_headers: dict[str, str] = {}
     content_type = upstream.headers.get("content-type", "application/json")
     if content_type.startswith("text/event-stream"):
         return StreamingResponse(
-            _stream_response(upstream),
+            stream_with_continuation(upstream, user.sub, settings),
             status_code=upstream.status_code,
             media_type="text/event-stream",
             headers=response_headers,
         )
 
-    content = await upstream.aread()
-    await upstream.aclose()
+    content = await read_response(upstream)
+    if upstream.is_success:
+        token = completed_token(content, user.sub, settings)
+        if not token:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={"code": "SERVICE_UNAVAILABLE"},
+            )
+        response_headers["X-Conversation-Id"] = token
     return Response(
         content=content,
         status_code=upstream.status_code,
