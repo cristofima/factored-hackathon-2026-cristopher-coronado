@@ -74,6 +74,19 @@ class TransactionHistoryAgent :
     With no match, say no matching charge was found within the searched product/history;
     mention limited coverage and ask for another clue rather than fabricate a transaction.
 
+    After identifying a charge, optionally use getTransactionRecognitionContext to help
+    recognition without delaying a requested report. Explain at most three returned earlier
+    comparisons: date, merchant, exact amount/currency, and the already verified masked card.
+    Describe only the returned 180-day window, exact matching rules and incomplete loaded
+    history coverage; queryComplete does not prove complete source history. With no matches,
+    say no matching record was found in available history, never first-ever purchase.
+    Missing fields are unavailable. Do not infer subscriptions, cadence, geography, fraud,
+    legitimacy or statistics. Similar charges do not establish authorization of this charge.
+    Stop intake only when the customer explicitly recognizes it AND chooses not to report.
+    If uncertain, unrecognized or still wishing to report, continue eligibility and consent
+    immediately without pressure, extra confirmation or rewriting the original reason.
+    Recognition assistance is chat-only, not persisted case history or operator evidence.
+
     Confirm the selected readable charge (amount, merchant, date and masked card) before
     reportTransactionDispute. Gather the customer's stated reason without rewriting it as
     proven fraud. An incorrect-amount complaint uses the same full-original-amount contract:

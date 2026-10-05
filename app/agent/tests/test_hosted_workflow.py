@@ -109,6 +109,24 @@ def test_pre_intake_consent_instruction_contract(requirement: str) -> None:
     assert requirement in instructions
 
 
+@pytest.mark.parametrize("requirement", [
+    "optionally use getTransactionRecognitionContext",
+    "without delaying a requested report",
+    "at most three returned earlier comparisons",
+    "queryComplete does not prove complete source history",
+    "never first-ever purchase",
+    "Do not infer subscriptions, cadence, geography, fraud, legitimacy or statistics",
+    "Similar charges do not establish authorization",
+    "explicitly recognizes it AND chooses not to report",
+    "continue eligibility and consent immediately",
+    "without pressure, extra confirmation or rewriting the original reason",
+    "chat-only, not persisted case history or operator evidence",
+])
+def test_recognition_instruction_contract(requirement: str) -> None:
+    instructions = " ".join(TransactionHistoryAgent.instructions.split())
+    assert requirement in instructions
+
+
 def test_dispute_consultation_instruction_contract() -> None:
     triage = " ".join(TRIAGE_INSTRUCTIONS.split())
     instructions = " ".join(TransactionHistoryAgent.instructions.split())
