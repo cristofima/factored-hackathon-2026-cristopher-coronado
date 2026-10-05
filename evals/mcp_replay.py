@@ -38,7 +38,7 @@ def _argument_schema(argument: ast.arg) -> dict[str, str]:
     return schema
 
 
-def _tool_contract(function: ast.FunctionDef, decorator: ast.Call) -> types.Tool:
+def _tool_contract(function: ast.FunctionDef | ast.AsyncFunctionDef, decorator: ast.Call) -> types.Tool:
     metadata = {item.arg: ast.literal_eval(item.value) for item in decorator.keywords}
     properties = {
         argument.arg: _argument_schema(argument)
@@ -61,7 +61,7 @@ def load_contracts(server: str) -> list[types.Tool]:
     source = ROOT / "app" / "business-api" / server / "mcp_tools.py"
     contracts = []
     for function in ast.parse(source.read_text(encoding="utf-8")).body:
-        if not isinstance(function, ast.FunctionDef):
+        if not isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         for decorator in function.decorator_list:
             if (isinstance(decorator, ast.Call) and isinstance(decorator.func, ast.Attribute)

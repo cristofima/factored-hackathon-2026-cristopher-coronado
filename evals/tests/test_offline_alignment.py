@@ -38,7 +38,7 @@ async def test_all_25_cases_are_investigation_only(cases: list[dict[str, Any]]) 
         result = await runner.run_baseline(case)
         assert replay.score_case(case, result)["passed"], case["id"]
         for call in result["tool_calls"]:
-            if call["tool"] == "respondToDisputeApproval" and call["arguments"]["approved"]:
+            if call["tool"] == "reportTransactionDispute":
                 approved.append(call["result"])
                 assert call["result"]["status"] == "IN_REVIEW"
                 assert call["result"].get("resolutionOutcome") is None

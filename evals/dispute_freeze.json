@@ -1,14 +1,17 @@
 {
   "dataset_version": "dispute-replay-v2",
   "dataset_sha256": "daaff9a5ed2c3f43602799fe55dd14c030aa68cfeba34232533743ebe2e4b761",
-  "expanded_inputs_sha256": "35aa9d572db2d919aab5a13932663723ffb92adc3ada3c55c0f17698ece617f6",
+  "expansion_version": "dispute-consent-v3",
+  "expanded_inputs_sha256": "0c8c7e4cf88ea54aaf46152ad8f9311d775470f9461cfa85158c54d42f4411a4",
   "case_count": 25,
   "exposure": "development-exposed-synthetic-confirmation; not untouched held-out evidence",
   "dependencies": {
-    "evals/dispute_replay.py": "cc6f8ad07df8c10ebd63ca446eb7ac225f487210dcfbcc1e338caabdab19868e",
-    "evals/mcp_replay.py": "91c312cb09e51e952449b7b7ca2f04769ba27ab5b0b7df20c6ad5c926c066093",
-    "app/business-api/transaction/models.py": "a086149974b21fa3a3974178b213896bee8e6bd21d163321ef9ed29fcb7765c0"
+    "evals/dispute_replay.py": "c9d10b813e2e17650c8b65d3c81243c5ce1e98474971351744ae2244d3602046",
+    "evals/mcp_replay.py": "d29dd8a0e611e69779d5dab0e19cc3f7fc62bce4d6844e1dc8477419a186cfdd",
+    "app/business-api/transaction/models.py": "5ad9a9984b67ad72c66c249cee5cd4eba47aabccf260bf2034d5fa0a977b7e4e"
   },
-  "operator_adjudication": "blocked; unapproved contract; no assigned verdict behavior",
+  "freeze_revision": 3,
+  "dependency_review": "Plan 11 reviewed consent expansion dispute-consent-v3: new intake previews are read-only, explicit acceptance binds the preview and creates IN_REVIEW atomically, decline creates no case; legacy pending approvals remain supported. Production preview/location models and asynchronous SDK tool invocation are reflected in dependencies. Revision 2 reviewed ADR 0009 projections; all 25 raw scenarios, labels, dataset version and exact dataset bytes remain unchanged. Canonical expanded inputs deliberately change and are frozen separately.",
+  "operator_adjudication": "not exercised by this investigation-only dataset; approved production behavior is defined in ADR 0009",
   "dependency_hash_policy": "UTF-8 source bytes with CRLF normalized to LF; raw dataset bytes remain exact"
 }
