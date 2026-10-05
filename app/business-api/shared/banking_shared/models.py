@@ -5,7 +5,7 @@ from decimal import Decimal
 from uuid import uuid4
 from typing import Literal
 
-from sqlalchemy import CheckConstraint, Column, DateTime, Index, Integer, Numeric, String
+from sqlalchemy import CheckConstraint, Column, DateTime, Index, Integer, JSON, Numeric, String, column
 from sqlmodel import Field, SQLModel
 
 from banking_shared.identity_models import (
@@ -174,10 +174,40 @@ class TransactionRecord(SQLModel, table=True):
     response_code: str | None = Field(default=None, max_length=32)
     is_fraud: bool | None = Field(default=None)
     fraud_score: Decimal | None = Field(default=None, sa_column=Column(Numeric(6, 4)))
+    source_kind: str = Field(default="source", sa_column=Column(String(16), nullable=False, server_default="source"))
+    original_transaction_id: str | None = Field(default=None, max_length=64)
+    support_case_id: str | None = Field(default=None, max_length=64)
 
 
 # Valid support_cases.status values, in required transition order.
-SUPPORT_CASE_STATUSES = ("OPEN", "WAITING_USER_APPROVAL", "IN_REVIEW", "RESOLVED")
+SUPPORT_CASE_STATUSES = ("OPEN", "WAITING_USER_APPROVAL", "IN_REVIEW", "PENDING_EFFECTS", "RESOLVED_VALID", "RESOLVED_INVALID", "RESOLVED")
+
+
+class RuntimePosting(SQLModel, table=True):
+    __tablename__ = "runtime_postings"
+
+    original_transaction_id: str = Field(primary_key=True, foreign_key=TRANSACTION_ID_FOREIGN_KEY, max_length=64)
+    case_id: str = Field(foreign_key="support_cases.case_id", unique=True, max_length=64)
+    movement_id: str = Field(foreign_key=TRANSACTION_ID_FOREIGN_KEY, unique=True, max_length=64)
+    product_id: str = Field(foreign_key=PRODUCT_ID_FOREIGN_KEY, index=True, max_length=64)
+    customer_id: str = Field(foreign_key=CUSTOMER_ID_FOREIGN_KEY, max_length=64)
+    amount: Decimal = Field(sa_column=Column(Numeric(20, 4), nullable=False))
+    balance_delta: Decimal = Field(sa_column=Column(Numeric(20, 4), nullable=False))
+    currency: str = Field(max_length=8)
+    operator_sub: str = Field(foreign_key="operators.user_id", max_length=36)
+    executed_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class CardProtection(SQLModel, table=True):
+    __tablename__ = "card_protections"
+
+    product_id: str = Field(primary_key=True, foreign_key=PRODUCT_ID_FOREIGN_KEY, max_length=64)
+    case_id: str = Field(foreign_key="support_cases.case_id", max_length=64)
+    prior_status: str | None = Field(default=None, max_length=32)
+    blocked: bool = Field(default=True)
+    rationale: str = Field(max_length=1000)
+    operator_sub: str = Field(foreign_key="operators.user_id", max_length=36)
+    updated_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
 
 
 class SupportCase(SQLModel, table=True):
@@ -185,6 +215,9 @@ class SupportCase(SQLModel, table=True):
     __table_args__ = (
         Index("ix_support_cases_customer_status", "customer_id", "status"),
         Index("ix_support_cases_transaction", "transaction_id"),
+        Index("uq_support_cases_active_transaction", "transaction_id", unique=True,
+              postgresql_where=column("status").in_(("OPEN", "WAITING_USER_APPROVAL", "IN_REVIEW", "PENDING_EFFECTS")),
+              sqlite_where=column("status").in_(("OPEN", "WAITING_USER_APPROVAL", "IN_REVIEW", "PENDING_EFFECTS"))),
         Index("ix_support_cases_operator_queue", "status", "assigned_operator_sub", "opened_at"),
     )
 
@@ -207,6 +240,11 @@ class SupportCase(SQLModel, table=True):
     )
     claimed_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True)))
     claim_version: int = Field(default=0, sa_column=Column(Integer, nullable=False, server_default="0"))
+    case_version: int = Field(default=0, sa_column=Column(Integer, nullable=False, server_default="0"))
+    evidence_version: int = Field(default=0, sa_column=Column(Integer, nullable=False, server_default="0"))
+    evidence_snapshot: dict | None = Field(default=None, sa_column=Column(JSON))
+    verdict: str | None = Field(default=None, max_length=16)
+    effect_code: str | None = Field(default=None, max_length=64)
     resolution_outcome: str | None = Field(default=None, max_length=64)
     resolution_notes: str | None = Field(default=None, max_length=1000)
     recommendation_type: str | None = Field(default=None, max_length=64)
