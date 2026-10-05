@@ -29,6 +29,8 @@ from banking_shared.models import (
 )
 from banking_shared.product_types import CARD_PRODUCT_TYPES
 from banking_transaction.models.transactions import DisputeCase, DisputeCaseEvent, DisputePreview
+from banking_transaction.models.conversation import CaseConversation, ConversationMessage
+from banking_transaction.services.conversation import append_conversation, read_conversation
 from banking_transaction.consent.preview import (
     DisputePreviewError, configured_preview_secret, evidence_digest, issue_preview, read_preview,
 )
@@ -116,9 +118,16 @@ class SupportCaseService:
                 raise PermissionError("Dispute preview unavailable")
             return _to_dispute_case(session, case, _get_case_product(session, case))
 
+    def get_case_conversation(self, case_id: str, customer_id: str) -> CaseConversation:
+        with self._session_factory() as session:
+            case = _get_owned_case(session, case_id, customer_id)
+            return read_conversation(session, case.case_id)
+
     def accept_transaction_dispute(
         self, preview_token: str, customer_id: str,
+        conversation_history: list[ConversationMessage] | None = None,
     ) -> DisputeCase:
+        history = CaseConversation(messages=conversation_history) if conversation_history is not None else None
         claims = read_preview(self._signing_secret(), preview_token, customer_id)
         recovered = self.recover_transaction_dispute(preview_token, customer_id)
         if recovered is not None:
@@ -151,6 +160,8 @@ class SupportCaseService:
                 _add_event(session, case_id, "CASE_OPENED", "customer",
                            f"Dispute opened for transaction {transaction.transaction_id}")
                 _grant_approval(session, case, commit=False)
+                if history is not None:
+                    append_conversation(session, case_id, history)
                 session.commit()
             except IntegrityError:
                 session.rollback()

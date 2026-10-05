@@ -10,6 +10,7 @@ from banking_transaction.services.disputes import (
 )
 from banking_transaction.auth.jwt_identity import get_jwt_customer_id
 from banking_transaction.consent.preview import DisputePreviewError
+from banking_transaction.models.conversation import CaseConversation
 from banking_transaction.models.transactions import (
     AcceptDisputeRequest, DisputeApprovalRequest, DisputeCase, DisputePreview,
     OpenDisputeRequest, ResolveCaseRequest,
@@ -68,7 +69,9 @@ def open_support_case(
 ) -> DisputeCase:
     """Accept a verified proposal and atomically create the consented case."""
     try:
-        return service.accept_transaction_dispute(request.previewToken, customer_id)
+        return service.accept_transaction_dispute(
+            request.previewToken, customer_id, request.conversationHistory,
+        )
     except (PermissionError, ValueError) as error:
         raise _intake_error(error) from error
 
@@ -83,6 +86,16 @@ def get_support_case(
         return service.get_case(case_id, customer_id)
     except PermissionError as error:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(error)) from error
+
+
+@router.get("/{case_id}/conversation", response_model=CaseConversation)
+def get_support_case_conversation(
+    case_id: str, customer_id: Annotated[str, Depends(get_jwt_customer_id)],
+) -> CaseConversation:
+    try:
+        return service.get_case_conversation(case_id, customer_id)
+    except PermissionError:
+        raise HTTPException(403, detail={"code": "DISPUTE_UNAVAILABLE"}) from None
 
 
 @router.get("/{case_id}/timeline")

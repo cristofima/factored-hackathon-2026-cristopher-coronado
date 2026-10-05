@@ -1,5 +1,7 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import Literal, Optional
+
+from banking_transaction.models.conversation import CaseConversation, ConversationMessage
 
 
 class Transaction(BaseModel):
@@ -77,6 +79,12 @@ class OpenDisputeRequest(BaseModel):
 
 class AcceptDisputeRequest(BaseModel):
     previewToken: str
+    conversationHistory: list[ConversationMessage] | None = Field(default=None, max_length=100)
+
+    @model_validator(mode="after")
+    def validate_conversation_history(self) -> "AcceptDisputeRequest":
+        CaseConversation(messages=self.conversationHistory or [])
+        return self
 
 
 class DisputePreview(BaseModel):
