@@ -12,8 +12,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, create_engine, select
 
 from banking_shared.identity_models import IdentityAudit, Role, User, UserRole
-from identity.schemas import AdminBootstrap
-from identity.service import IdentityService
+from identity.models.schemas import AdminBootstrap
+from identity.services.service import IdentityService
 from identity.settings import Settings
 
 

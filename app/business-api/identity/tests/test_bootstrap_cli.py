@@ -11,7 +11,7 @@ from sqlmodel import Session, select
 
 from banking_shared import CustomerUser, IdentityAudit, Role, User, UserRole
 
-from identity import bootstrap
+from identity.services import bootstrap
 from identity.settings import Settings
 
 

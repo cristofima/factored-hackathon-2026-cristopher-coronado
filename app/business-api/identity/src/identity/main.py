@@ -14,11 +14,11 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlmodel import Session, create_engine
 from starlette.concurrency import run_in_threadpool
 
-from identity.schemas import (
+from identity.models.schemas import (
     CustomerProfile, IntrospectionRequest, LoginRequest, LoginResponse,
     OperatorCreate, PasswordReset, UserProfile,
 )
-from identity.service import IdentityService, unauthorized
+from identity.services.service import IdentityService, unauthorized
 from identity.settings import Settings
 
 bearer = HTTPBearer(auto_error=False)

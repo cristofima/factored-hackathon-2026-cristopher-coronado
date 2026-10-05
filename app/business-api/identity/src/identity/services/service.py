@@ -14,7 +14,7 @@ from banking_shared.identity_models import (
     CustomerUser, IdentityAudit, Operator, Role, User, UserRole, utc_now,
 )
 from banking_shared import Customer
-from identity.schemas import CustomerProfile, LoginResponse, OperatorCreate, UserProfile
+from identity.models.schemas import CustomerProfile, LoginResponse, OperatorCreate, UserProfile
 from identity.settings import Settings
 
 
