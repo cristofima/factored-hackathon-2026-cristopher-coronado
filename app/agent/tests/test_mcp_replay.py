@@ -215,7 +215,7 @@ def test_replay_fixtures_match_public_tool_arguments() -> None:
     import json
     from pathlib import Path
 
-    cases = json.loads((Path(__file__).resolve().parents[3] / "evals/replay_cases.json").read_text())
+    cases = json.loads((Path(__file__).resolve().parents[3] / "evals" / "replay_cases.json").read_text())
     for case in cases:
         for server in ("account", "transaction"):
             contracts = {tool.name: tool.inputSchema for tool in load_contracts(server)}

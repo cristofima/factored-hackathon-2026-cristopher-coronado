@@ -95,7 +95,7 @@ async def run_case(
                 stream = agent.run(message, stream=True, **options)
                 async for update in stream:
                     entry["stream_updates"].append(sanitize(update.to_dict()))
-                    entry["final_answer"] += update.text or ""
+                    entry["final_answer"] += sanitize(update.text or "")
                 response = await stream.get_final_response()
                 result["response"] = sanitize(response.to_dict())
                 result["final_answer"] = sanitize(response.text)
@@ -160,7 +160,8 @@ async def main_async(args: argparse.Namespace) -> int:
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(sanitize(report), ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"Saved {len(results)} synthetic replay transcripts to {output}")
-    return 0 if results and all(result["protocol_passed"] for result in results) else 1
+    passed = all(result["protocol_passed"] for result in results)
+    return 0 if results and passed else 1
 
 
 def main() -> int:

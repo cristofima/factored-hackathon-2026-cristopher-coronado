@@ -3,15 +3,17 @@ import logging
 from agent_framework import Agent, BaseChatClient, MCPStreamableHTTPTool
 from mcp import ClientSession
 
+from app.agents.azure_chat.guardrails import BANKING_GUARDRAILS
 from app.common.internal_identity import mcp_header_provider
 from app.adapters.tool_error_middleware import OwnershipErrorMiddleware
+from app.adapters.refusal_locale_middleware import RefusalLocaleMiddleware
 from app.context.user_profile_provider import UserProfileProvider
 
 
 logger = logging.getLogger(__name__)
 
 class AccountAgent :
-    instructions = """
+    instructions = BANKING_GUARDRAILS + """
     you are a personal financial advisor who help the user to retrieve information about their bank accounts.
     Always use markdown to format your response.
     Use the authenticated customer context for all account information.
@@ -71,6 +73,9 @@ class AccountAgent :
                 name=AccountAgent.name,
                 require_per_service_call_history_persistence=True,
                 tools=[account_mcp_server],
-                middleware=[OwnershipErrorMiddleware()],
+                middleware=[
+                    OwnershipErrorMiddleware(),
+                    RefusalLocaleMiddleware(self.internal_identity_secret),
+                ],
                 context_providers=[UserProfileProvider(self.internal_identity_secret)]
             )

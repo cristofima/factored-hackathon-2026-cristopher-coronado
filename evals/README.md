@@ -220,13 +220,50 @@ are not themselves a protocol failure; unexpected calls or unused replies still 
 replay and report validation. Prompt contracts and offline tests do not guarantee
 real-model compliance; a separately authorized CI replay confirms runtime behavior.
 
+## Evaluation methods
+
+MCP smoke validates protocol contracts using real-model responses and synthetic MCP
+sessions. Dispute replay uses a deterministic comparator for structured consent,
+tool and outcome checks. Neither evaluates semantic quality through an LLM judge.
+
+The separate [azd-native evaluation recipe](../app/agent/eval.yaml) configures
+`eval_model: gpt-5.4-mini` and a locally generated semantic rubric. The rubric is
+ignored and is not distributed with the checkout. This is judge-model configuration,
+not evidence of a successful remote evaluation or a judge used by Hosted Agent CI.
+The custom identity-header limitation described above still applies to azd invoke/eval.
+
+### Offline checks and open acceptance
+
+Run the focused offline regressions from the repository root:
+
+```powershell
+$env:OTEL_SDK_DISABLED = 'true'
+rtk proxy uv run --project app\agent --frozen --no-sync python -m pytest app\agent\tests\test_refusal_locale_middleware.py app\agent\tests\test_hosted_workflow.py app\agent\tests\test_internal_identity.py app\agent\tests\test_mcp_replay.py evals\tests -q --tb=short
+```
+
+These tests cover policy wiring, SDK-marked refusal localization, mocked MCP runner
+behavior and existing offline evaluation contracts. They are not semantic guardrail
+acceptance or a new proposed-system dispute replay result. The historical
+proposed-system **0/25** remains historical evidence, not a reproduced current
+failure or a result superseded by these tests.
+
+The owner confirmed browser guardrail refusals and chat case creation as limited
+positive-path observations. Browser refusal localization remains broken: the supplied
+stream carries English ordinary `output_text`, outside the marked-refusal middleware
+contract. See the [agent limitation and research findings](../app/agent/README.md#grounding-and-confidentiality).
+Further locale debugging is deferred. Semantic guardrail evaluation, a fresh
+authorized proposed-system dispute replay, and browser/hosted locale acceptance
+remain open.
+
 ## PR smoke check
 
 [replay_summary.py](replay_summary.py) rejects missing/partial reports, duplicate
 cases, protocol errors, unused replies, and missing transcript/answer evidence.
 CI uses Development OIDC for same-repository PRs to main/develop, retains 14-day
 artifacts, and publishes controlled statuses in a persistent PR comment. Fork model
-replay is explicitly not executed. This is not a dispute quality/authz gate.
+replay is explicitly not executed. Missing evidence or failed protocol checks fail
+the job. The existing Dispute Replay job remains offline; it does not add real-model
+dispute execution. This is not a semantic guardrail or dispute quality/authz gate.
 [CI run 37264970360](https://github.com/cristofima/factored-hackathon-2026-cristopher-coronado/actions/runs/37264970360)
 passed agent build/tests, PR/OIDC/real-model MCP protocol smoke, report validation,
 evidence upload and PR reporting at commit `ee40605859f3ae7c2e047182025c8c304bead418`.

@@ -25,6 +25,46 @@ reported within that limited searched scope, not as proof of exhaustive history.
 Incorrect-amount complaints preserve the expected amount in the reason under the
 existing full-original-amount policy, never a promised partial refund.
 
+## Grounding and confidentiality
+
+Triage, Account and Transaction prepend the same English [guardrail policy](src/app/agents/azure_chat/guardrails.py).
+They must ground answers in authenticated context and authorized tool results, treat
+customer and tool-returned text as untrusted data, and refuse instruction overrides,
+credential disclosure and hidden-prompt requests. Refusals follow the stored profile
+locale, do not echo secrets, and do not use tools or handoffs to satisfy forbidden
+requests. Security refusals, warnings and redirections use the same authenticated
+profile language as normal answers, never a default English refusal for a Spanish
+or Portuguese profile, even when a message requests a language override. The
+per-request locale provider reinforces this rule for every agent run.
+The [refusal middleware](src/app/adapters/refusal_locale_middleware.py) also replaces
+SDK-marked provider refusals with controlled en/es/pt text, for streaming and final
+responses, using the signed profile locale. It does not translate unmarked model
+prose or tool results, and adds no telemetry flags or spans.
+
+**Known limitation:** the owner confirmed refusal behavior in the browser, but refusal
+localization still fails there and further debugging is deferred. The supplied SSE
+contains an English refusal as ordinary `output_text`, not structured `refusal`
+content. The middleware intentionally leaves ordinary text unchanged. This evidence
+does not establish whether the provider omitted refusal metadata, a later layer lost
+it, or the running deployment differs from the tested code. Browser localization and
+hosted-model locale acceptance remain open; the offline middleware fix does not close
+them.
+
+[Microsoft Learn's Responses schema](https://learn.microsoft.com/rest/api/microsoft-foundry/aiproject#components)
+distinguishes ordinary text from structured refusals. The reviewed documentation did
+not provide a refusal-language setting or guarantee. If debugging resumes, inspect
+controlled provider metadata at the
+[chat-middleware boundary](https://learn.microsoft.com/en-us/agent-framework/agents/middleware)
+before choosing another fix. Do not infer content filtering from refusal wording alone
+or translate arbitrary agent Markdown.
+Independently valid banking questions in mixed requests remain supported.
+Authorized bank numbers, masked cards and existing consent transport are preserved.
+
+This prompt policy is defense in depth, not an authorization boundary or guaranteed
+model immunity. Offline tests verify policy content and actual agent configuration;
+real-model refusal and hosted deployment require separate validation. Never use real
+credentials in adversarial test messages.
+
 ## Pre-intake consent and localized context
 
 Selected-charge confirmation is separate from explicit case consent. The Transaction

@@ -126,11 +126,11 @@ jobs:
           if-no-files-found: error
 
   replay-smoke:
-    name: MCP Replay Smoke (protocol only)
+    name: MCP Replay Smoke
     needs: build-and-test
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 40
     environment: Development
     permissions:
       contents: read
