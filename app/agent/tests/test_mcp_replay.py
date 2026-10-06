@@ -211,11 +211,12 @@ async def test_runner_records_full_transcript_and_interleaved_tools() -> None:
     assert [call["sequence"] for call in result["tool_calls"]] == [0, 1]
 
 
-def test_replay_fixtures_match_public_tool_arguments() -> None:
+@pytest.mark.parametrize("dataset", ["replay_cases.json", "guardrail_cases.json"])
+def test_replay_fixtures_match_public_tool_arguments(dataset: str) -> None:
     import json
     from pathlib import Path
 
-    cases = json.loads((Path(__file__).resolve().parents[3] / "evals/replay_cases.json").read_text())
+    cases = json.loads((Path(__file__).resolve().parents[3] / "evals" / dataset).read_text())
     for case in cases:
         for server in ("account", "transaction"):
             contracts = {tool.name: tool.inputSchema for tool in load_contracts(server)}

@@ -33,7 +33,18 @@ def render_summary(report: dict[str, Any], cases: list[dict[str, Any]]) -> tuple
         and report.get("model_execution") == "real"
         and report.get("foundry_submission") == "not_submitted"
     )
-    passed = complete and all(protocol_passed(result) for result in results)
+    guardrail_lane = any("guardrails" in case for case in cases)
+    if guardrail_lane:
+        from banking_evals.guardrails import behavior_passed, validate_cases
+
+        validate_cases(cases)
+        by_id = {case["id"]: case for case in cases}
+        def check_passed(result: dict[str, Any]) -> bool:
+            case = by_id.get(result.get("case_id"))
+            return case is not None and behavior_passed(result, case)
+    else:
+        check_passed = protocol_passed
+    passed = complete and all(check_passed(result) for result in results)
     lines = [
         "## MCP Replay Smoke", "",
         f"Protocol check: **{'PASSED' if passed else 'FAILED'}**.", "",
@@ -42,11 +53,21 @@ def render_summary(report: dict[str, Any], cases: list[dict[str, Any]]) -> tuple
         "quality, service authorization, baseline improvement, or a Foundry submission.", "",
         "| Case | Protocol |", "| --- | --- |",
     ]
+    if guardrail_lane:
+        lines = [
+            "## Guardrail Replay", "",
+            f"Protocol and behavioral indicators: **{'PASSED' if passed else 'FAILED'}**.", "",
+            f"Expected cases: {len(expected)}. Recorded cases: {len(observed)}.", "",
+            "Real model, synthetic MCP data. Deterministic refusal, canary, grounding and",
+            "MCP-boundary indicators only; not comprehensive semantic safety, locale quality,",
+            "handoff prohibition, live authorization or deployed identity acceptance.", "",
+            "| Case | Indicators |", "| --- | --- |",
+        ]
     for case_id in expected:
         matches = [result for result in results if result.get("case_id") == case_id]
         status = "MISSING OR DUPLICATED"
         if len(matches) == 1:
-            status = "PASSED" if protocol_passed(matches[0]) else "FAILED"
+            status = "PASSED" if check_passed(matches[0]) else "FAILED"
         safe_id = str(case_id).replace("|", "\\|").replace("`", "").replace("\n", " ")
         lines.append(f"| {safe_id} | {status} |")
     if not complete:

@@ -28,6 +28,7 @@ from azure.identity.aio import AzureCliCredential
 
 from app.agents.azure_chat.hosted_workflow import build_hosted_workflow
 from banking_evals.mcp_replay import ReplayReply, ReplayServer
+from banking_evals.guardrails import behavior_passed, score_turn, validate_cases
 from banking_evals.evidence import (
     available_output, controlled_error, customer_identity, register_result, sanitize, unique_output,
 )
@@ -88,6 +89,8 @@ async def run_case(
                 for server in servers.values():
                     server.turn = turn
                 started = perf_counter()
+                trace_start = len(trace)
+                raw_stream_text = ""
                 options = {"session": conversation} if conversation is not None else {}
                 entry = {"turn": turn, "query": message, "completed": False,
                          "final_answer": "", "stream_updates": []}
@@ -95,8 +98,14 @@ async def run_case(
                 stream = agent.run(message, stream=True, **options)
                 async for update in stream:
                     entry["stream_updates"].append(sanitize(update.to_dict()))
-                    entry["final_answer"] += update.text or ""
+                    raw_stream_text += update.text or ""
+                    entry["final_answer"] += sanitize(update.text or "")
                 response = await stream.get_final_response()
+                if "guardrails" in case:
+                    entry["guardrail_checks"] = score_turn(
+                        response.text, raw_stream_text, case["guardrails"][turn],
+                        case["locale"], trace[trace_start:],
+                    )
                 result["response"] = sanitize(response.to_dict())
                 result["final_answer"] = sanitize(response.text)
                 entry.update(response=sanitize(response.to_dict()), final_answer=sanitize(response.text),
@@ -130,6 +139,8 @@ async def main_async(args: argparse.Namespace) -> int:
             raise ValueError("Unknown replay case ID")
     if not cases or len({case["id"] for case in cases}) != len(cases):
         raise ValueError("Replay requires a nonempty dataset with unique case IDs")
+    if any("guardrails" in case for case in cases):
+        validate_cases(cases)
     models = {
         "triage": args.triage_model or args.model,
         "account": args.account_model or args.model,
@@ -160,7 +171,11 @@ async def main_async(args: argparse.Namespace) -> int:
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(sanitize(report), ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"Saved {len(results)} synthetic replay transcripts to {output}")
-    return 0 if results and all(result["protocol_passed"] for result in results) else 1
+    passed = all(
+        behavior_passed(result, case) if "guardrails" in case else result["protocol_passed"]
+        for result, case in zip(results, cases, strict=True)
+    )
+    return 0 if results and passed else 1
 
 
 def main() -> int:
