@@ -16,6 +16,17 @@ variable "location" {
   type = string
 }
 
+variable "app_service_location" {
+  description = "Region for the shared Linux plan and its five sites only. Null retains the resource group region. Existing deployments require a reviewed replacement or parallel migration."
+  type        = string
+  default     = null
+  nullable    = true
+  validation {
+    condition     = var.app_service_location == null ? true : length(trimspace(var.app_service_location)) > 0
+    error_message = "App Service location must be null or a nonempty Azure region name."
+  }
+}
+
 variable "resource_group_name" {
   description = "Existing single resource group name selected for this stack."
   type        = string

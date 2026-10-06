@@ -124,7 +124,7 @@ resource "azurerm_application_insights" "main" {
 
 resource "azurerm_service_plan" "main" {
   name                = "asp-${var.environment_name}"
-  location            = data.azurerm_resource_group.main.location
+  location            = coalesce(var.app_service_location, data.azurerm_resource_group.main.location)
   resource_group_name = data.azurerm_resource_group.main.name
   os_type             = "Linux"
   sku_name            = var.plan_sku
@@ -139,7 +139,7 @@ resource "azurerm_service_plan" "main" {
 resource "azapi_resource" "web" {
   type      = "Microsoft.Web/sites@2024-11-01"
   name      = local.web_name
-  location  = data.azurerm_resource_group.main.location
+  location  = coalesce(var.app_service_location, data.azurerm_resource_group.main.location)
   parent_id = data.azurerm_resource_group.main.id
   tags      = merge(local.tags, { "azd-service-name" = "web" })
   identity {
@@ -170,13 +170,17 @@ resource "azapi_resource" "web" {
     })
   }
   response_export_values = ["properties.defaultHostName", "identity.principalId"]
+
+  lifecycle {
+    replace_triggered_by = [azurerm_service_plan.main.location]
+  }
 }
 
 resource "azapi_resource" "app" {
   for_each  = local.apps
   type      = "Microsoft.Web/sites@2024-11-01"
   name      = each.value
-  location  = data.azurerm_resource_group.main.location
+  location  = coalesce(var.app_service_location, data.azurerm_resource_group.main.location)
   parent_id = data.azurerm_resource_group.main.id
   tags      = merge(local.tags, { "azd-service-name" = each.key })
   identity {
@@ -235,12 +239,17 @@ resource "azapi_resource" "app" {
   # the full appSettings array and no ignore_changes/manual az webapp config appsettings set is needed;
   # see plan/tmp/KEY_VAULT_SECRETS_MIGRATION_PLAN.md.
   depends_on = [azurerm_key_vault_secret.database_url]
+
+  # AzAPI treats location as an update; attached sites must be recreated before the plan.
+  lifecycle {
+    replace_triggered_by = [azurerm_service_plan.main.location]
+  }
 }
 
 resource "azapi_resource" "identity" {
   type      = "Microsoft.Web/sites@2024-11-01"
   name      = local.identity_name
-  location  = data.azurerm_resource_group.main.location
+  location  = coalesce(var.app_service_location, data.azurerm_resource_group.main.location)
   parent_id = data.azurerm_resource_group.main.id
   tags      = merge(local.tags, { "azd-service-name" = "identity" })
 
@@ -279,12 +288,16 @@ resource "azapi_resource" "identity" {
   }
   response_export_values = ["properties.defaultHostName", "identity.principalId"]
   depends_on             = [azurerm_key_vault_secret.database_url]
+
+  lifecycle {
+    replace_triggered_by = [azurerm_service_plan.main.location]
+  }
 }
 
 resource "azapi_resource" "responses_bff" {
   type      = "Microsoft.Web/sites@2024-11-01"
   name      = local.responses_bff_name
-  location  = data.azurerm_resource_group.main.location
+  location  = coalesce(var.app_service_location, data.azurerm_resource_group.main.location)
   parent_id = data.azurerm_resource_group.main.id
   tags      = merge(local.tags, { "azd-service-name" = "responses-bff" })
 
@@ -341,6 +354,9 @@ resource "azapi_resource" "responses_bff" {
 
   # This resource owns the full settings array, including removal of the legacy DATABASE_URL.
   # Runtime references resolve with secret-scoped MI grants; the BFF has no database dependency.
+  lifecycle {
+    replace_triggered_by = [azurerm_service_plan.main.location]
+  }
 }
 
 

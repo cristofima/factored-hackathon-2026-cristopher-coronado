@@ -14,9 +14,40 @@ The root Terraform files use `main.tfvars.json` for azd interpolation and `provi
 
 The checked-in `main.tfvars.json` sets `postgres_location = "centralus"` because
 the East US 2 PostgreSQL capacity request was denied, and this provisioning path was
-validated successfully in Central US. Only PostgreSQL uses this override; App
-Services, storage, monitoring, and Foundry retain the existing resource group region.
-A null or omitted override uses the resource group region. Direct Terraform runs must
+validated successfully in Central US. This override applies only to PostgreSQL.
+Storage, monitoring, and Foundry retain the existing resource group region.
+The separate `app_service_location` variable scopes a regional override to the shared
+Linux plan and all five sites; it does not move PostgreSQL, storage, Key Vault,
+monitoring, Foundry, or the resource group. Its default is null, preserving existing
+deployments when invoking Terraform directly. The root azd path passes
+`AZURE_APP_SERVICE_LOCATION` through `main.tfvars.json`; configure it explicitly in
+the selected root environment before provisioning:
+
+```powershell
+azd env set AZURE_APP_SERVICE_LOCATION centralus
+```
+
+To retain the current App Service region through azd, set this value to that region
+instead. Do not change `AZURE_LOCATION` to move only App Services. The SKU remains
+controlled independently by `plan_sku` (default B2).
+
+Changing an existing App Service region is not an in-place operation. All five sites
+use `replace_triggered_by` on the plan's `location`: Terraform destroys attached sites
+before replacing the plan, then recreates the sites and their managed-identity grants.
+A SKU-only update does not trigger site replacement. Same-name regional migration
+requires downtime and redeployment of all five application artifacts; provisioning
+alone does not restore application code. Review `azd provision --preview` first:
+existing sites must show replacement, not an in-place location update. After a partial
+failure, refresh and review the plan again before retrying; do not manually delete the
+plan while sites remain attached.
+
+Consume the new hostname outputs, update the separate agent's MCP URLs, and rebuild
+the frontend with the new service URLs before validating the application. A parallel
+migration instead requires distinct plan/site names and preservation of the original
+apps until cutover validation. Moving App Services does not establish a fix for
+Foundry hosted-agent readiness errors.
+
+A null or omitted PostgreSQL override uses the resource group region. Direct Terraform runs must
 also pass `postgres_location = "centralus"` in their local variable file.
 
 PostgreSQL server and database names are resolved from azd environment variables in
