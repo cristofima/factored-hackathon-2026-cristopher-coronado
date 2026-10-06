@@ -29,7 +29,7 @@ jobs:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-          location: ${{ vars.AZURE_LOCATION }}
+          location: ${{ vars.AZURE_APP_SERVICE_LOCATION }}
           resource-group: ${{ vars.AZURE_RESOURCE_GROUP }}
           app-service-name: ${{ vars.AZURE_RESPONSES_BFF_APP_NAME }}
           app-service-name-variable: AZURE_RESPONSES_BFF_APP_NAME

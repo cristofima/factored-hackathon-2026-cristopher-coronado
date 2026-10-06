@@ -82,8 +82,18 @@ Set these in **Settings > Environments > Development > Variables**.
 - `AZURE_CLIENT_ID`
 - `AZURE_TENANT_ID`
 - `AZURE_SUBSCRIPTION_ID`
-- `AZURE_LOCATION`
 - `AZURE_RESOURCE_GROUP`
+
+### Deployment regions
+
+- `AZURE_APP_SERVICE_LOCATION=centralus`: required by the five root App Service CD
+  workflows (Identity, Account, Transaction, Responses BFF and Web).
+- `AZURE_LOCATION`: required by the separate hosted-agent CD workflow; retain its
+  existing Foundry region.
+
+These GitHub Environment variables are independent from local azd configuration.
+The shared CD action uses the selected region to initialize its deployment-only
+azd environment; it does not provision or relocate resources.
 
 Root CD also requires a GitHub `Development` variable whose value matches its
 service’s Terraform name output. Terraform outputs, azd variables, root manifest
