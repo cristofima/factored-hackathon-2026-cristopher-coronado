@@ -3,7 +3,7 @@ name = "banking-identity"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
-  "banking-shared",
+  "banking-shared[telemetry]",
   "fastapi==0.141.1",
   "uvicorn==0.54.0",
   "pyjwt==2.10.1",

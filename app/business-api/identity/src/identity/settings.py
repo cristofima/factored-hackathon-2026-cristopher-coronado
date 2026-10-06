@@ -13,3 +13,4 @@ class Settings(BaseSettings):
     jwt_audience: str = Field(min_length=1)
     auth_internal_secret: SecretStr = Field(min_length=32)
     access_token_minutes: int = Field(default=60, ge=1, le=60)
+    applicationinsights_connection_string: str | None = None

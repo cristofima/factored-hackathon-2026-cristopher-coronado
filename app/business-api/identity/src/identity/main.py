@@ -4,10 +4,12 @@ from contextlib import asynccontextmanager
 from hmac import compare_digest
 from typing import Annotated, AsyncIterator
 
+from banking_shared.tracing import create_meter_provider, create_tracer_provider
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from pydantic import Field
 from sqlalchemy import Engine
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -48,6 +50,15 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             await run_in_threadpool(database.dispose)
 
     app = FastAPI(title="Banking Identity", lifespan=lifespan)
+    FastAPIInstrumentor.instrument_app(
+        app,
+        tracer_provider=create_tracer_provider(
+            "banking-assistant-identity", config.applicationinsights_connection_string
+        ),
+        meter_provider=create_meter_provider(
+            "banking-assistant-identity", config.applicationinsights_connection_string
+        ),
+    )
 
     def session() -> Iterator[Session]:
         with Session(database) as current:

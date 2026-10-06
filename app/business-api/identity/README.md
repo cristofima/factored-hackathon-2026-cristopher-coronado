@@ -72,13 +72,14 @@ financial end-to-end acceptance.
 
 Supply environment values explicitly; the service never discovers credential files.
 
-| Variable                      | Purpose                                             |
-| ----------------------------- | --------------------------------------------------- |
-| `DATABASE_URL`                | Approved PostgreSQL connection                      |
-| `JWT_SECRET_KEY`              | HS256 key, at least 32 characters                   |
-| `JWT_ISSUER` / `JWT_AUDIENCE` | Shared application JWT issuer/audience              |
-| `AUTH_INTERNAL_SECRET`        | Protected introspection key, at least 32 characters |
-| `ACCESS_TOKEN_MINUTES`        | 60 by default, range 1–60                           |
+| Variable                                | Purpose                                             |
+| --------------------------------------- | --------------------------------------------------- |
+| `DATABASE_URL`                          | Approved PostgreSQL connection                      |
+| `JWT_SECRET_KEY`                        | HS256 key, at least 32 characters                   |
+| `JWT_ISSUER` / `JWT_AUDIENCE`           | Shared application JWT issuer/audience              |
+| `AUTH_INTERNAL_SECRET`                  | Protected introspection key, at least 32 characters |
+| `ACCESS_TOKEN_MINUTES`                  | 60 by default, range 1–60                           |
+| `APPLICATIONINSIGHTS_CONNECTION_STRING` | Optional Azure Monitor trace and HTTP metric export |
 
 Access expiry is absolute from issuance, not an inactivity timeout. Explicit environment
 values override the default. Restart Identity after changing the lifetime;
@@ -103,6 +104,15 @@ There is no root dotenv configuration; service tasks load each service's `.env`.
 BFF/Account/Transaction retain the compatibility setting `AUTH_USERS_ENDPOINT`
 (default `http://127.0.0.1:8090`) for this service despite the Identity rename.
 PostgreSQL connection and statement timeouts are bounded to three seconds.
+
+## Observability
+
+FastAPI creates server spans and HTTP duration metrics using explicit, reused
+providers with the `banking-assistant-identity` service resource. Incoming W3C
+trace context correlates Identity requests with the BFF. Export is optional;
+missing or invalid exporter configuration does not disable HTTP serving.
+Instrumentation does not enable body or authentication-header capture.
+In-memory regression tests do not establish deployed Application Insights ingestion.
 
 ## Explicit administrator bootstrap
 
