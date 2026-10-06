@@ -121,7 +121,7 @@ agent, and frontend. Restart the BFF after Python edits when running without `--
 | `RESPONSES_AGENT_ENDPOINT`              | Local default `http://127.0.0.1:8088/responses`; configure the approved upstream for hosted mode. |
 | `RESPONSES_TOKEN_SCOPE`                 | `https://ai.azure.com/.default`                                                                   |
 | `AZURE_CLIENT_ID`                       | Optional client ID for server-side Azure credentials.                                             |
-| `APPLICATIONINSIGHTS_CONNECTION_STRING` | Optional Azure Monitor trace export; propagation works without it.                                |
+| `APPLICATIONINSIGHTS_CONNECTION_STRING` | Optional Azure Monitor trace and HTTP metric export; propagation works without it.                |
 | `ALLOWED_ORIGINS`                       | JSON array; defaults to `["http://localhost:5170"]`.                                              |
 
 Keep secrets in ignored environment files or protected deployment settings. Never log
@@ -138,12 +138,13 @@ direct Account/Transaction REST checks remain required.
 ## Distributed Tracing
 
 The BFF originates W3C trace context when the browser sends no tracing headers.
-FastAPI creates the server span and the BFF's instrumented HTTPX client injects
-`traceparent` into the agent request. Valid incoming context keeps its trace ID and
+FastAPI creates the server span and the BFF's instrumented HTTPX clients inject
+`traceparent` into Identity and agent requests. Valid incoming context keeps its trace ID and
 `tracestate`; malformed context starts a new trace. A new trace normally has no
 `tracestate`. No frontend instrumentation or extra CORS headers are required.
 
-Trace providers are reused per service without replacing the global provider.
+Trace and meter providers are reused per service without replacing global providers.
+FastAPI records HTTP server duration; both HTTPX clients record dependency duration.
 `APPLICATIONINSIGHTS_CONNECTION_STRING` enables asynchronous Azure Monitor export;
 missing or invalid export configuration does not disable local propagation.
 The service resource is named `banking-assistant-responses-bff`. Instrumentation does

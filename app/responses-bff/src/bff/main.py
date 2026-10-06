@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 
 import httpx
+from banking_shared.tracing import create_meter_provider
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
@@ -39,9 +40,10 @@ def create_app(
             timeout=3.0, transport=auth_transport, follow_redirects=False,
         )
         app.state.http_client = httpx.AsyncClient(timeout=None, transport=transport)
-        HTTPXClientInstrumentor.instrument_client(
-            app.state.http_client, tracer_provider=tracer_provider
-        )
+        for client in (app.state.auth_client, app.state.http_client):
+            HTTPXClientInstrumentor.instrument_client(
+                client, tracer_provider=tracer_provider, meter_provider=meter_provider
+            )
         app.state.azure_credential = None
         try:
             if app_settings.responses_upstream_mode == "foundry":
@@ -55,6 +57,9 @@ def create_app(
 
     app = FastAPI(title=app_settings.app_name, lifespan=lifespan)
     tracer_provider = configure_tracing(app, app_settings.applicationinsights_connection_string)
+    meter_provider = create_meter_provider(
+        "banking-assistant-responses-bff", app_settings.applicationinsights_connection_string
+    )
     app.include_router(auth_router, tags=["auth"])
     app.include_router(admin_router, tags=["admin"])
     app.include_router(customer_router, tags=["admin"])
