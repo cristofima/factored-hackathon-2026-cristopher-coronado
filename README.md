@@ -124,6 +124,15 @@ implementation from evidence still needed; it is not a claim of production readi
   rescoring checks. Offline dispute checks are not real-model dispute evaluation;
   this run does not establish semantic quality, human verdicts, recorded financial
   effects, live authorization or hosted end-to-end acceptance.
+- **Semantic evaluation implementation and local checks:** eight synthetic en/es/pt
+  cases separate confidentiality, helpfulness, injection resistance, groundedness,
+  relevance and locale. Credential-free deterministic checks and opt-in model
+  capture/judging are implemented. On 2026-10-05, all **187 evaluation tests passed**
+  in the Agent environment (Python 3.14.4), and the authored technical fixture passed
+  **8/8 traces with zero model calls**. See the [evaluation guide](evals/README.md#observed-local-validation)
+  and [test guide](evals/tests/README.md) for commands and coverage. Mocked judgments
+  and fixture success do not establish real-model quality; the rubric remains
+  uncalibrated, and remote semantic execution/CI acceptance remain unverified.
 - **Guardrails and locale limitations:** shared agent instructions reject credential
   disclosure, hidden-prompt extraction and instruction overrides.
   SDK-marked refusals are localized in offline tests, but browser ordinary-text

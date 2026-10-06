@@ -1,5 +1,108 @@
 # Offline Evaluation and Synthetic Confirmation
 
+## Semantic replay evaluation
+
+[semantic_cases.json](semantic_cases.json) contains eight development-exposed
+synthetic cases across en/es/pt. [semantic_rubric.json](semantic_rubric.json)
+records separate confidentiality, helpfulness, injection resistance, groundedness,
+relevance and locale criteria, with explicit anchors. The rubric is **uncalibrated**:
+a successful judgment is inconclusive for acceptance, while execution or technical
+failures remain failures. No aggregate semantic score replaces individual criteria.
+
+The [semantic package](src/banking_evals/semantic) validates strict contracts,
+projects safe evidence, checks tool choice and task completion deterministically,
+and emits additive private JSON, Markdown and JUnit reports. The
+[Foundry adapter](src/banking_evals/semantic_provider.py) requests structured output
+with no tools and no response storage. It uses the installed Agent Framework client;
+no new evaluation SDK or dependency was added. Provider compatibility is tested with
+SDK-backed mocks, not a verified remote deployment.
+
+### Credential-free checks
+
+Run from repository root:
+
+```powershell
+rtk proxy uv run --project evals --extra offline python -m pytest evals\tests\test_semantic_contracts.py evals\tests\test_semantic_dataset.py evals\tests\test_semantic_judge.py evals\tests\test_semantic_reports.py evals\tests\test_semantic_cli.py evals\tests\test_semantic_provider.py evals\tests\test_semantic_technical.py -q
+rtk proxy uv run --project evals --extra offline python -m banking_evals.semantic.technical --evidence evals\semantic_technical_evidence.json --output evals\results\semantic-technical.json
+```
+
+The saved [technical fixture](semantic_technical_evidence.json) is authored positive
+self-check evidence, **not agent output**. Its eight passing traces demonstrate
+comparator behavior, not agent quality. Missing evidence, wrong calls/arguments or
+results, incomplete answers and execution failures fail deterministic completion.
+Intentional canned ownership denials can pass. Calls are ordered within each MCP
+server; no arbitrary cross-server order is imposed. The scorer accepts the minimal
+fixture envelope or a capture envelope with matching dataset fingerprint and exact
+ordered requested case IDs. It does not judge response meaning or actual service
+authorization. Output explicitly declares zero model calls and no Foundry submission.
+
+[Hosted Agent CI](../.github/workflows/ci-hosted-agent.yml) configures a credential-free
+semantic job for offline contracts/mocked judging and this fixture, with 14-day
+artifacts. Configuration is not proof of a successful GitHub Actions run or a complete
+`eval-quality`/`eval-authz` gate.
+
+### Observed local validation
+
+On 2026-10-05, the installed Agent environment (Python 3.14.4) passed all **187
+evaluation tests**. The minimal Evals environment previously passed **166 tests
+with 21 optional-framework skips**; SDK-backed coverage requires the Agent/model
+dependencies. These are different environment results, not conflicting totals.
+See the [test guide](tests/README.md) for coverage and environment selection.
+
+The latest local checks, run from repository root, were:
+
+```powershell
+$env:OTEL_SDK_DISABLED = 'true'
+rtk proxy uv run --project app\agent --frozen --no-sync python -m pytest evals\tests -q --tb=short
+# Passed: 187 tests.
+
+rtk proxy uv run --project evals --frozen --no-sync python -W error::RuntimeWarning -m banking_evals.semantic.technical --evidence evals\semantic_technical_evidence.json --output evals\results\semantic-technical-validation.json
+# Passed with a fresh output path: eight synthetic traces, zero model calls.
+```
+
+The technical command was verified with an exclusive session-artifact output path;
+the example above uses a fresh repository-local results path. Do not reuse an
+existing output file. RuntimeWarning-as-error completed successfully, and
+`git diff --check` found no whitespace errors. Mocked verdicts verify forwarding,
+validation and reporting, not whether a real judge agrees with independent reviewers.
+No model calls, remote Foundry submission or remote semantic CI run occurred during
+this validation; the rubric remains uncalibrated.
+
+### Opt-in capture and saved-evidence judging
+
+[run_semantic_eval.py](src/banking_evals/run_semantic_eval.py) separates capture from
+judging. Capture reuses the production workflow with synthetic in-memory MCP sessions,
+not production REST/MCP data or service authorization. Judge mode never reruns the
+agent. Both modes require an explicit HTTPS endpoint, deployment, call budget and
+`--authorize-model-calls`, which authorizes synthetic-data transmission as well as
+billable calls. Obtain session approval before running either command. Examples use
+owner-supplied endpoint/deployment environment variables, not credentials:
+
+```powershell
+rtk proxy uv run --project evals --extra model python -m banking_evals.run_semantic_eval capture --project-endpoint $env:PROJECT_ENDPOINT --model $env:AGENT_DEPLOYMENT --authorize-model-calls --max-calls 40 --output evals\results\semantic-capture.json
+rtk proxy uv run --project evals --extra model python -m banking_evals.run_semantic_eval judge --project-endpoint $env:PROJECT_ENDPOINT --model $env:JUDGE_DEPLOYMENT --authorize-model-calls --max-calls 8 --evidence evals\results\semantic-capture.json --output evals\results\semantic-judged.json
+```
+
+CLI authentication uses the developer's existing Azure CLI credential server-side.
+Do not print tokens or supply private instructions, real customer data or credentials
+as evidence. Capture records raw dataset/rubric hashes, model/settings, actual request
+count and requested IDs. Judge mode requires both matching hashes and exact requested
+IDs, validates citations and rejects unsafe/oversized evidence instead of truncating.
+Captured results retain completed answers and chronological tool traces only.
+
+Default timeout is 120 seconds, bounded at 600; default judge retries are zero,
+concurrency one and context limit 100000 characters. Retries cover transient transport
+failures only and consume the shared budget. Capture is sequential with no retries.
+Outputs are exclusive: choose a new path for each run. Judge emits JSON/Markdown/JUnit
+sidecars without overwriting capture. Exit 0 means complete execution/judging without
+technical failures, not calibrated semantic acceptance; exit 1 reports failed execution
+or judging, and exit 2 reports controlled invalid input/configuration.
+
+Human calibration, repeated judge consistency, thresholds, remote compatibility,
+billable CI, real-model locale/grounding and browser/hosted/authz/financial acceptance
+remain open. No real model run or remote Foundry evaluation is established by this
+implementation. Frozen dispute workloads and their historical results are unchanged.
+
 ## Current dispute contract
 
 [dispute_cases.json](dispute_cases.json) is the 25-case **dispute-replay-v2**
