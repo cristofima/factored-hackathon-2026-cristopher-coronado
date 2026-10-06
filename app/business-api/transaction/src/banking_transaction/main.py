@@ -1,7 +1,7 @@
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from banking_shared.tracing import create_tracer_provider
+from banking_shared.tracing import create_meter_provider, create_tracer_provider
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 import uvicorn
 from banking_transaction.observability.logging_config import configure_logging
@@ -28,6 +28,9 @@ def create_app() -> FastAPI:
     FastAPIInstrumentor.instrument_app(
         app,
         tracer_provider=create_tracer_provider(
+            "banking-assistant-transaction", os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING")
+        ),
+        meter_provider=create_meter_provider(
             "banking-assistant-transaction", os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING")
         ),
     )
