@@ -200,14 +200,14 @@ Services use different ports based on the `PROFILE` environment variable:
 
 ## Configuration
 
-| Variable                                | Used by              | Purpose / default                                                         |
-| --------------------------------------- | -------------------- | ------------------------------------------------------------------------- |
-| `DATABASE_URL`                          | Account, Transaction | Shared PostgreSQL connection (via `banking-shared`).                      |
-| `INTERNAL_IDENTITY_SECRET`              | Account, Transaction | HMAC secret verifying the agent's short-lived MCP bearer.                 |
-| `JWT_SECRET_KEY`                        | Account, Transaction | Must match the BFF's signing key; verifies the browser's application JWT. |
-| `JWT_ISSUER` / `JWT_AUDIENCE`           | Account, Transaction | Default `home-banking-api` / `home-banking-web`, matching the BFF.        |
-| `CORS_ALLOWED_ORIGINS`                  | Account, Transaction | Comma-separated browser origins; defaults to `http://localhost:5170`.     |
-| `APPLICATIONINSIGHTS_CONNECTION_STRING` | Account, Transaction | Optional Azure Monitor trace export.                                      |
+| Variable                                | Used by                        | Purpose / default                                                         |
+| --------------------------------------- | ------------------------------ | ------------------------------------------------------------------------- |
+| `DATABASE_URL`                          | Account, Transaction           | Shared PostgreSQL connection (via `banking-shared`).                      |
+| `INTERNAL_IDENTITY_SECRET`              | Account, Transaction           | HMAC secret verifying the agent's short-lived MCP bearer.                 |
+| `JWT_SECRET_KEY`                        | Account, Transaction           | Must match the BFF's signing key; verifies the browser's application JWT. |
+| `JWT_ISSUER` / `JWT_AUDIENCE`           | Account, Transaction           | Default `home-banking-api` / `home-banking-web`, matching the BFF.        |
+| `CORS_ALLOWED_ORIGINS`                  | Account, Transaction           | Comma-separated browser origins; defaults to `http://localhost:5170`.     |
+| `APPLICATIONINSIGHTS_CONNECTION_STRING` | Account, Transaction, Identity | Optional Azure Monitor trace and HTTP metric export.                      |
 
 ### Distributed Tracing
 
@@ -217,8 +217,13 @@ starts a new trace for browser REST calls without context. Service resource name
 are `banking-assistant-account` and `banking-assistant-transaction`. Export is optional;
 propagation and server spans remain available without an Application Insights connection.
 The setup does not enable body or authentication-header capture.
+Explicit meter providers export HTTP server duration alongside server spans;
+Identity uses the same setup with resource `banking-assistant-identity`.
+Azure Monitor stores server spans as Requests and uses preaggregated HTTP metrics
+for standard request charts. Logs in Traces are a separate signal: their presence
+alone does not prove request ingestion. See the [Azure exporter guidance](https://learn.microsoft.com/en-us/python/api/overview/azure/monitor-opentelemetry-exporter-readme?view=azure-python).
 
-In-memory tests verify MCP context reception. Correlation across the deployed
+In-memory tests verify MCP context reception and HTTP duration recording. Correlation across the deployed
 Foundry gateway remains unverified. The App Service startup command must also trust
 the controlled Azure proxy's forwarded scheme so `/mcp` redirects remain HTTPS;
 the Terraform startup-command correction requires provisioning, not just zip deployment.
