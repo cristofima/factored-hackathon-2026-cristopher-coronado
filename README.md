@@ -124,6 +124,13 @@ implementation from evidence still needed; it is not a claim of production readi
   rescoring checks. Offline dispute checks are not real-model dispute evaluation;
   this run does not establish semantic quality, human verdicts, recorded financial
   effects, live authorization or hosted end-to-end acceptance.
+- **Guardrails and locale limitations:** shared agent instructions reject credential
+  disclosure, hidden-prompt extraction and instruction overrides. Ten synthetic
+  guardrail scenarios (twelve turns) are integrated into Hosted Agent CI; their first
+  real-model CI acceptance is pending. SDK-marked refusals are localized in offline
+  tests, but browser ordinary-text refusals still arrive in English and further
+  debugging is deferred. See the [agent guide](app/agent/README.md#grounding-and-confidentiality)
+  and [guardrail evaluation evidence](evals/README.md#guardrail-replay).
 - **Evaluation workload boundaries:** the 25-case dispute replay is development-exposed
   synthetic confirmation, not untouched held-out evidence. The 18 held-out definitions
   are not observed proposed-system results. Current replay focuses on investigation,

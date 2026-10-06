@@ -220,13 +220,68 @@ are not themselves a protocol failure; unexpected calls or unused replies still 
 replay and report validation. Prompt contracts and offline tests do not guarantee
 real-model compliance; a separately authorized CI replay confirms runtime behavior.
 
+## Guardrail replay
+
+[guardrail_cases.json](guardrail_cases.json) adds ten synthetic scenarios (twelve
+turns) to the same production-workflow MCP runner. They cover instruction overrides,
+credential and hidden-prompt extraction, encoded canary disclosure, untrusted tool
+text, mixed banking requests, specialist follow-ups, and unavailable-data fabrication.
+Cases use authenticated en/es/pt fixtures and fictional canaries, never real credentials.
+
+[guardrails.py](src/banking_evals/guardrails.py) scores final and streamed text **before
+redaction**, checking refusal indicators, forbidden canaries and selected encodings,
+required banking indicators, and per-turn MCP boundaries. Unexpected or unconsumed
+scripted calls also fail. Missing or incomplete behavioral evidence fails report
+validation and the CLI. This is finite deterministic coverage, not a semantic safety
+judge, complete locale evaluation, or proof that no internal handoff occurred.
+
+With separate authorization for model usage, run from the repository root:
+
+```powershell
+rtk proxy uv run --project evals --extra model python -m banking_evals.run_mcp_replay `
+  --project-endpoint $env:FOUNDRY_PROJECT_ENDPOINT --model $env:MODEL_DEPLOYMENT_NAME `
+  --dataset evals\guardrail_cases.json --output evals\results\guardrail-replay.json
+```
+
+The same optional participant deployment flags documented above apply. No remote
+Foundry evaluation or agent deployment is created. Synthetic MCP data does not prove
+live Identity, PostgreSQL ownership, dispute consent or recorded financial effects.
+
+### Verified offline evidence and open acceptance
+
+The latest focused offline run passed **197 tests with 24 dependency warnings**:
+
+```powershell
+$env:OTEL_SDK_DISABLED = 'true'
+rtk proxy uv run --project app\agent --frozen --no-sync python -m pytest app\agent\tests\test_refusal_locale_middleware.py app\agent\tests\test_hosted_workflow.py app\agent\tests\test_internal_identity.py evals\tests app\agent\tests\test_guardrail_replay.py -q --tb=short
+```
+
+These tests cover policy wiring, SDK-marked refusal localization, mocked guardrail
+runner/evidence behavior and existing offline evaluation contracts. They are not a
+real-model guardrail replay or a new proposed-system dispute replay result. The
+historical proposed-system **0/25** remains historical evidence, not a reproduced
+current failure or a result superseded by these tests.
+
+The owner confirmed browser guardrail refusals and chat case creation as limited
+positive-path observations. Browser refusal localization remains broken: the supplied
+stream carries English ordinary `output_text`, outside the marked-refusal middleware
+contract. See the [agent limitation and research findings](../app/agent/README.md#grounding-and-confidentiality).
+Further locale debugging is deferred. Real-model guardrail CI, a fresh authorized
+proposed-system dispute replay, and browser/hosted locale acceptance remain open.
+
 ## PR smoke check
 
 [replay_summary.py](replay_summary.py) rejects missing/partial reports, duplicate
 cases, protocol errors, unused replies, and missing transcript/answer evidence.
 CI uses Development OIDC for same-repository PRs to main/develop, retains 14-day
 artifacts, and publishes controlled statuses in a persistent PR comment. Fork model
-replay is explicitly not executed. This is not a dispute quality/authz gate.
+replay is explicitly not executed. The job also runs the guardrail dataset, validates
+its complete behavioral evidence, and includes a separate safe summary in the same
+comment and artifacts. Guardrails still run after a protocol-replay failure when model
+login succeeded. Missing evidence or failed indicators fail the job. The existing
+Dispute Replay job remains offline; this change does not add real-model dispute
+execution. First real-model guardrail CI acceptance remains pending. This is not a
+dispute quality/authz gate.
 [CI run 37264970360](https://github.com/cristofima/factored-hackathon-2026-cristopher-coronado/actions/runs/37264970360)
 passed agent build/tests, PR/OIDC/real-model MCP protocol smoke, report validation,
 evidence upload and PR reporting at commit `ee40605859f3ae7c2e047182025c8c304bead418`.
