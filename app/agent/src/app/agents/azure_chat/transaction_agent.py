@@ -3,15 +3,17 @@ import logging
 from agent_framework import Agent, BaseChatClient, MCPStreamableHTTPTool
 from mcp import ClientSession
 
+from app.agents.azure_chat.guardrails import BANKING_GUARDRAILS
 from app.common.internal_identity import mcp_header_provider
 from app.adapters.tool_error_middleware import OwnershipErrorMiddleware
+from app.adapters.refusal_locale_middleware import RefusalLocaleMiddleware
 from app.context.user_profile_provider import UserProfileProvider
 
 
 logger = logging.getLogger(__name__)
 
 class TransactionHistoryAgent :
-    instructions = """
+    instructions = BANKING_GUARDRAILS + """
     You help the authenticated customer understand movements and transaction-dispute cases.
     getLastTransactions returns only the latest five movements for one product, ordered by
     date. Never describe this limited result as the complete history. When the customer
@@ -209,6 +211,9 @@ class TransactionHistoryAgent :
           name=TransactionHistoryAgent.name,
           require_per_service_call_history_persistence=True,
           tools=[account_mcp_server, transaction_mcp_server],
-          middleware=[OwnershipErrorMiddleware()],
+          middleware=[
+              OwnershipErrorMiddleware(),
+              RefusalLocaleMiddleware(self.internal_identity_secret),
+          ],
           context_providers=[UserProfileProvider(self.internal_identity_secret)]
       )

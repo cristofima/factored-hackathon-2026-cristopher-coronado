@@ -6,14 +6,16 @@ from agent_framework import Agent, BaseChatClient, Message, Workflow
 from mcp import ClientSession
 
 from app.agents.azure_chat.account_agent import AccountAgent
+from app.agents.azure_chat.guardrails import BANKING_GUARDRAILS
 from app.agents.azure_chat.transaction_agent import TransactionHistoryAgent
 from app.adapters.checkpointed_handoff import CheckpointedHandoffBuilder as HandoffBuilder
 from app.adapters.handoff_middleware import HandoffNarrationMiddleware
 from app.adapters.no_history_provider import NoHistoryProvider
+from app.adapters.refusal_locale_middleware import RefusalLocaleMiddleware
 from app.context.user_profile_provider import UserProfileProvider
 
 
-TRIAGE_INSTRUCTIONS = """
+TRIAGE_INSTRUCTIONS = BANKING_GUARDRAILS + """
 You are a banking customer support agent triaging requests about bank accounts and transactions.
 Evaluate the whole conversation and hand off to AccountAgent or TransactionHistoryAgent when the
 request belongs to one of those areas.
@@ -64,7 +66,10 @@ def build_hosted_workflow(
         description="Routes banking requests to the account or transaction specialist.",
         require_per_service_call_history_persistence=True,
         context_providers=[NoHistoryProvider(), UserProfileProvider(internal_identity_secret)],
-        middleware=[HandoffNarrationMiddleware()],
+        middleware=[
+            HandoffNarrationMiddleware(),
+            RefusalLocaleMiddleware(internal_identity_secret),
+        ],
     )
     account_agent = AccountAgent(
         account_chat_client if account_chat_client is not None else chat_client,
