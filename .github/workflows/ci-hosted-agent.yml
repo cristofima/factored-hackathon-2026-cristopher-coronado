@@ -125,6 +125,41 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
+  semantic-technical-offline:
+    name: Semantic Technical Offline
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      OTEL_SDK_DISABLED: "true"
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v8.3.2
+        with:
+          python-version: "3.11"
+          enable-cache: true
+      - name: Install credential-free evaluation dependencies
+        run: uv sync --project evals --extra offline --frozen
+      - name: Test offline semantic contracts and deterministic evaluator
+        run: uv run --project evals --frozen --no-sync python -m pytest evals/tests/test_semantic_contracts.py evals/tests/test_semantic_dataset.py evals/tests/test_semantic_judge.py evals/tests/test_semantic_reports.py evals/tests/test_semantic_cli.py evals/tests/test_semantic_provider.py evals/tests/test_semantic_technical.py -q --junitxml=evals/results/semantic-technical-tests.xml
+      - name: Evaluate saved synthetic trace without model calls
+        if: ${{ !cancelled() }}
+        run: uv run --project evals --frozen --no-sync python -m banking_evals.semantic.technical --evidence evals/semantic_technical_evidence.json --output evals/results/semantic-technical.json
+      - name: Upload deterministic technical evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: semantic-technical-offline-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            evals/semantic_technical_evidence.json
+            evals/results/semantic-technical.json
+            evals/results/semantic-technical-tests.xml
+          retention-days: 14
+          if-no-files-found: error
+
   replay-smoke:
     name: MCP Replay Smoke
     needs: build-and-test
